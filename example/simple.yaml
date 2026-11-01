@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=../schema/problem.schema.json
+#
+# A first problem file: change the names, keep the spaces at the start of
+# the lines (two per level, never a tab).
+
+day: 09:00-17:00        # when everybody is available
+breaks: 12:00-13:30     # lunch: no interview then
+duration: 1h            # length of an interview
+
+recruiters:
+  Alice:
+  Bob:
+  Chloe:
+
+candidates:
+  David:
+    meet: [Alice, Bob]
+  Emma:
+    meet: [Bob, Chloe]
+  Farid:
+    meet: [Alice]

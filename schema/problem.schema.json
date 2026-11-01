@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/FrederickFrance/igiveyouarendezvous/main/schema/problem.schema.json",
+  "title": "igiveyouarendezvous problem",
+  "description": "Everything to plan: recruiters, candidates with the recruiters they must meet, availabilities and settings. Read in YAML or JSON.",
+  "type": "object",
+  "required": [
+    "recruiters",
+    "candidates"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "This schema, for editors; ignored."
+    },
+    "day": {
+      "$ref": "#/$defs/spans",
+      "description": "Default availability of everybody (08:00-12:00 by default)."
+    },
+    "breaks": {
+      "$ref": "#/$defs/spans",
+      "description": "Times without interviews, such as lunch; a candidate's interviews never lie on both sides of a break. The longest break separates the morning from the afternoon."
+    },
+    "duration": {
+      "$ref": "#/$defs/duration",
+      "description": "Default interview length (1h by default)."
+    },
+    "step": {
+      "$ref": "#/$defs/duration",
+      "description": "Time grid: interviews start on multiples of it (automatic by default)."
+    },
+    "max-wait": {
+      "description": "Total time a candidate may wait between their first and last interview: 0 (the default) chains the interviews; \"unlimited\" removes the limit.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/duration"
+        },
+        {
+          "const": "unlimited"
+        }
+      ]
+    },
+    "joint-groups": {
+      "description": "Groups of recruiters who may interview a candidate together (allowed, not required).",
+      "type": "array",
+      "items": {
+        "type": "array",
+        "minItems": 2,
+        "uniqueItems": true,
+        "items": {
+          "$ref": "#/$defs/name"
+        }
+      }
+    },
+    "max-joint-size": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Maximum recruiters in a joint interview (0: no limit)."
+    },
+    "objectives": {
+      "description": "The objectives, most important first (see igiveyouarendezvous -list-objectives).",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "priorities",
+          "urgency",
+          "complete-candidates",
+          "meetings",
+          "recruiters",
+          "recruiter-half-days",
+          "interviews",
+          "recruiter-span",
+          "candidate-wait",
+          "earliest"
+        ]
+      }
+    },
+    "recruiters": {
+      "description": "The recruiters, by name; a recruiter without settings takes the defaults.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/name"
+      },
+      "additionalProperties": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "duration": {
+            "$ref": "#/$defs/duration",
+            "description": "Length of an interview with this recruiter; a joint interview lasts as long as its longest part."
+          },
+          "availability": {
+            "$ref": "#/$defs/availability"
+          }
+        }
+      }
+    },
+    "candidates": {
+      "description": "The candidates, by name.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/name"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "meet"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "meet": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/$defs/name"
+            },
+            "description": "The recruiters to meet."
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "One candidate outranks any number of candidates of lower priority (1 by default)."
+          },
+          "availability": {
+            "$ref": "#/$defs/availability"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "spans": {
+      "description": "Time spans, such as \"08:00-12:00, 14:00-17:00\" (or 8h-12h), or a list of spans; \"none\": never.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^\\s*(?:[Nn][Oo][Nn][Ee]|\\d{1,2}(?:[:hH]\\d{2}|[hH])?\\s*-\\s*\\d{1,2}(?:[:hH]\\d{2}|[hH])?(?:\\s*,\\s*\\d{1,2}(?:[:hH]\\d{2}|[hH])?\\s*-\\s*\\d{1,2}(?:[:hH]\\d{2}|[hH])?)*)\\s*$"
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^\\s*(?:[Nn][Oo][Nn][Ee]|\\d{1,2}(?:[:hH]\\d{2}|[hH])?\\s*-\\s*\\d{1,2}(?:[:hH]\\d{2}|[hH])?(?:\\s*,\\s*\\d{1,2}(?:[:hH]\\d{2}|[hH])?\\s*-\\s*\\d{1,2}(?:[:hH]\\d{2}|[hH])?)*)\\s*$"
+          }
+        }
+      ]
+    },
+    "duration": {
+      "description": "A length of time: 45m, 1h, 1h30, 1h30m, or a number of minutes.",
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "string",
+          "pattern": "^\\s*(?:\\d+|\\d+h\\d+|(?:\\d+(?:\\.\\d+)?(?:h|m|s))+)\\s*$"
+        }
+      ]
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "A date: 2026-11-03."
+    },
+    "availability": {
+      "description": "When the person is available: time spans valid every day, or time spans by date (absent on the other dates).",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/spans"
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/date"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/spans"
+          }
+        }
+      ]
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    }
+  }
+}

@@ -1,0 +1,31 @@
+# Publishes a release when a version tag is pushed:
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# The tests run first, then the ready-to-use zips of scripts/package.sh
+# (Windows, Mac with an Apple or Intel chip, Linux) are attached to the
+# release, for the people who do not install Go (see the tutorial of the
+# README).
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # to create the release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go test ./...
+      - run: scripts/package.sh "$GITHUB_REF_NAME"
+      - name: Release with the zips
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.zip --title "$GITHUB_REF_NAME" --generate-notes

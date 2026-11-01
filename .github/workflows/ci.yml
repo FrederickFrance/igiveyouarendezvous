@@ -1,0 +1,54 @@
+# Continuous integration: the GitHub equivalent of a .gitlab-ci.yml.
+# Jobs run in parallel on every push and pull request, and every Monday for
+# the vulnerability scan (new vulnerabilities appear without code changes).
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch: # "Run workflow" button
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod # the Go of the build is the one of go.mod
+      - run: go build ./...
+      - run: go vet ./...
+      - name: Tests, with the race detector and the coverage
+        run: go test -race -coverpkg=./... -coverprofile=coverage.out ./...
+      - name: Coverage
+        run: go tool cover -func=coverage.out | tail -1 | tee -a "$GITHUB_STEP_SUMMARY"
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.15.0 # 2.13 cannot read the export data of Go 1.27
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: osv-scanner (runs govulncheck on Go code)
+        run: |
+          go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest
+          osv-scanner scan source -r .

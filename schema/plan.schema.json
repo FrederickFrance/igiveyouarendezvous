@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/FrederickFrance/igiveyouarendezvous/main/schema/plan.schema.json",
+  "title": "igiveyouarendezvous plan",
+  "description": "A schedule written by igiveyouarendezvous -out, to resume from with -start. Read in YAML or JSON.",
+  "type": "object",
+  "required": [
+    "candidates"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "This schema, for editors; ignored."
+    },
+    "date": {
+      "$ref": "#/$defs/date",
+      "description": "The day of the schedule."
+    },
+    "candidates": {
+      "description": "The appointments, by candidate. The fixed plans are added one by one, in this order.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/name"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "fixed"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "fixed": {
+            "type": "boolean",
+            "description": "true: convened, the appointments are kept as they are (or the candidate is planned again, with an alert, when they no longer hold); false: they may be planned again."
+          },
+          "interviews": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "time",
+                "recruiters"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "time": {
+                  "type": "string",
+                  "pattern": "^\\s*\\d{1,2}(?:[:hH]\\d{2}|[hH])?\\s*-\\s*\\d{1,2}(?:[:hH]\\d{2}|[hH])?\\s*$",
+                  "description": "Start and end, such as 09:00-10:00."
+                },
+                "recruiters": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {
+                    "$ref": "#/$defs/name"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "scores": {
+      "type": "array",
+      "description": "The scores of the schedule, for information; ignored when reading."
+    }
+  },
+  "$defs": {
+    "date": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "A date: 2026-11-03."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    }
+  }
+}

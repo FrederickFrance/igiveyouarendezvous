@@ -1,0 +1,12 @@
+# Dependabot opens a pull request when a dependency (Go module or GitHub
+# action) has a new version; the CI then tells whether it can be merged.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
