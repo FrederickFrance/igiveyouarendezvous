@@ -51,7 +51,7 @@ func TestRunWithRest(t *testing.T) {
 	require.Contains(t, text, "R1 + R2", "A meets R1 and R2 together")
 	require.Contains(t, text, "1. priority 1")
 	require.Contains(t, text, "4/5")
-	require.Contains(t, text, "To plan another day:")
+	require.Contains(t, text, "To plan later:")
 
 	left, err := os.ReadFile(rest)
 	require.NoError(t, err)
@@ -97,7 +97,7 @@ func TestRunWithBreak(t *testing.T) {
 	problem := `
 day: 08:00-14:00
 breaks: 11:00-12:00
-max-wait: unlimited
+max-gap: unlimited
 recruiters:
   R1: {availability: 10:00-11:00}
   R2: {availability: 12:00-13:00}
@@ -107,7 +107,7 @@ candidates:
 
 	var out bytes.Buffer
 	require.NoError(t, run(t.Context(), []string{"-patience", "100ms"}, strings.NewReader(problem), &out, &out))
-	require.Contains(t, out.String(), "To plan another day: A (R1, R2)")
+	require.Contains(t, out.String(), "To plan later: A (R1, R2)")
 }
 
 func TestRunErrors(t *testing.T) {
@@ -192,20 +192,20 @@ func TestRunFixedPlans(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	plan := file(t, dir, "plan.yaml", `date: 2026-11-03
+	plan := file(t, dir, "plan.yaml", `from: 2026-11-03
 candidates:
   A:
     fixed: false
-    interviews: [{time: 08:00-09:00, recruiters: [R1]}]
+    interviews: [{date: 2026-11-03, time: 08:00-09:00, recruiters: [R1]}]
   B:
     fixed: false
-    interviews: [{time: 09:00-10:00, recruiters: [R1]}]
+    interviews: [{date: 2026-11-03, time: 09:00-10:00, recruiters: [R1]}]
   C:
     fixed: true
-    interviews: [{time: 10:00-11:00, recruiters: [R1]}]
+    interviews: [{date: 2026-11-03, time: 10:00-11:00, recruiters: [R1]}]
   Z:
     fixed: true
-    interviews: [{time: 11:00-12:00, recruiters: [R1]}]
+    interviews: [{date: 2026-11-03, time: 11:00-12:00, recruiters: [R1]}]
 `)
 
 	// Since the convocations, R1 only comes at 9:00, B needs R2 too, and Z
@@ -235,6 +235,9 @@ candidates:
 
 	require.ErrorContains(t, run(t.Context(), []string{"-date", "2026-11-04", "-start", plan, problem}, nil, &out, &errs),
 		"is the schedule of 2026-11-03, not of 2026-11-04")
+	undated := file(t, dir, "undated.yaml", "recruiters: {R1: }\ncandidates:\n  C: {meet: [R1]}\n")
+	require.ErrorContains(t, run(t.Context(), []string{"-start", plan, undated}, nil, &out, &errs),
+		"is the schedule of 2026-11-03, not of a day without date")
 }
 
 func TestRunDate(t *testing.T) {
@@ -252,7 +255,13 @@ candidates:
 
 	var out, errs bytes.Buffer
 	require.ErrorContains(t, run(t.Context(), nil, strings.NewReader(problem), &out, &errs),
-		"availabilities are given by date (2026-11-03, 2026-11-04): choose the day with -date")
+		"availabilities are given by date (2026-11-03, 2026-11-04): choose the period with -from and -to, or the day with -date")
+	require.ErrorContains(t, run(t.Context(), []string{"-date", "2026-11-03", "-to", "2026-11-04"}, strings.NewReader(problem), &out, &errs),
+		"-date is one day: give it, or -from and -to, not both")
+	require.ErrorContains(t, run(t.Context(), []string{"-to", "2026-11-04"}, strings.NewReader(problem), &out, &errs),
+		"the end of the period is given, not its start")
+	require.ErrorContains(t, run(t.Context(), []string{"-from", "2026-11-04", "-to", "2026-11-03"}, strings.NewReader(problem), &out, &errs),
+		"the period ends (2026-11-03) before it starts (2026-11-04)")
 
 	require.NoError(t, run(t.Context(), []string{"-date", "2026-11-03", "-patience", "100ms"},
 		strings.NewReader(problem), &out, &errs))
@@ -263,8 +272,98 @@ candidates:
 	out.Reset()
 	require.NoError(t, run(t.Context(), []string{"-date", "2026-11-06", "-patience", "100ms"},
 		strings.NewReader(problem), &out, &errs))
-	require.Contains(t, errs.String(), "no availability is given for 2026-11-06")
-	require.Contains(t, out.String(), "To plan another day: A (R1)")
+	require.Contains(t, errs.String(), "no availability is given in 2026-11-06")
+	require.Contains(t, out.String(), "To plan later: A (R1)")
+
+	out.Reset()
+	errs.Reset()
+	require.NoError(t, run(t.Context(), []string{"-from", "2026-11-07", "-to", "2026-11-08", "-patience", "100ms"},
+		strings.NewReader(problem), &out, &errs))
+	require.Contains(t, errs.String(), "no working day in 2026-11-07 to 2026-11-08 (weekdays, closed): nothing can be planned")
+	require.Contains(t, out.String(), "To plan later: A (R1), B (R1)")
+}
+
+// interviewsOf returns the interviews of candidate name in the printed
+// schedule: "Mon 2026-11-09 09:00-10:00 R2", in the order of time.
+func interviewsOf(text, name string) []string {
+	var ivs []string
+
+	for line := range strings.Lines(text) {
+		f := strings.Fields(line)
+		if len(f) >= 5 && f[3] == name { // day, date, time, candidate, recruiters, fixed
+			ivs = append(ivs, strings.Join([]string{f[0], f[1], f[2], f[4]}, " "))
+		}
+	}
+
+	return ivs
+}
+
+// A week with a closed Wednesday, three days at least between two
+// interviews, and an order for A: R2, then R1.
+func TestRunPeriod(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	problem := file(t, dir, "problem.yaml", `from: 2026-11-09
+to: 2026-11-13
+closed: [2026-11-11]
+day: 09:00-12:00
+min-gap: 3d
+max-gap: unlimited
+recruiters:
+  R1:
+  R2:
+candidates:
+  A: {meet: {R1: 2, R2: 1}}
+  B:
+    meet: [R1, R2]
+    availability: {2026-11-10: 09:00-10:00, 2026-11-13: 11:00-12:00}
+`)
+	plan := filepath.Join(dir, "plan.yaml")
+
+	var out, errs bytes.Buffer
+	require.NoError(t, run(t.Context(), []string{"-patience", "200ms", "-out", plan, problem}, nil, &out, &errs))
+
+	text := out.String()
+	require.Contains(t, text, "Period 2026-11-09 to 2026-11-13 planned with the local search")
+	require.Contains(t, text, "All meetings are planned.")
+	require.Contains(t, text, "recruiters ")
+	require.Contains(t, text, "/8", "2 recruiters, 4 working days")
+
+	b := interviewsOf(text, "B")
+	require.Len(t, b, 2, text)
+	require.True(t, strings.HasPrefix(b[0], "Tue 2026-11-10 09:00-10:00 "), b)
+	require.True(t, strings.HasPrefix(b[1], "Fri 2026-11-13 11:00-12:00 "), b)
+
+	a := interviewsOf(text, "A")
+	require.Len(t, a, 2, text)
+	require.True(t, strings.HasSuffix(a[0], " R2") && strings.HasSuffix(a[1], " R1"), "R2 first: %v", a)
+	require.Contains(t, []string{"Mon", "Tue"}, a[0][:3], "three days before the second one: %v", a)
+	require.Contains(t, []string{"Thu", "Fri"}, a[1][:3], a)
+
+	saved, err := os.ReadFile(plan)
+	require.NoError(t, err)
+	require.Contains(t, string(saved), "from: 2026-11-09\nto: 2026-11-13\n")
+	require.Contains(t, string(saved), "      - date: 2026-11-10\n        time: 09:00-10:00\n")
+
+	// The plan holds for its period only; -to replaces the end of the file.
+	require.ErrorContains(t, run(t.Context(), []string{"-to", "2026-11-12", "-start", plan, problem}, nil, &out, &errs),
+		"is the schedule of 2026-11-09 to 2026-11-13, not of 2026-11-09 to 2026-11-12")
+	require.ErrorContains(t, run(t.Context(), []string{"-date", "2026-11-09", "-start", plan, problem}, nil, &out, &errs),
+		"is the schedule of 2026-11-09 to 2026-11-13, not of 2026-11-09")
+
+	// Resumed, it plans the same.
+	out.Reset()
+	require.NoError(t, run(t.Context(), []string{"-patience", "100ms", "-start", plan, "-fix-all", problem}, nil, &out, &errs))
+	require.Equal(t, a, interviewsOf(out.String(), "A"))
+	require.Equal(t, b, interviewsOf(out.String(), "B"))
+
+	// From Thursday on (-from replaces the start of the file), A and B
+	// need more days.
+	out.Reset()
+	require.NoError(t, run(t.Context(), []string{"-from", "2026-11-12", "-patience", "100ms", problem}, nil, &out, &errs))
+	require.Contains(t, out.String(), "Period 2026-11-12 to 2026-11-13 planned with")
+	require.Contains(t, out.String(), "To plan later: A (R1, R2), B (R1, R2)")
 }
 
 func TestRunExample(t *testing.T) {
@@ -272,9 +371,15 @@ func TestRunExample(t *testing.T) {
 
 	for _, name := range []string{"problem.yaml", "problem.json"} {
 		var out bytes.Buffer
-		require.NoError(t, run(t.Context(), []string{"-date", "2026-11-04", "-patience", "200ms", "-seed", "3",
+		require.NoError(t, run(t.Context(), []string{"-patience", "200ms", "-seed", "3",
 			filepath.Join("..", "..", "example", name)}, nil, &out, &out))
-		require.Contains(t, out.String(), "Day 2026-11-04 planned with", name)
+		require.Contains(t, out.String(), "Period 2026-11-09 to 2026-11-13 planned with", name)
+		require.Contains(t, out.String(), "All meetings are planned.", name)
+
+		out.Reset()
+		require.NoError(t, run(t.Context(), []string{"-date", "2026-11-10", "-patience", "200ms", "-seed", "3",
+			filepath.Join("..", "..", "example", name)}, nil, &out, &out))
+		require.Contains(t, out.String(), "Day 2026-11-10 planned with", name)
 	}
 }
 
@@ -320,5 +425,102 @@ candidates:
 	require.NoError(t, run(t.Context(), []string{"-date", "2026-11-03", "-patience", "100ms"}, strings.NewReader(problem), &out, &out))
 	require.Contains(t, out.String(), "08:00-09:00   A")
 	require.Contains(t, out.String(), "2. last day")
-	require.Contains(t, out.String(), "To plan another day: B (R1)")
+	require.Contains(t, out.String(), "To plan later: B (R1)")
+}
+
+// On Wednesday: X failed and is withdrawn, A is convened, B is not yet, and
+// N arrives. A stays on Monday, B and N go from Wednesday on.
+func TestRunNotBefore(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	plan := file(t, dir, "plan.yaml", `from: 2026-11-09
+to: 2026-11-13
+candidates:
+  A:
+    fixed: true
+    interviews:
+      - {date: 2026-11-09, time: 09:00-10:00, recruiters: [R1]}
+      - {date: 2026-11-09, time: 10:00-11:00, recruiters: [R2]}
+  X:
+    fixed: true
+    interviews:
+      - {date: 2026-11-10, time: 09:00-10:00, recruiters: [R1]}
+      - {date: 2026-11-10, time: 10:00-11:00, recruiters: [R2]}
+  B:
+    fixed: false
+    interviews:
+      - {date: 2026-11-09, time: 11:00-12:00, recruiters: [R1]}
+`)
+	problem := file(t, dir, "problem.yaml", `from: 2026-11-09
+to: 2026-11-13
+day: 09:00-12:00
+recruiters: {R1: , R2: }
+candidates:
+  A: {meet: [R1, R2]}
+  B: {meet: [R1]}
+  N: {meet: [R2]}
+`)
+
+	var out, errs bytes.Buffer
+	err := run(t.Context(), []string{"-patience", "100ms", "-start", plan, "-not-before", "2026-11-11", problem}, nil, &out, &errs)
+	require.ErrorIs(t, err, errAlerts, "X is withdrawn: their appointments are to cancel")
+
+	text := out.String()
+	require.Contains(t, text, "  X: not in the problem file any more\n")
+	require.Contains(t, text, "Period 2026-11-09 to 2026-11-13 planned with the local search, new interviews from Wed 2026-11-11, on a")
+	require.Equal(t, []string{"Mon 2026-11-09 09:00-10:00 R1", "Mon 2026-11-09 10:00-11:00 R2"}, interviewsOf(text, "A"))
+	require.Contains(t, errs.String(), "  Mon 2026-11-09 11:00-12:00 B with R1: before the first day of new interviews\n")
+
+	for _, name := range []string{"B", "N"} {
+		ivs := interviewsOf(text, name)
+		require.Len(t, ivs, 1, text)
+		require.Contains(t, []string{"Wed", "Thu", "Fri"}, ivs[0][:3], "%s: %v", name, ivs)
+	}
+
+	require.Contains(t, text, "All meetings are planned.")
+
+	require.ErrorContains(t, run(t.Context(), []string{"-not-before", "2026-11-16", problem}, nil, &out, &errs),
+		"not-before: 2026-11-16 is out of the period, from 2026-11-09 to 2026-11-13")
+	require.ErrorContains(t, run(t.Context(), []string{"-not-before", "Wednesday", problem}, nil, &out, &errs),
+		`-not-before: invalid date "Wednesday"`)
+}
+
+// The examples of other uses (README): meetings with everybody at once, and
+// the programme of a colloquium.
+func TestRunOtherUses(t *testing.T) {
+	t.Parallel()
+
+	for name, want := range map[string][]string{
+		"show.yaml": {
+			"Thu 2026-11-19 ", // the only day when Ada and Grace are both there
+			"   graphs for everybody              Camille (host) + Ada + Grace",
+			"   the joys of operations research   Camille (host) + Ada + Blaise + Grace",
+		},
+		"colloquium.yaml": {"Mon 2026-11-16 09:00-09:30   colloquium   opening", "Wed 2026-11-18 16:30-17:00   colloquium   closing"},
+		"roleplay.yaml":   {"Sat 2026-11-28 14:00-18:00   the spell of Zandar   Morgane (game master) + Lou + Max + Noé"},
+	} {
+		var out bytes.Buffer
+		require.NoError(t, run(t.Context(), []string{"-patience", "200ms", filepath.Join("..", "..", "example", name)}, nil, &out, &out))
+		require.Contains(t, out.String(), "All meetings are planned.", name)
+
+		for _, line := range want {
+			require.Contains(t, out.String(), line, name)
+		}
+	}
+
+	// Without a time when everybody is free, no recording rather than pieces.
+	problem := `day: 09:00-12:00
+recruiters:
+  host:
+  guest: {availability: 11:00-12:00}
+  other guest: {availability: 09:00-11:00}
+candidates:
+  episode: {meet: [host, guest, other guest], together: true}
+`
+
+	var out bytes.Buffer
+	require.NoError(t, run(t.Context(), []string{"-patience", "100ms"}, strings.NewReader(problem), &out, &out))
+	require.Contains(t, out.String(), "To plan later: episode (host, guest, other guest)")
+	require.Contains(t, out.String(), "Impossible with these availabilities")
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -38,10 +39,10 @@ type Score struct {
 	Proven bool
 }
 
-// Schedule is the plan of one day.
+// Schedule is the plan of a period.
 type Schedule struct {
 	Interviews  []Interview // sorted by start, then candidate
-	Unscheduled []int       // requests not held, to plan on another day
+	Unscheduled []int       // requests not held, to plan another time
 	Impossible  []int       // unscheduled requests that no day with the same availabilities can hold
 	Scores      []Score     // one per objective (MaxPriorities, MaxUrgency: per level), in priority order
 	Step        time.Duration
@@ -58,8 +59,8 @@ func (s *Schedule) Proven() bool {
 	return true
 }
 
-// Remaining returns the problem of the next day: the same people, and only
-// the requests that were not held.
+// Remaining returns the problem left: the same people, with the same
+// availabilities, and only the requests that were not held.
 func (s *Schedule) Remaining(p *Problem) *Problem {
 	next := &Problem{
 		Recruiters: slices.Clone(p.Recruiters),
@@ -91,14 +92,15 @@ func Check(p *Problem, opts Options, s *Schedule) error {
 		return err
 	}
 
-	if err := p.check(); err != nil {
+	if err := p.check(o); err != nil {
 		return err
 	}
 
 	held := make([]int, len(p.Requests))
+	breaks := o.everyDay(o.Breaks)
 
 	for _, iv := range s.Interviews {
-		if err := checkInterview(p, o, iv, held); err != nil {
+		if err := checkInterview(p, o, iv, held, breaks); err != nil {
 			return err
 		}
 	}
@@ -123,10 +125,10 @@ func Check(p *Problem, opts Options, s *Schedule) error {
 		return err
 	}
 
-	return checkCandidates(p, o, s, held)
+	return checkCandidates(p, o, s, held, breaks)
 }
 
-func checkInterview(p *Problem, o Options, iv Interview, held []int) error {
+func checkInterview(p *Problem, o Options, iv Interview, held []int, breaks []Interval) error {
 	if iv.Candidate < 0 || iv.Candidate >= len(p.Candidates) {
 		return fmt.Errorf("interview with unknown candidate %d", iv.Candidate)
 	}
@@ -136,31 +138,36 @@ func checkInterview(p *Problem, o Options, iv Interview, held []int) error {
 		return fmt.Errorf("interview of %s without request", candidate)
 	}
 
-	var (
-		recruiters []int
-		length     time.Duration
-	)
+	var recruiters []int
 
 	for _, r := range iv.Requests {
 		if r < 0 || r >= len(p.Requests) || p.Requests[r].Candidate != iv.Candidate {
 			return fmt.Errorf("interview of %s holds a request of somebody else", candidate)
 		}
 
-		req := p.Requests[r]
 		held[r]++
-		recruiters = append(recruiters, req.Recruiter)
-		length = max(length, p.duration(req.Recruiter, o))
+		recruiters = append(recruiters, p.Requests[r].Recruiter)
 	}
 
-	if len(recruiters) > 1 && !p.jointAllowed(recruiters) {
-		return fmt.Errorf("joint interview of %s with recruiters of no common joint group", candidate)
+	if err := p.joint(iv.Candidate, recruiters, o); err != nil {
+		return fmt.Errorf("joint interview of %s with %w", candidate, err)
 	}
 
-	if o.MaxJointSize > 0 && len(iv.Requests) > o.MaxJointSize {
-		return fmt.Errorf("joint interview of %s with more than %d recruiters", candidate, o.MaxJointSize)
+	if p.Candidates[iv.Candidate].Together {
+		all := 0
+		for _, r := range p.Requests {
+			if r.Candidate == iv.Candidate {
+				all++
+			}
+		}
+
+		if len(iv.Requests) != all {
+			return fmt.Errorf("%s meets everybody together, in one interview", candidate)
+		}
 	}
 
 	slices.Sort(recruiters)
+	length := p.length(iv.Candidate, recruiters, o)
 
 	if !slices.Equal(recruiters, iv.Recruiters) {
 		return fmt.Errorf("interview of %s: recruiters do not match the requests", candidate)
@@ -170,13 +177,24 @@ func checkInterview(p *Problem, o Options, iv Interview, held []int) error {
 		return fmt.Errorf("interview of %s lasts %s instead of %s", candidate, iv.End-iv.Start, length)
 	}
 
-	if !inside(availability(p.Candidates[iv.Candidate].Availability, o.Day), iv.Start, iv.End) {
-		return fmt.Errorf("%s is not available %s", candidate, Interval{iv.Start, iv.End})
+	when := Interval{iv.Start, iv.End}
+
+	switch {
+	case when.Day() < 0 || when.Day() >= o.days() || iv.End > time.Duration(when.Day()+1)*DayLength:
+		return fmt.Errorf("interview of %s %s out of the days of the period", candidate, when)
+	case !o.open(when.Day()):
+		return fmt.Errorf("interview of %s on day %d, which is closed", candidate, when.Day())
+	case !iv.Fixed && when.Day() < o.NotBefore:
+		return fmt.Errorf("interview of %s on day %d, before day %d of the new interviews, without being fixed", candidate, when.Day(), o.NotBefore)
+	case overlaps(breaks, iv.Start, iv.End):
+		return fmt.Errorf("interview of %s %s during a break", candidate, when)
+	case !inside(availability(p.Candidates[iv.Candidate].Availability, o), iv.Start, iv.End):
+		return fmt.Errorf("%s is not available %s", candidate, when)
 	}
 
 	for _, h := range recruiters {
-		if !inside(availability(p.Recruiters[h].Availability, o.Day), iv.Start, iv.End) {
-			return fmt.Errorf("%s is not available %s", p.Recruiters[h].Name, Interval{iv.Start, iv.End})
+		if !inside(availability(p.Recruiters[h].Availability, o), iv.Start, iv.End) {
+			return fmt.Errorf("%s is not available %s", p.Recruiters[h].Name, when)
 		}
 	}
 
@@ -216,8 +234,9 @@ func checkOverlaps(p *Problem, s *Schedule) error {
 	return nil
 }
 
-// checkCandidates verifies "all or nothing" and the waiting limit.
-func checkCandidates(p *Problem, o Options, s *Schedule, held []int) error {
+// checkCandidates verifies "all or nothing", and the gaps and the order of
+// the interviews of each candidate.
+func checkCandidates(p *Problem, o Options, s *Schedule, held []int, breaks []Interval) error {
 	needed := make([]int, len(p.Candidates))
 	got := make([]int, len(p.Candidates))
 
@@ -231,78 +250,105 @@ func checkCandidates(p *Problem, o Options, s *Schedule, held []int) error {
 			return fmt.Errorf("%s is only partly served", p.Candidates[c].Name)
 		}
 
-		if err := checkBreaks(p, o, s, c); err != nil {
+		if err := planProblem(p, o, interviewsOf(s, c), breaks); err != nil {
 			return err
 		}
-
-		if o.MaxWait == NoWaitLimit {
-			continue
-		}
-
-		if wait := candidateWait(s, c); wait > o.MaxWait {
-			return fmt.Errorf("%s waits %s between interviews, more than %s", p.Candidates[c].Name, wait, o.MaxWait)
-		}
 	}
 
 	return nil
 }
 
-// checkBreaks verifies that the interviews of candidate c avoid the breaks
-// and lie on one side of each.
-func checkBreaks(p *Problem, o Options, s *Schedule, c int) error {
-	for _, b := range o.Breaks {
-		before, after := false, false
-
-		for _, iv := range s.Interviews {
-			if iv.Candidate != c {
-				continue
-			}
-
-			switch {
-			case overlaps([]Interval{b}, iv.Start, iv.End):
-				return fmt.Errorf("interview of %s during the break %s", p.Candidates[c].Name, b)
-			case iv.End <= b.Start:
-				before = true
-			default:
-				after = true
-			}
-		}
-
-		if before && after {
-			return fmt.Errorf("the interviews of %s are split by the break %s", p.Candidates[c].Name, b)
-		}
-	}
-
-	return nil
-}
-
-// candidateWait returns the time candidate c waits between interviews.
-func candidateWait(s *Schedule, c int) time.Duration {
-	var (
-		first, last time.Duration
-		busy        time.Duration
-		seen        bool
-	)
+// interviewsOf returns the interviews of candidate c, by start.
+func interviewsOf(s *Schedule, c int) []Interview {
+	var out []Interview
 
 	for _, iv := range s.Interviews {
-		if iv.Candidate != c {
-			continue
+		if iv.Candidate == c {
+			out = append(out, iv)
 		}
-
-		if !seen || iv.Start < first {
-			first = iv.Start
-		}
-
-		last = max(last, iv.End)
-		busy += iv.End - iv.Start
-		seen = true
 	}
 
-	if !seen {
-		return 0
+	slices.SortFunc(out, func(a, b Interview) int { return cmp.Compare(a.Start, b.Start) })
+
+	return out
+}
+
+// planProblem checks the interviews of one candidate, sorted by start, that
+// do not overlap: the gaps, the breaks on a same day, and the ranks.
+func planProblem(p *Problem, o Options, ivs []Interview, breaks []Interval) error {
+	if len(ivs) == 0 {
+		return nil
 	}
 
-	return last - first - busy
+	name := p.Candidates[ivs[0].Candidate].Name
+
+	for i := 1; i < len(ivs); i++ {
+		a, b := Interval{ivs[i-1].Start, ivs[i-1].End}, Interval{ivs[i].Start, ivs[i].End}
+		gap, days := b.Start-a.End, b.Day()-a.Day()
+
+		switch {
+		case o.MinGap.Days > 0 && days < o.MinGap.Days:
+			return fmt.Errorf("%s has %d days between two interviews, fewer than %s", name, days, o.MinGap)
+		case o.MinGap.Days == 0 && gap < o.MinGap.Duration:
+			return fmt.Errorf("%s has %s between two interviews, less than %s", name, Length(gap), o.MinGap)
+		case o.MaxGap.Days > 0 && days > o.MaxGap.Days:
+			return fmt.Errorf("%s has %d days between two interviews, more than %s", name, days, o.MaxGap)
+		case o.MaxGap.IsZero() && gap > 0:
+			return fmt.Errorf("%s waits %s between two interviews, which must follow each other", name, Length(gap))
+		case o.MaxGap.Days == 0 && o.MaxGap.Duration != NoLimit && gap > o.MaxGap.Duration:
+			return fmt.Errorf("%s waits %s between two interviews, more than %s", name, Length(gap), o.MaxGap)
+		case days == 0 && overlaps(breaks, a.End, b.Start):
+			return fmt.Errorf("two interviews of %s lie on both sides of a break (%s, %s)", name, a, b)
+		}
+	}
+
+	last := 0 // the rank of the previous ranked interview
+
+	for _, iv := range ivs {
+		rank := 0
+
+		for _, r := range iv.Requests {
+			switch k := p.Requests[r].Rank; {
+			case k == 0:
+			case rank > 0 && k != rank:
+				return fmt.Errorf("an interview of %s holds meetings of ranks %d and %d", name, rank, k)
+			default:
+				rank = k
+			}
+		}
+
+		if rank > 0 && rank < last {
+			return fmt.Errorf("%s meets %s, of rank %d, after a meeting of rank %d", name, recruiterNames(p, iv.Recruiters), rank, last)
+		}
+
+		last = max(last, rank)
+	}
+
+	return nil
+}
+
+func recruiterNames(p *Problem, recruiters []int) string {
+	names := make([]string, len(recruiters))
+	for i, h := range recruiters {
+		names[i] = p.Recruiters[h].Name
+	}
+
+	return strings.Join(names, " and ")
+}
+
+// candidateWait returns the time candidate c waits between interviews of a
+// same day.
+func candidateWait(s *Schedule, c int) time.Duration {
+	ivs := interviewsOf(s, c)
+	wait := time.Duration(0)
+
+	for i := 1; i < len(ivs); i++ {
+		if dayOf(ivs[i].Start) == dayOf(ivs[i-1].Start) {
+			wait += ivs[i].Start - ivs[i-1].End
+		}
+	}
+
+	return wait
 }
 
 // Evaluate computes the value of each objective of the options on the
@@ -334,14 +380,14 @@ func Evaluate(p *Problem, opts Options, s *Schedule) ([]Score, error) {
 
 func evaluate(p *Problem, o Options, s *Schedule, cr criterion, held []bool) int {
 	switch obj := cr.obj; obj {
-	case MinRecruiters, MinRecruiterHalfDays:
-		used := make([][2]bool, len(p.Recruiters))
+	case MinRecruiters, MinRecruiterHalfDays: // by recruiter and day
+		used := map[[2]int][2]bool{}
 
 		for _, iv := range s.Interviews {
 			halves := halfDaysOf(o, iv.Start, iv.End)
 			for _, h := range iv.Recruiters {
-				used[h][0] = used[h][0] || halves[0]
-				used[h][1] = used[h][1] || halves[1]
+				key := [2]int{h, dayOf(iv.Start)}
+				used[key] = [2]bool{used[key][0] || halves[0], used[key][1] || halves[1]}
 			}
 		}
 
@@ -371,27 +417,23 @@ func evaluate(p *Problem, o Options, s *Schedule, cr criterion, held []bool) int
 		return count(held)
 	case MinInterviews:
 		return len(s.Interviews)
-	case MinRecruiterSpan:
+	case MinRecruiterSpan: // by recruiter and day
+		first, last := map[[2]int]time.Duration{}, map[[2]int]time.Duration{}
+
+		for _, iv := range s.Interviews {
+			for _, h := range iv.Recruiters {
+				key := [2]int{h, dayOf(iv.Start)}
+				if f, seen := first[key]; !seen || iv.Start < f {
+					first[key] = iv.Start
+				}
+
+				last[key] = max(last[key], iv.End)
+			}
+		}
+
 		total := time.Duration(0)
-
-		for h := range p.Recruiters {
-			first, last, seen := time.Duration(0), time.Duration(0), false
-
-			for _, iv := range s.Interviews {
-				if !slices.Contains(iv.Recruiters, h) {
-					continue
-				}
-
-				if !seen || iv.Start < first {
-					first = iv.Start
-				}
-
-				last, seen = max(last, iv.End), true
-			}
-
-			if seen {
-				total += last - first
-			}
+		for key, f := range first {
+			total += last[key] - f
 		}
 
 		return int(total / time.Minute)

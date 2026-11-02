@@ -2,6 +2,7 @@ package planning_test
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -124,6 +125,10 @@ func solve(t *testing.T, e engine, p *planning.Problem, o planning.Options) *pla
 	defer cancel()
 
 	s, err := e.plan(ctx, p, o)
+	if e.exact && errors.Is(err, planning.ErrUnsupported) {
+		t.Skip("beyond the exact model")
+	}
+
 	require.NoError(t, err)
 	require.NoError(t, planning.Check(p, o, s))
 
@@ -299,9 +304,9 @@ func TestChaining(t *testing.T) {
 		meetings int
 	}{
 		"chained, all the same day (default)": {meetings: 0},
-		"one hour of waiting":                 {options: planning.Options{MaxWait: time.Hour}, meetings: 0},
-		"two hours of waiting":                {options: planning.Options{MaxWait: 2 * time.Hour}, meetings: 2},
-		"no wait limit":                       {options: planning.Options{MaxWait: planning.NoWaitLimit}, meetings: 2},
+		"one hour of waiting":                 {options: planning.Options{MaxGap: planning.Gap{Duration: time.Hour}}, meetings: 0},
+		"two hours of waiting":                {options: planning.Options{MaxGap: planning.Gap{Duration: 2 * time.Hour}}, meetings: 2},
+		"no wait limit":                       {options: planning.Options{MaxGap: planning.Gap{Duration: planning.NoLimit}}, meetings: 2},
 	}
 
 	for name, tc := range tests {
@@ -373,7 +378,7 @@ func TestCandidateWait(t *testing.T) {
 		p.Recruiters[0].Availability = []planning.Interval{{Start: clock(8, 0), End: clock(9, 0)}}
 
 		s := solve(t, e, p, planning.Options{
-			MaxWait:    planning.NoWaitLimit,
+			MaxGap:     planning.Gap{Duration: planning.NoLimit},
 			Objectives: []planning.Objective{planning.MaxMeetings, planning.MinCandidateWait},
 		})
 		require.Equal(t, 2, score(t, s, planning.MaxMeetings))
@@ -417,8 +422,8 @@ func TestBreaks(t *testing.T) {
 		options  planning.Options
 		meetings int
 	}{
-		"no break":         {options: planning.Options{Day: day, MaxWait: planning.NoWaitLimit}, meetings: 2},
-		"lunch in between": {options: planning.Options{Day: day, Breaks: lunch, MaxWait: planning.NoWaitLimit}, meetings: 0},
+		"no break":         {options: planning.Options{Day: day, MaxGap: planning.Gap{Duration: planning.NoLimit}}, meetings: 2},
+		"lunch in between": {options: planning.Options{Day: day, Breaks: lunch, MaxGap: planning.Gap{Duration: planning.NoLimit}}, meetings: 0},
 	}
 
 	for name, tc := range tests {
@@ -497,7 +502,7 @@ func TestInvalidOptions(t *testing.T) {
 		"step does not divide":  {Step: 25 * time.Minute},
 		"objective twice":       {Objectives: []planning.Objective{planning.MaxMeetings, planning.MaxMeetings}},
 		"no objective":          {Objectives: []planning.Objective{}},
-		"negative wait":         {MaxWait: -2 * time.Minute},
+		"negative wait":         {MaxGap: planning.Gap{Duration: -2 * time.Minute}},
 		"empty day interval":    {Day: []planning.Interval{{Start: clock(12, 0), End: clock(8, 0)}}},
 		"odd duration in grid":  {Duration: 90 * time.Second},
 		"negative joint size":   {MaxJointSize: -1},

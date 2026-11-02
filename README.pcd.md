@@ -8,10 +8,20 @@
 Ch'est un programme pour planifier ches intertiens intre ches candidats et
 ches recruteus, in Go.
 
-Chaque candidat i vot tous ses recruteus ch'même jour, eun intertien après
-l'eute. Ch'programme i fait passer l'pus d'gins possibe, pis i fait des
-économies d'temps pour ches recruteus. Eune journée à l'fos : cho qui
-n'rinte pon, i l'met dins ch'fichier d'éch'lindemain.
+Chaque candidat i vot tous ses recruteus dins l'période (eune journée, eune
+semaine…), avec un écart minimum et maximum intre deux intertiens (par
+défaut eun après l'eute, ou bin par exempe au moins trois jours), et si o
+veut dins un ordre. Ch'programme i fait passer l'pus d'gins possibe, pis i
+fait des économies d'temps pour ches recruteus. Eune période à l'fos (d'`from`
+à `to`, du lundi au vindredi par défaut, sans ches jours fériés) : cho qui
+n'rinte pon, i l'met dins ch'fichier d'la période d'après.
+
+Pas qu'des intertiens : avec `together: true`, un « candidat » i vot tous ses
+« recruteus » in même temps, ou bin personne, pour inregistrer eune émission,
+pour eune partie d'jeu d'rôle… Et un colloque dins eune salle, ch'est un
+« candidat » qu'ses intervintions i s'suivtent. Vos ches exempes
+[émission](example/show.yaml), [colloque](example/colloquium.yaml) et [jeu
+d'rôle](example/roleplay.yaml).
 
 ## Ch'premier planning, pas à pas
 
@@ -77,7 +87,8 @@ Informations complémentaires > Exécuter quand même.)
 **6. Éch'lindemain.** Pour cheux qui n'ont point pu passer :
 `igiveyouarendezvous -rest lindemain.yaml problem.yaml` (Mac et Linux : avec
 `./` devant). Ch'programme i écrit aussi `lindemain.yaml`, avec seulement cho
-qui reste : prinds-le éch'lindemain à l'plache d'`problem.yaml`.
+qui reste : prinds-le éch'lindemain à l'plache d'`problem.yaml`. (Pour eune
+semaine intière d'un coup, vos `from` et `to` dins `example-full.yaml`.)
 
 **Si cha n'va point**, ch'programme i dit quelle ligne qu'all' est fausse :
 r'garde les espaces au début, ch'deux-points, et si les noms is sont écrits
@@ -92,7 +103,7 @@ go install github.com/FrederickFrance/igiveyouarendezvous/cmd/igiveyouarendezvou
 ## Pour s'in servir
 
 ```sh
-igiveyouarendezvous -date 2026-11-03 -rest lindemain.yaml example/problem.yaml
+igiveyouarendezvous -rest lindemain.yaml example/problem.yaml
 ```
 
 Ch'fichier problème (YAML ou JSON) i dit qui qu'i doit vir qui, et quand

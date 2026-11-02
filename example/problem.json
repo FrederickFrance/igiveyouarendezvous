@@ -1,14 +1,19 @@
 {
   "$schema": "../schema/problem.schema.json",
+  "from": "2026-11-09",
+  "to": "2026-11-13",
+  "weekdays": ["mon", "tue", "wed", "thu", "fri"],
+  "closed": ["2026-11-11"],
   "day": "08:00-17:00",
   "breaks": "12:00-13:30",
   "duration": "1h",
-  "max-wait": 0,
+  "min-gap": 0,
+  "max-gap": 0,
   "joint-groups": [
     ["recruiter 2", "recruiter 3", "recruiter 5"],
     ["recruiter 4", "recruiter 5"]
   ],
-  "objectives": ["priorities", "meetings", "recruiters", "recruiter-half-days", "interviews", "recruiter-span"],
+  "objectives": ["priorities", "urgency", "meetings", "recruiters", "recruiter-half-days", "interviews", "recruiter-span"],
   "recruiters": {
     "recruiter 1": {"duration": "30m", "availability": "09:00-12:00"},
     "recruiter 2": {},
@@ -20,12 +25,12 @@
     "candidate A": {"meet": ["recruiter 1", "recruiter 2", "recruiter 3"]},
     "candidate B": {
       "meet": ["recruiter 3"],
-      "availability": {"2026-11-03": "none", "2026-11-04": "08:00-12:00"}
+      "availability": {"2026-11-09": "none", "2026-11-10": "08:00-12:00"}
     },
     "candidate C": {"meet": ["recruiter 4", "recruiter 5"], "priority": 2},
     "candidate D": {
-      "meet": ["recruiter 1", "recruiter 2", "recruiter 5"],
-      "availability": {"2026-11-03": "09:00-12:00", "2026-11-04": "14:00-17:00"}
+      "meet": {"recruiter 1": 1, "recruiter 2": "X", "recruiter 5": 2},
+      "availability": {"2026-11-12": "09:00-12:00", "2026-11-13": "14:00-17:00"}
     }
   }
 }

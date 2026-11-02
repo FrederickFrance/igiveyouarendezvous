@@ -14,7 +14,12 @@ import (
 // takes integer values, so a gap below 1 proves optimality.
 const absGap = 0.999
 
-// Solve plans one day.
+// ErrUnsupported is returned by Solve for a problem beyond the exact model:
+// a period of several days, gaps other than "back to back" or "no limit",
+// or ranked requests. Search handles them.
+var ErrUnsupported = errors.New("planning: the exact model only plans one day, with interviews back to back or with any wait, in any order")
+
+// Solve plans one day, with an exact model (see ErrUnsupported).
 //
 // The objectives are optimised one after the other: each one is optimised,
 // then frozen ("never do worse than this") before the next one is
@@ -23,7 +28,7 @@ const absGap = 0.999
 // is returned and its scores are not proven.
 //
 // Requests that cannot all be held are listed in Schedule.Unscheduled;
-// Schedule.Remaining gives the problem to plan on the next day.
+// Schedule.Remaining gives the problem to plan in the next period.
 func Solve(ctx context.Context, solver mip.Solver, p *Problem, o Options) (*Schedule, error) {
 	if solver == nil {
 		return nil, errors.New("planning: no solver")
@@ -32,6 +37,10 @@ func Solve(ctx context.Context, solver mip.Solver, p *Problem, o Options) (*Sche
 	in, err := newInstance(p, o)
 	if err != nil {
 		return nil, err
+	}
+
+	if !in.exact() {
+		return nil, ErrUnsupported
 	}
 
 	f := in.formulate()
@@ -55,6 +64,22 @@ func Solve(ctx context.Context, solver mip.Solver, p *Problem, o Options) (*Sche
 	}
 
 	return s, nil
+}
+
+// exact tells whether the exact model handles the instance.
+func (in *instance) exact() bool {
+	o := in.o
+	if o.days() > 1 || !o.MinGap.IsZero() || !o.MaxGap.IsZero() && o.MaxGap != (Gap{Duration: NoLimit}) {
+		return false
+	}
+
+	for _, r := range in.p.Requests {
+		if r.Rank > 0 {
+			return false
+		}
+	}
+
+	return true
 }
 
 // optimize runs the lexicographic optimisation and returns the values of the

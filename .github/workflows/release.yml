@@ -24,8 +24,14 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go test ./...
-      - run: scripts/package.sh "$GITHUB_REF_NAME"
+      - run: sh scripts/package.sh "$GITHUB_REF_NAME" # sh: works even if the executable bit is lost
       - name: Release with the zips
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/*.zip --title "$GITHUB_REF_NAME" --generate-notes
+        run: | # the notes: the section of the version in CHANGELOG.md, or generated ones
+          sh scripts/notes.sh "$GITHUB_REF_NAME" > notes.md
+          if [ -s notes.md ]; then
+            gh release create "$GITHUB_REF_NAME" dist/*.zip --title "$GITHUB_REF_NAME" --notes-file notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" dist/*.zip --title "$GITHUB_REF_NAME" --generate-notes
+          fi

@@ -1,9 +1,12 @@
 package config
 
 import (
+	"cmp"
+	"errors"
 	"fmt"
 	"io"
 	"slices"
+	"time"
 
 	"go.yaml.in/yaml/v3"
 
@@ -13,25 +16,30 @@ import (
 // The plan file, a schedule written by WritePlan and read back by ReadPlan,
 // in YAML or JSON:
 //
-//	date: 2026-11-03
+//	from: 2026-11-02      # the period of the schedule; none for one day without date
+//	to: 2026-11-06
 //	candidates:
 //	  candidate A:
 //	    fixed: true       # convened: their appointments are kept as they are
 //	    interviews:
-//	      - time: 09:00-10:00
+//	      - date: 2026-11-03
+//	        time: 09:00-10:00
 //	        recruiters: [recruiter 1]
-//	      - time: 10:00-10:30
+//	      - date: 2026-11-03
+//	        time: 10:00-10:30
 //	        recruiters: [recruiter 2, recruiter 3]     # a joint interview
 //	  candidate B:
 //	    fixed: false      # may be planned again
 //	    interviews:
-//	      - time: 09:00-10:00
+//	      - date: 2026-11-04
+//	        time: 09:00-10:00
 //	        recruiters: [recruiter 3]
 //	scores:               # for information, ignored when reading
 //	  - {objective: priorities, priority: 1, value: 2, proven: false}
 type planFile struct {
 	Schema     string               `yaml:"$schema"`
-	Date       string               `yaml:"date"`
+	From       Date                 `yaml:"from"`
+	To         Date                 `yaml:"to"`
 	Candidates Named[planCandidate] `yaml:"candidates"`
 }
 
@@ -43,6 +51,7 @@ type planCandidate struct {
 }
 
 type planInterview struct {
+	Date       string   `yaml:"date"`
 	Time       string   `yaml:"time"`
 	Recruiters []string `yaml:"recruiters"`
 	line       int
@@ -64,14 +73,16 @@ func (pi *planInterview) UnmarshalYAML(n *yaml.Node) error {
 }
 
 var planKeys = shape{
-	"$schema": nil, "date": nil, "scores": nil,
-	"candidates": {"*": {"fixed": nil, "interviews": {"time": nil, "recruiters": nil}}},
+	"$schema": nil, "from": nil, "to": nil, "scores": nil,
+	"candidates": {"*": {"fixed": nil, "interviews": {"date": nil, "time": nil, "recruiters": nil}}},
 }
 
 // Plan is a schedule read back by ReadPlan.
 type Plan struct {
-	// Date is the day of the schedule (DateLayout), or "" when unknown.
-	Date string
+	// From and To are the period of the schedule (DateLayout), both empty
+	// for one day without date. Its times count from the midnight of From
+	// (see planning.Interval).
+	From, To string
 	// Schedule holds the interviews, as indexes of the problem; the
 	// interviews of fixed candidates are marked Fixed.
 	Schedule *planning.Schedule
@@ -117,10 +128,13 @@ func ReadPlan(data []byte, p *planning.Problem, fixAll bool) (*Plan, error) {
 
 	plan := &Plan{Schedule: &planning.Schedule{}}
 
-	if f.Date != "" {
-		if plan.Date, err = ParseDate(f.Date); err != nil {
-			return nil, err
-		}
+	dates, err := Period(string(f.From), string(f.To))
+	if err != nil {
+		return nil, err
+	}
+
+	if len(dates) > 0 {
+		plan.From, plan.To = dates[0], dates[len(dates)-1]
 	}
 
 	candidates := index(p.Candidates, func(c planning.Candidate) string { return c.Name })
@@ -145,7 +159,7 @@ func ReadPlan(data []byte, p *planning.Problem, fixAll bool) (*Plan, error) {
 			continue
 		}
 
-		ivs, unknown, err := readInterviews(p, c, e.Value.Interviews, fixed, recruiters)
+		ivs, unknown, err := readInterviews(p, c, e.Value.Interviews, fixed, recruiters, dates)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", e.Name, err)
 		}
@@ -163,9 +177,11 @@ func ReadPlan(data []byte, p *planning.Problem, fixAll bool) (*Plan, error) {
 	return plan, nil
 }
 
-// readInterviews converts the interviews of candidate c; it returns the
-// first unknown recruiter, if any.
-func readInterviews(p *planning.Problem, c int, pis []planInterview, fixed bool, recruiters map[string]int) ([]planning.Interview, string, error) {
+// readInterviews converts the interviews of candidate c, in the period of
+// dates; it returns the first unknown recruiter, if any.
+func readInterviews(p *planning.Problem, c int, pis []planInterview, fixed bool, recruiters map[string]int,
+	dates []string,
+) ([]planning.Interview, string, error) {
 	out := make([]planning.Interview, 0, len(pis))
 
 	for _, pi := range pis {
@@ -174,11 +190,17 @@ func readInterviews(p *planning.Problem, c int, pis []planInterview, fixed bool,
 			return nil, "", fmt.Errorf("line %d: %w", pi.line, err)
 		}
 
+		day, err := dayIn(pi.Date, dates)
+		if err != nil {
+			return nil, "", fmt.Errorf("line %d: %w", pi.line, err)
+		}
+
 		if len(pi.Recruiters) == 0 {
 			return nil, "", fmt.Errorf("line %d: an interview without recruiters", pi.line)
 		}
 
-		iv := planning.Interview{Candidate: c, Start: when.Start, End: when.End, Fixed: fixed}
+		shift := time.Duration(day) * planning.DayLength
+		iv := planning.Interview{Candidate: c, Start: when.Start + shift, End: when.End + shift, Fixed: fixed}
 
 		for _, name := range pi.Recruiters {
 			h, known := recruiters[NormalizeName(name)]
@@ -205,11 +227,36 @@ func readInterviews(p *planning.Problem, c int, pis []planInterview, fixed bool,
 	return out, "", nil
 }
 
-// WritePlan writes schedule s of problem p, for the day date (may be empty),
-// in format fm, to be read back with ReadPlan. A candidate is written as
-// fixed when their interviews are; the others are written with fixed: false,
-// to set to true once they are convened.
-func WritePlan(w io.Writer, p *planning.Problem, s *planning.Schedule, date string, fm Format) error {
+// dayIn returns the day of date in the period of dates.
+func dayIn(date string, dates []string) (int, error) {
+	switch {
+	case len(dates) == 0 && date == "":
+		return 0, nil
+	case len(dates) == 0:
+		return 0, errors.New("an interview with a date in a plan without from and to")
+	case date == "":
+		return 0, errors.New(`the "date" of the interview is missing`)
+	}
+
+	d, err := ParseDate(date)
+	if err != nil {
+		return 0, err
+	}
+
+	day := slices.Index(dates, d)
+	if day < 0 {
+		return 0, fmt.Errorf("%s is out of the period of the plan, from %s to %s", d, dates[0], dates[len(dates)-1])
+	}
+
+	return day, nil
+}
+
+// WritePlan writes schedule s of problem p, for the period from from to to
+// (empty for one day without date), in format fm, to be read back with
+// ReadPlan. A candidate is written as fixed when their interviews are; the
+// others are written with fixed: false, to set to true once they are
+// convened.
+func WritePlan(w io.Writer, p *planning.Problem, s *planning.Schedule, from, to string, fm Format) error {
 	var order []int
 
 	byCandidate := map[int][]planning.Interview{}
@@ -236,7 +283,14 @@ func WritePlan(w io.Writer, p *planning.Problem, s *planning.Schedule, date stri
 				who[i] = p.Recruiters[h].Name
 			}
 
-			item := mapping(scalar("time"), plain(planning.Interval{Start: iv.Start, End: iv.End}.String()), scalar("recruiters"), names(who))
+			when := planning.Interval{Start: iv.Start, End: iv.End}
+
+			item := mapping()
+			if from != "" {
+				item.Content = append(item.Content, scalar("date"), plain(DateOf(from, when.Day())))
+			}
+
+			item.Content = append(item.Content, scalar("time"), plain(when.String()), scalar("recruiters"), names(who))
 			if fm == JSON {
 				item.Style = yaml.FlowStyle // one line
 			}
@@ -249,8 +303,8 @@ func WritePlan(w io.Writer, p *planning.Problem, s *planning.Schedule, date stri
 	}
 
 	root := mapping()
-	if date != "" {
-		root.Content = append(root.Content, scalar("date"), plain(date))
+	if from != "" {
+		root.Content = append(root.Content, scalar("from"), plain(from), scalar("to"), plain(cmp.Or(to, from)))
 	}
 
 	root.Content = append(root.Content, scalar("candidates"), cands)

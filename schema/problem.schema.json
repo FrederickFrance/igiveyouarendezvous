@@ -14,13 +14,83 @@
       "type": "string",
       "description": "This schema, for editors; ignored."
     },
+    "from": {
+      "$ref": "#/$defs/date",
+      "description": "First day of the period to plan (the command may give another one)."
+    },
+    "to": {
+      "$ref": "#/$defs/date",
+      "description": "Last day of the period to plan, included (from by default)."
+    },
+    "not-before": {
+      "$ref": "#/$defs/date",
+      "description": "To plan again in the middle of the period: the first date of new interviews; the fixed interviews of the -start plan may come before."
+    },
+    "weekdays": {
+      "description": "The days of the week with interviews (Monday to Friday by default).",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "mon",
+          "Mon",
+          "MON",
+          "tue",
+          "Tue",
+          "TUE",
+          "wed",
+          "Wed",
+          "WED",
+          "thu",
+          "Thu",
+          "THU",
+          "fri",
+          "Fri",
+          "FRI",
+          "sat",
+          "Sat",
+          "SAT",
+          "sun",
+          "Sun",
+          "SUN",
+          "monday",
+          "Monday",
+          "MONDAY",
+          "tuesday",
+          "Tuesday",
+          "TUESDAY",
+          "wednesday",
+          "Wednesday",
+          "WEDNESDAY",
+          "thursday",
+          "Thursday",
+          "THURSDAY",
+          "friday",
+          "Friday",
+          "FRIDAY",
+          "saturday",
+          "Saturday",
+          "SATURDAY",
+          "sunday",
+          "Sunday",
+          "SUNDAY"
+        ]
+      }
+    },
+    "closed": {
+      "description": "Dates without interviews, such as holidays.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/date"
+      }
+    },
     "day": {
       "$ref": "#/$defs/spans",
-      "description": "Default availability of everybody (08:00-12:00 by default)."
+      "description": "Default availability of everybody, every day (08:00-12:00 by default)."
     },
     "breaks": {
       "$ref": "#/$defs/spans",
-      "description": "Times without interviews, such as lunch; a candidate's interviews never lie on both sides of a break. The longest break separates the morning from the afternoon."
+      "description": "Times without interviews, every day, such as lunch; two interviews of a candidate on a same day never lie on both sides of a break. The longest break separates the morning from the afternoon."
     },
     "duration": {
       "$ref": "#/$defs/duration",
@@ -30,11 +100,15 @@
       "$ref": "#/$defs/duration",
       "description": "Time grid: interviews start on multiples of it (automatic by default)."
     },
-    "max-wait": {
-      "description": "Total time a candidate may wait between their first and last interview: 0 (the default) chains the interviews; \"unlimited\" removes the limit.",
+    "min-gap": {
+      "$ref": "#/$defs/gap",
+      "description": "The least time between two interviews of a candidate (0 by default)."
+    },
+    "max-gap": {
+      "description": "The most time between two interviews of a candidate: 0 (the default) chains the interviews; \"unlimited\" removes the limit.",
       "oneOf": [
         {
-          "$ref": "#/$defs/duration"
+          "$ref": "#/$defs/gap"
         },
         {
           "const": "unlimited"
@@ -114,17 +188,50 @@
         "additionalProperties": false,
         "properties": {
           "meet": {
-            "type": "array",
-            "uniqueItems": true,
-            "items": {
-              "$ref": "#/$defs/name"
-            },
-            "description": "The recruiters to meet."
+            "description": "The recruiters to meet: a list, in any order, or the recruiters with their ranks: 1 first, then 2..., X any time.",
+            "oneOf": [
+              {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/name"
+                }
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "$ref": "#/$defs/name"
+                },
+                "additionalProperties": {
+                  "oneOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^\\s*(?:[Xx]|[Aa][Nn][Yy])\\s*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            ]
           },
           "priority": {
             "type": "integer",
             "minimum": 1,
             "description": "One candidate outranks any number of candidates of lower priority (1 by default)."
+          },
+          "duration": {
+            "$ref": "#/$defs/duration",
+            "description": "Length of the interviews of this candidate, in place of the recruiters' ones (the length of a meeting, for instance)."
+          },
+          "together": {
+            "type": "boolean",
+            "description": "A meeting: all the recruiters at once, in one interview, whatever the joint groups, or not at all (false by default). No ranks in meet then."
           },
           "availability": {
             "$ref": "#/$defs/availability"
@@ -164,9 +271,22 @@
         }
       ]
     },
+    "gap": {
+      "description": "A time between two interviews: a duration (0, 30m, 1h30, a number of minutes) or a number of calendar days (3d, 3 days).",
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "string",
+          "pattern": "^\\s*(?:(?:\\d+|\\d+h\\d+|(?:\\d+(?:\\.\\d+)?(?:h|m|s))+)|\\d+\\s*(?:d|days?))\\s*$"
+        }
+      ]
+    },
     "date": {
       "type": "string",
-      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
       "description": "A date: 2026-11-03."
     },
     "availability": {

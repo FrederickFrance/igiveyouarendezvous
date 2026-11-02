@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=../schema/problem.schema.json
+#
+# Not only interviews: the programme of a three-day colloquium, in one room.
+# The colloquium is the "candidate", the speakers its "recruiters": it is in
+# one place at a time, so the talks follow each other. The ranks put the
+# opening first and the closing last; their availabilities fix their days.
+
+from: 2026-11-16
+to: 2026-11-18
+day: 09:00-12:00, 14:00-17:00   # lunch as a gap in the day: talks before and after
+duration: 1h                    # a talk
+max-gap: unlimited              # the talks need not follow each other at once
+objectives: [complete-candidates, earliest]
+
+recruiters:
+  opening:
+    duration: 30m
+    availability: {2026-11-16: 09:00-09:30}
+  Ada:
+  Blaise:
+    availability: {2026-11-16: none, 2026-11-17: 14:00-17:00, 2026-11-18: 09:00-12:00}
+  Grace:
+  Alan:
+    duration: 1h30
+  Emmy:
+  closing:
+    duration: 30m
+    availability: {2026-11-18: 16:30-17:00}
+
+candidates:
+  colloquium:
+    meet: {opening: 1, Ada: 2, Blaise: 2, Grace: 2, Alan: 2, Emmy: 2, closing: 3}

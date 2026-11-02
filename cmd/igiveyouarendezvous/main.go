@@ -1,16 +1,17 @@
-// Command igiveyouarendezvous plans a day of interviews from a problem file,
-// in YAML or JSON, which describes the recruiters, the candidates with the
-// recruiters they must meet, the availabilities and the settings (see package
-// config and the schema directory).
+// Command igiveyouarendezvous plans interviews over a period, from a problem
+// file in YAML or JSON, which describes the recruiters, the candidates with
+// the recruiters they must meet, the availabilities and the settings (see
+// package config and the schema directory).
 //
 //	igiveyouarendezvous [flags] problem.yaml
 //
-// One run plans one day. With -rest, the problem file of the next day is
-// written: the same, with the meetings left; -date picks the day when the
-// availabilities are given by date:
+// One run plans one period, from -from to -to (or the from and to of the
+// file; -date for a single day; one day without date when availabilities are
+// not given by date). With -rest, the problem file of what is left is
+// written: the same, without the candidates served:
 //
-//	igiveyouarendezvous -date 2026-11-03 -rest day2.yaml day1.yaml
-//	igiveyouarendezvous -date 2026-11-04 -rest day3.yaml day2.yaml
+//	igiveyouarendezvous -from 2026-11-02 -to 2026-11-06 -rest week2.yaml week1.yaml
+//	igiveyouarendezvous -from 2026-11-09 -to 2026-11-13 -rest week3.yaml week2.yaml
 //
 // The command uses a local search in pure Go, which improves the schedule
 // until -timeout (or -patience without improvement). Ctrl+C stops it early
@@ -28,9 +29,16 @@
 // holds (a new meeting, an absence, an overlap...) is an alert, and that
 // candidate is planned again from scratch. The command exits with code 2
 // when there are alerts, 1 on an error.
+//
+// To plan again in the middle of the period, on the same period, -not-before
+// keeps the fixed appointments of the days before and plans nothing new
+// then:
+//
+//	igiveyouarendezvous -start plan.yaml -not-before 2026-11-04 -out plan.yaml week1.yaml
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"flag"
@@ -82,7 +90,8 @@ func main() {
 
 // options holds the command-line flags.
 type options struct {
-	date, objectives             string
+	from, to, date, notBefore    string
+	objectives                   string
 	restPath, outPath, startPath string
 	timeout, patience            time.Duration
 	seed                         uint64
@@ -96,14 +105,17 @@ func parseFlags(args []string, stderr io.Writer) (*options, error) {
 
 	fs := flag.NewFlagSet("igiveyouarendezvous", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	fs.StringVar(&o.date, "date", "", "day to plan, such as 2026-11-03, when availabilities are given by date")
+	fs.StringVar(&o.from, "from", "", "first day of the period to plan, such as 2026-11-02 (overrides the problem file)")
+	fs.StringVar(&o.to, "to", "", "last day of the period, such as 2026-11-06 (overrides the problem file; default: the first day)")
+	fs.StringVar(&o.date, "date", "", "one day to plan: -from and -to at once")
+	fs.StringVar(&o.notBefore, "not-before", "", "to plan again in the middle of the period: no new interview before this date; the fixed ones of -start stay (overrides the problem file)")
 	fs.StringVar(&o.objectives, "objectives", "", "comma-separated objectives, by priority (overrides the problem file)")
 	fs.DurationVar(&o.timeout, "timeout", time.Minute, "maximum computing time")
 	fs.DurationVar(&o.patience, "patience", 30*time.Second, "search: stop after this long without improvement (0: run until the timeout)")
 	fs.Uint64Var(&o.seed, "seed", 1, "search: random seed, to reproduce a result")
 	fs.IntVar(&o.workers, "workers", runtime.NumCPU(), "search: number of searches run in parallel")
 	fs.BoolVar(&o.progress, "progress", false, "search: print every improvement")
-	fs.StringVar(&o.restPath, "rest", "", "write the problem file of the next day, with the meetings left, to this file (.yaml or .json)")
+	fs.StringVar(&o.restPath, "rest", "", "write the problem file of what is left, without the candidates served, to this file (.yaml or .json)")
 	fs.StringVar(&o.outPath, "out", "", "write the schedule to this plan file (.yaml or .json), to resume from with -start")
 	fs.StringVar(&o.startPath, "start", "", "resume from the schedule of this plan file (written by -out)")
 	fs.BoolVar(&o.fixAll, "fix-all", false, "with -start: keep every appointment of the file as it is (once they are announced)")
@@ -146,12 +158,12 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return nil
 	}
 
-	f, p, opts, err := loadProblem(o, stdin, stderr)
+	f, p, opts, pe, err := loadProblem(o, stdin, stderr)
 	if err != nil {
 		return err
 	}
 
-	start, rejected, err := loadStart(o, p, opts, stderr)
+	start, rejected, err := loadStart(o, p, opts, pe, stderr)
 	if err != nil {
 		return err
 	}
@@ -171,14 +183,14 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	}
 
 	if len(rejected) > 0 {
-		printAlerts(stdout, p, s, rejected)
+		printAlerts(stdout, p, s, pe, rejected)
 	}
 
-	printSchedule(stdout, p, s, o.date)
+	printSchedule(stdout, p, s, pe)
 
 	if o.outPath != "" {
 		if err := writeFile(o.outPath, func(w io.Writer) error {
-			return config.WritePlan(w, p, s, o.date, config.FormatOf(o.outPath))
+			return config.WritePlan(w, p, s, o.from, o.to, config.FormatOf(o.outPath))
 		}); err != nil {
 			return err
 		}
@@ -204,8 +216,9 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	return nil
 }
 
-// loadProblem reads the problem file, for the day o.date.
-func loadProblem(o *options, stdin io.Reader, stderr io.Writer) (*config.File, *planning.Problem, planning.Options, error) {
+// loadProblem reads the problem file, for the period of the flags or of the
+// file; it sets o.from and o.to to the period planned.
+func loadProblem(o *options, stdin io.Reader, stderr io.Writer) (*config.File, *planning.Problem, planning.Options, period, error) {
 	var (
 		f   *config.File
 		err error
@@ -221,37 +234,64 @@ func loadProblem(o *options, stdin io.Reader, stderr io.Writer) (*config.File, *
 	}
 
 	if err != nil {
-		return nil, nil, planning.Options{}, err
+		return nil, nil, planning.Options{}, period{}, err
 	}
-
-	dates := f.Dates()
 
 	switch {
-	case o.date == "" && len(dates) > 0:
-		return nil, nil, planning.Options{}, fmt.Errorf("availabilities are given by date (%s): choose the day with -date",
-			abbreviate(dates, maxListed))
+	case o.date != "" && (o.from != "" || o.to != ""):
+		return nil, nil, planning.Options{}, period{}, errors.New("-date is one day: give it, or -from and -to, not both")
 	case o.date != "":
-		if o.date, err = config.ParseDate(o.date); err != nil {
-			return nil, nil, planning.Options{}, err
-		}
-
-		if len(dates) > 0 && !slices.Contains(dates, o.date) {
-			fmt.Fprintf(stderr, "note: no availability is given for %s: the people with availabilities by date are absent\n", o.date)
-		}
+		o.from, o.to = o.date, o.date
+	default: // each one replaces the one of the file
+		o.from, o.to = cmp.Or(o.from, string(f.From)), cmp.Or(o.to, string(f.To))
 	}
 
-	p, opts, err := f.Problem(o.date)
+	dates, err := config.Period(o.from, o.to)
 	if err != nil {
-		return nil, nil, planning.Options{}, err
+		return nil, nil, planning.Options{}, period{}, err
+	}
+
+	given := f.Dates()
+	if len(dates) == 0 && len(given) > 0 {
+		return nil, nil, planning.Options{}, period{}, fmt.Errorf(
+			"availabilities are given by date (%s): choose the period with -from and -to, or the day with -date", abbreviate(given, maxListed))
+	}
+
+	if len(dates) > 0 {
+		o.from, o.to = dates[0], dates[len(dates)-1]
+	}
+
+	if len(given) > 0 && !slices.ContainsFunc(dates, func(d string) bool { return slices.Contains(given, d) }) {
+		fmt.Fprintf(stderr, "note: no availability is given in %s: the people with availabilities by date are absent\n",
+			strings.Join(slices.Compact([]string{o.from, o.to}), " to "))
+	}
+
+	if o.notBefore != "" {
+		d, err := config.ParseDate(o.notBefore)
+		if err != nil {
+			return nil, nil, planning.Options{}, period{}, fmt.Errorf("-not-before: %w", err)
+		}
+
+		f.NotBefore = config.Date(d)
+	}
+
+	p, opts, err := f.Problem(o.from, o.to)
+	if err != nil {
+		return nil, nil, planning.Options{}, period{}, err
+	}
+
+	if len(dates) > 0 && len(opts.Closed) == len(dates) {
+		fmt.Fprintf(stderr, "note: no working day in %s (weekdays, closed): nothing can be planned\n",
+			strings.Join(slices.Compact([]string{o.from, o.to}), " to "))
 	}
 
 	if o.objectives != "" {
 		if opts.Objectives, err = planning.ParseObjectives(o.objectives); err != nil {
-			return nil, nil, planning.Options{}, err
+			return nil, nil, planning.Options{}, period{}, err
 		}
 	}
 
-	return f, p, opts, nil
+	return f, p, opts, period{dates: dates, open: max(1, len(dates)) - len(opts.Closed), notBefore: opts.NotBefore}, nil
 }
 
 // rejected is a fixed plan that no longer holds: the candidate is planned
@@ -264,7 +304,7 @@ type rejected struct {
 
 // loadStart reads the plan file of -start and cleans it against the problem;
 // it returns it with the fixed plans that no longer hold.
-func loadStart(o *options, p *planning.Problem, opts planning.Options, stderr io.Writer) (*planning.Schedule, []rejected, error) {
+func loadStart(o *options, p *planning.Problem, opts planning.Options, pe period, stderr io.Writer) (*planning.Schedule, []rejected, error) {
 	if o.startPath == "" {
 		if o.fixAll {
 			return nil, nil, errors.New("-fix-all fixes the appointments of the -start file: give one")
@@ -283,13 +323,8 @@ func loadStart(o *options, p *planning.Problem, opts planning.Options, stderr io
 		return nil, nil, fmt.Errorf("%s: %w", o.startPath, err)
 	}
 
-	if plan.Date != "" && plan.Date != o.date {
-		day := o.date
-		if day == "" {
-			day = "a day without -date"
-		}
-
-		return nil, nil, fmt.Errorf("%s is the schedule of %s, not of %s", o.startPath, plan.Date, day)
+	if plan.From != o.from || plan.To != o.to {
+		return nil, nil, fmt.Errorf("%s is the schedule of %s, not of %s", o.startPath, periodName(plan.From, plan.To), periodName(o.from, o.to))
 	}
 
 	cleaned, err := planning.Clean(p, opts, plan.Schedule)
@@ -317,7 +352,7 @@ func loadStart(o *options, p *planning.Problem, opts planning.Options, stderr io
 
 	dropped := slices.Clone(plan.Dropped)
 	for _, d := range cleaned.Dropped {
-		dropped = append(dropped, fmt.Sprintf("%s %s with %s: %s", planning.Interval{Start: d.Interview.Start, End: d.Interview.End},
+		dropped = append(dropped, fmt.Sprintf("%s %s with %s: %s", pe.when(planning.Interval{Start: d.Interview.Start, End: d.Interview.End}),
 			p.Candidates[d.Interview.Candidate].Name, recruiterNames(p, d.Interview.Recruiters), d.Reason))
 	}
 
@@ -369,6 +404,19 @@ func writeFile(path string, write func(io.Writer) error) error {
 	}
 
 	return os.Rename(tmp, path)
+}
+
+// periodName names a period for people: "2026-11-02 to 2026-11-06",
+// "2026-11-03", or "a day without date".
+func periodName(from, to string) string {
+	switch from {
+	case "":
+		return "a day without date"
+	case to:
+		return from
+	default:
+		return from + " to " + to
+	}
 }
 
 // abbreviate joins at most n names.

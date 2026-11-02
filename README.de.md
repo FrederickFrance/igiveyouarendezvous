@@ -8,11 +8,22 @@
 Terminplanung für Vorstellungsgespräche zwischen Bewerbern und Recruitern,
 in Go, als Kommandozeilenprogramm oder als Bibliothek.
 
-Jeder Bewerber trifft alle seine Recruiter am selben Tag, in Gesprächen, die
-direkt aufeinander folgen. Der Plan maximiert zuerst die Zahl der Bewerber,
-die alle ihre Recruiter treffen (nach Priorität), dann die Zahl der Treffen,
-und schont danach die Zeit der Recruiter. Ein Durchlauf plant einen Tag; was
-nicht hineinpasst, landet in der Problemdatei des nächsten Tages.
+Jeder Bewerber trifft alle seine Recruiter im geplanten Zeitraum (ein Tag,
+eine Woche …), mit einem wählbaren Mindest- und Höchstabstand zwischen zwei
+Gesprächen (standardmäßig direkt hintereinander, oder zum Beispiel
+mindestens drei Tage) und, wenn gewünscht, in einer festen Reihenfolge. Der
+Plan maximiert zuerst die Zahl der Bewerber, die alle ihre Recruiter treffen
+(nach Priorität), dann die Zahl der Treffen, und schont danach die Zeit der
+Recruiter. Ein Durchlauf plant einen Zeitraum (`from` bis `to`,
+standardmäßig Montag bis Freitag, ohne Feiertage); was nicht hineinpasst,
+landet in der Problemdatei des nächsten Zeitraums.
+
+Nicht nur Vorstellungsgespräche: Mit `together: true` trifft ein „Bewerber“
+alle seine „Recruiter“ auf einmal oder gar nicht, etwa für die Aufnahmen
+einer Sendung mit schwer erreichbaren Gästen oder für Rollenspielrunden; und
+ein Kolloquium in einem Saal ist ein „Bewerber“, dessen Vorträge aufeinander
+folgen. Siehe die Beispiele [Sendung](example/show.yaml),
+[Kolloquium](example/colloquium.yaml) und [Rollenspiel](example/roleplay.yaml).
 
 ## Der erste Plan, Schritt für Schritt
 
@@ -82,8 +93,9 @@ mit `./` davor) und `plan.txt` wie in Schritt 2 öffnen.
 **6. Der nächste Tag.** Für alle, die heute nicht hineingepasst haben:
 `igiveyouarendezvous -rest morgen.yaml problem.yaml` eingeben (Mac und Linux:
 mit `./` davor). Das Programm schreibt dann auch `morgen.yaml`: dieselbe
-Datei, nur mit den übrigen Treffen. Bei Bedarf ergänzen und am nächsten Tag
-anstelle von `problem.yaml` verwenden.
+Datei, nur mit den übrigen Bewerbern. Bei Bedarf ergänzen und am nächsten Tag
+anstelle von `problem.yaml` verwenden. (Eine ganze Woche auf einmal: siehe
+`from` und `to` in `example-full.yaml`.)
 
 **Bei einem Fehler** nennt das Programm die fehlerhafte Zeile der Datei:
 Leerzeichen am Zeilenanfang, Doppelpunkt und die Schreibweise der Namen (wie
@@ -102,7 +114,8 @@ go install github.com/FrederickFrance/igiveyouarendezvous/cmd/igiveyouarendezvou
 ## Verwendung
 
 ```sh
-igiveyouarendezvous -date 2026-11-03 -rest tag2.yaml example/problem.yaml
+igiveyouarendezvous -rest woche2.yaml example/problem.yaml
+igiveyouarendezvous -from 2026-11-16 -to 2026-11-20 -rest woche3.yaml woche2.yaml
 ```
 
 Die Problemdatei (YAML oder JSON) beschreibt die Recruiter, die Bewerber mit
