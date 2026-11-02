@@ -47,7 +47,7 @@ func (a Availability) On(date string) (Intervals, bool, error) {
 	case a.Dates == nil:
 		return a.Daily, a.Daily != nil, nil
 	case date == "":
-		return nil, false, errors.New("the availability is given by date: give the date to plan")
+		return nil, false, errors.New("the availability is given by date: give the period to plan")
 	}
 
 	if spans, ok := a.Dates[date]; ok {
@@ -143,34 +143,177 @@ func ParseDuration(s string) (time.Duration, error) {
 	return d, nil
 }
 
-// Wait is a Duration, or "unlimited".
-type Wait time.Duration
+// Gap is the time between two interviews of a candidate: a Duration, a
+// number of calendar days ("3d", "3 days"), or "unlimited".
+type Gap planning.Gap
+
+var daysPattern = regexp.MustCompile(`^(\d+)\s*(?:d|days?)$`)
 
 // UnmarshalYAML implements yaml.Unmarshaler.
-func (w *Wait) UnmarshalYAML(n *yaml.Node) error {
-	if strings.EqualFold(strings.TrimSpace(n.Value), "unlimited") {
-		*w = Wait(planning.NoWaitLimit)
+func (g *Gap) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind != yaml.ScalarNode {
+		return fmt.Errorf("line %d: a gap is expected, such as 0, 30m or 3d", n.Line)
+	}
+
+	v := strings.ToLower(strings.TrimSpace(n.Value))
+
+	if v == "unlimited" {
+		*g = Gap{Duration: planning.NoLimit}
 
 		return nil
 	}
 
-	var d Duration
-	if err := d.UnmarshalYAML(n); err != nil {
-		return err
+	if m := daysPattern.FindStringSubmatch(v); m != nil {
+		days, err := strconv.Atoi(m[1])
+		if err != nil {
+			return fmt.Errorf("line %d: invalid number of days %q", n.Line, m[1])
+		}
+
+		*g = Gap{Days: days}
+
+		return nil
 	}
 
-	*w = Wait(d)
+	d, err := ParseDuration(v)
+	if err != nil {
+		return fmt.Errorf("line %d: invalid gap %q (examples: 0, 30m, 1h30, 3d, unlimited)", n.Line, n.Value)
+	}
+
+	*g = Gap{Duration: d}
 
 	return nil
 }
 
-// String writes the wait as it is read.
-func (w Wait) String() string {
-	if time.Duration(w) == planning.NoWaitLimit {
+// String writes the gap as it is read.
+func (g Gap) String() string {
+	switch {
+	case g.Days > 0:
+		return fmt.Sprintf("%dd", g.Days)
+	case g.Duration == planning.NoLimit:
 		return "unlimited"
+	default:
+		return Duration(g.Duration).String()
+	}
+}
+
+// Meet is a recruiter a candidate must meet, with the rank of the meeting
+// (see planning.Request.Rank).
+type Meet struct {
+	Recruiter string
+	Rank      int
+}
+
+// Meets lists the recruiters to meet: a list, in any order, or a mapping of
+// the recruiters to their ranks, 1, 2..., or X for any time:
+//
+//	meet: [recruiter 1, recruiter 2]
+//	meet: {recruiter 1: 1, recruiter 2: X, recruiter 3: 2}
+type Meets []Meet
+
+// UnmarshalYAML implements yaml.Unmarshaler.
+func (m *Meets) UnmarshalYAML(n *yaml.Node) error {
+	out := Meets{}
+
+	switch n.Kind {
+	case yaml.SequenceNode:
+		for _, item := range n.Content {
+			if item.Kind != yaml.ScalarNode {
+				return fmt.Errorf("line %d: a recruiter name is expected", item.Line)
+			}
+
+			out = append(out, Meet{Recruiter: item.Value})
+		}
+	case yaml.MappingNode:
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			key, value := n.Content[i], n.Content[i+1]
+			meet := Meet{Recruiter: key.Value}
+
+			switch v := strings.TrimSpace(value.Value); {
+			case value.ShortTag() == "!!null", strings.EqualFold(v, "x"), strings.EqualFold(v, "any"):
+			default:
+				rank, err := strconv.Atoi(v)
+				if err != nil || rank < 1 || value.Kind != yaml.ScalarNode {
+					return fmt.Errorf("line %d: %s: a rank is expected, 1, 2... or X for any time", value.Line, key.Value)
+				}
+
+				meet.Rank = rank
+			}
+
+			out = append(out, meet)
+		}
+	default:
+		return fmt.Errorf("line %d: the recruiters to meet are expected, such as [recruiter 1, recruiter 2]", n.Line)
 	}
 
-	return Duration(w).String()
+	*m = out
+
+	return nil
+}
+
+// weekdayNames are the names of the days of the week, as written in the
+// file.
+var weekdayNames = map[string]time.Weekday{
+	"mon": time.Monday, "monday": time.Monday, "tue": time.Tuesday, "tuesday": time.Tuesday,
+	"wed": time.Wednesday, "wednesday": time.Wednesday, "thu": time.Thursday, "thursday": time.Thursday,
+	"fri": time.Friday, "friday": time.Friday, "sat": time.Saturday, "saturday": time.Saturday,
+	"sun": time.Sunday, "sunday": time.Sunday,
+}
+
+// Weekday is a day of the week: "mon" or "monday", and so on.
+type Weekday time.Weekday
+
+// UnmarshalYAML implements yaml.Unmarshaler.
+func (wd *Weekday) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind != yaml.ScalarNode {
+		return fmt.Errorf("line %d: a day of the week is expected", n.Line)
+	}
+
+	d, err := ParseWeekday(n.Value)
+	if err != nil {
+		return fmt.Errorf("line %d: %w", n.Line, err)
+	}
+
+	*wd = Weekday(d)
+
+	return nil
+}
+
+// Date is a date, read with ParseDate and kept in DateLayout.
+type Date string
+
+// UnmarshalYAML implements yaml.Unmarshaler.
+func (d *Date) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind != yaml.ScalarNode {
+		return fmt.Errorf("line %d: a date is expected", n.Line)
+	}
+
+	s, err := ParseDate(n.Value)
+	if err != nil {
+		return fmt.Errorf("line %d: %w", n.Line, err)
+	}
+
+	*d = Date(s)
+
+	return nil
+}
+
+// ParseWeekday reads a day of the week: "mon" or "monday", and so on.
+func ParseWeekday(s string) (time.Weekday, error) {
+	if d, ok := weekdayNames[strings.ToLower(strings.TrimSpace(s))]; ok {
+		return d, nil
+	}
+
+	return 0, fmt.Errorf("invalid day of the week %q (examples: mon, tuesday)", strings.TrimSpace(s))
+}
+
+// DateOf returns the date day days after from (DateLayout).
+func DateOf(from string, day int) string {
+	d, err := time.Parse(DateLayout, from)
+	if err != nil {
+		return ""
+	}
+
+	return d.AddDate(0, 0, day).Format(DateLayout)
 }
 
 // Intervals is a list of time spans: "08:00-12:00, 14:00-17:00", or a list

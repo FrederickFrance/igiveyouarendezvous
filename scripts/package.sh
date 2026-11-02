@@ -1,7 +1,8 @@
 #!/bin/sh
 # Builds the ready-to-use zips of a release, one per system, into dist/:
-# the program, the problem file of the beginner's tutorial (problem.yaml)
-# and the full commented example (example-full.yaml).
+# the program, the problem file of the beginner's tutorial (problem.yaml),
+# the full commented example (example-full.yaml) and the examples of other
+# uses (example-show.yaml, example-colloquium.yaml, example-roleplay.yaml).
 #
 #   scripts/package.sh v0.1.0
 set -eu
@@ -33,11 +34,14 @@ for target in windows:windows:amd64 mac-apple:darwin:arm64 mac-intel:darwin:amd6
 
 	cp "$root/example/simple.yaml" "$dir/problem.yaml"
 	cp "$root/example/problem.yaml" "$dir/example-full.yaml"
+	for other in show colloquium roleplay; do # the other uses
+		cp "$root/example/$other.yaml" "$dir/example-$other.yaml"
+	done
 	cp "$root/LICENSE" "$root/WTFPL.txt" "$dir/"
 
 	# The schema comment of the examples points into the repository.
 	sed -i.bak 's#\$schema=\.\./schema/#$schema=https://raw.githubusercontent.com/FrederickFrance/igiveyouarendezvous/main/schema/#' \
-		"$dir/problem.yaml" "$dir/example-full.yaml"
+		"$dir"/*.yaml
 	rm "$dir"/*.bak
 
 	(cd "$dist" && zip -qr "igiveyouarendezvous-$name.zip" "igiveyouarendezvous-$version-$name")

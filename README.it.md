@@ -8,11 +8,22 @@
 Pianificazione di colloqui tra candidati e selezionatori, in Go, come comando
 o come libreria.
 
-Ogni candidato incontra tutti i suoi selezionatori lo stesso giorno, in
-colloqui che si susseguono. Il calendario massimizza prima i candidati che
-incontrano tutti i loro selezionatori (per priorità), poi gli incontri, e
-infine risparmia il tempo dei selezionatori. Un'esecuzione pianifica una
-giornata; ciò che non ci sta finisce nel file del problema del giorno dopo.
+Ogni candidato incontra tutti i suoi selezionatori nel periodo pianificato
+(un giorno, una settimana…), con uno scarto minimo e massimo a scelta tra due
+colloqui (di seguito per impostazione predefinita, oppure per esempio almeno
+tre giorni) e, se serve, in un ordine stabilito. Il calendario massimizza
+prima i candidati che incontrano tutti i loro selezionatori (per priorità),
+poi gli incontri, e infine risparmia il tempo dei selezionatori.
+Un'esecuzione pianifica un periodo (da `from` a `to`, dal lunedì al venerdì
+per impostazione predefinita, senza i festivi); ciò che non ci sta finisce
+nel file del problema del periodo successivo.
+
+Non solo colloqui: con `together: true` un «candidato» incontra tutti i suoi
+«selezionatori» insieme o per niente, per esempio per registrare le puntate
+di una trasmissione con ospiti difficili da riunire, o per partite di gioco
+di ruolo; e un convegno in una sola sala è un «candidato» i cui interventi si
+susseguono. Vedete gli esempi [trasmissione](example/show.yaml),
+[convegno](example/colloquium.yaml) e [gioco di ruolo](example/roleplay.yaml).
 
 ## Il primo calendario, passo dopo passo
 
@@ -81,8 +92,9 @@ con `./` davanti), poi aprite `calendario.txt` come al passo 2.
 **6. Il giorno dopo.** Per chi non ha trovato posto oggi:
 `igiveyouarendezvous -rest domani.yaml problem.yaml` (Mac e Linux: con `./`
 davanti). Il programma scrive anche `domani.yaml`: lo stesso file, con solo
-gli incontri rimasti. Completatelo se serve e usatelo il giorno dopo al posto
-di `problem.yaml`.
+i candidati rimasti. Completatelo se serve e usatelo il giorno dopo al posto
+di `problem.yaml`. (Per pianificare un'intera settimana in una volta: vedete
+`from` e `to` in `example-full.yaml`.)
 
 **In caso di errore**, il programma indica la riga sbagliata del file:
 controllate gli spazi a inizio riga, i due punti e che i nomi siano scritti
@@ -101,7 +113,8 @@ go install github.com/FrederickFrance/igiveyouarendezvous/cmd/igiveyouarendezvou
 ## Uso
 
 ```sh
-igiveyouarendezvous -date 2026-11-03 -rest giorno2.yaml example/problem.yaml
+igiveyouarendezvous -rest settimana2.yaml example/problem.yaml
+igiveyouarendezvous -from 2026-11-16 -to 2026-11-20 -rest settimana3.yaml settimana2.yaml
 ```
 
 Il file del problema (YAML o JSON) descrive i selezionatori, i candidati con i

@@ -20,21 +20,23 @@ const (
 	// requests that may be held together.
 	MinInterviews
 	// MinRecruiterSpan minimises the time recruiters spend between the
-	// start of their first interview and the end of their last one.
+	// start of their first interview and the end of their last one, day by
+	// day.
 	MinRecruiterSpan
-	// MinCandidateWait minimises the time candidates wait between their
-	// interviews (only useful when Options.MaxWait is not zero).
+	// MinCandidateWait minimises the time candidates wait between two
+	// interviews of the same day (only useful when Options.MaxGap is not
+	// zero).
 	MinCandidateWait
-	// MinEndTimes minimises the sum of the interview end times: interviews
-	// take place as early as possible.
+	// MinEndTimes minimises the sum of the interview end times, counted from
+	// the start of the period: interviews take place as early as possible.
 	MinEndTimes
 	// MinRecruiters minimises the number of recruiters who have at least one
-	// interview in the day.
+	// interview, day by day: a recruiter who comes on two days counts two.
 	MinRecruiters
 	// MinRecruiterHalfDays minimises the number of half-days, summed over
-	// the recruiters, in which a recruiter has at least one interview. The
-	// longest break (lunch) separates the morning from the afternoon; without
-	// breaks, noon does.
+	// the recruiters and the days, in which a recruiter has at least one
+	// interview. The longest break (lunch) separates the morning from the
+	// afternoon; without breaks, noon does.
 	MinRecruiterHalfDays
 	// MaxPriorities maximises the complete candidates priority level by
 	// priority level, the highest first (Candidate.Priority): one candidate
@@ -55,10 +57,10 @@ var objectiveNames = map[Objective][2]string{
 	MaxCompleteCandidates: {"complete-candidates", "maximise the candidates who meet all their recruiters"},
 	MaxMeetings:           {"meetings", "maximise the candidate/recruiter meetings held"},
 	MinInterviews:         {"interviews", "minimise the interviews (group meetings when allowed)"},
-	MinRecruiterSpan:      {"recruiter-span", "minimise the time recruiters spend from their first interview to the end of their last"},
-	MinCandidateWait:      {"candidate-wait", "minimise the time candidates wait between interviews"},
+	MinRecruiterSpan:      {"recruiter-span", "minimise the time recruiters spend from their first interview to the end of their last, day by day"},
+	MinCandidateWait:      {"candidate-wait", "minimise the time candidates wait between two interviews of a day"},
 	MinEndTimes:           {"earliest", "hold the interviews as early as possible"},
-	MinRecruiters:         {"recruiters", "minimise the recruiters who have an interview in the day"},
+	MinRecruiters:         {"recruiters", "minimise the recruiters who have an interview, day by day"},
 	MaxPriorities:         {"priorities", "maximise the complete candidates, priority level by priority level, the highest first"},
 	MinRecruiterHalfDays:  {"recruiter-half-days", "minimise the half-days (morning, afternoon) in which recruiters have an interview"},
 	MaxUrgency:            {"urgency", "maximise the complete candidates with the fewest days left, the fewest first"},

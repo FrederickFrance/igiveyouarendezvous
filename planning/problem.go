@@ -17,26 +17,46 @@ const (
 	DefaultDayEnd = 12 * time.Hour
 	// DefaultDuration is the interview length used when Options.Duration is zero.
 	DefaultDuration = time.Hour
-	// NoWaitLimit is the Options.MaxWait that lets candidates wait any time
-	// between their interviews.
-	NoWaitLimit time.Duration = -1
+	// NoLimit is the Duration of an Options.MaxGap that lets any time pass
+	// between two interviews of a candidate.
+	NoLimit time.Duration = -1
+	// DayLength is the length of a day of the period: day d covers
+	// [d*DayLength, (d+1)*DayLength).
+	DayLength = 24 * time.Hour
 )
 
-// Interval is the time span [Start, End), as offsets from midnight.
+// Interval is the time span [Start, End), as offsets from the midnight of
+// the first day of the period: within the first day, they are times of day.
 type Interval struct {
 	Start, End time.Duration
 }
 
-// String formats the interval as "08:00-12:00".
-func (i Interval) String() string {
-	return Clock(i.Start) + "-" + Clock(i.End)
+// Day returns the day of the period the interval starts on, from 0.
+func (i Interval) Day() int {
+	return dayOf(i.Start)
 }
 
-// Clock formats an offset from midnight as "08:30".
+// String formats the times of day of the interval: "08:00-12:00".
+func (i Interval) String() string {
+	midnight := time.Duration(i.Day()) * DayLength
+
+	return hhmm(i.Start-midnight) + "-" + hhmm(i.End-midnight)
+}
+
+// Clock formats the time of day of d: "08:30".
 func Clock(d time.Duration) string {
+	return hhmm(d - time.Duration(dayOf(d))*DayLength)
+}
+
+func hhmm(d time.Duration) string {
 	minutes := int(d / time.Minute)
 
 	return fmt.Sprintf("%02d:%02d", minutes/60, minutes%60)
+}
+
+// dayOf returns the day of the period of time t.
+func dayOf(t time.Duration) int {
+	return int(t / DayLength)
 }
 
 // Length formats a duration for people: "45 min", "1h", "1h30".
@@ -59,16 +79,17 @@ type Recruiter struct {
 	// Duration of an interview with this recruiter; zero means
 	// Options.Duration. A joint interview lasts as long as its longest part.
 	Duration time.Duration
-	// Availability lists when the recruiter can hold interviews; nil means
-	// Options.Day.
+	// Availability lists when the recruiter can hold interviews over the
+	// period (see Interval), each span within one day; nil means Options.Day
+	// on every day that is not closed.
 	Availability []Interval
 }
 
 // Candidate is a person who must meet some recruiters (see Request).
 type Candidate struct {
 	Name string
-	// Availability lists when the candidate can be interviewed; nil means
-	// Options.Day.
+	// Availability lists when the candidate can be interviewed, as for a
+	// Recruiter.
 	Availability []Interval
 	// Priority ranks the candidates for the MaxPriorities objective: one
 	// candidate is preferred to any number of candidates of lower priority.
@@ -79,12 +100,26 @@ type Candidate struct {
 	// chance. Zero means no limit is known (package config counts the dates
 	// on which the candidate and their recruiters are available).
 	DaysLeft int
+	// Duration is the length of the interviews of the candidate, in place
+	// of those of their recruiters; zero means the recruiters' ones.
+	Duration time.Duration
+	// Together makes the candidate meet all their recruiters in one single
+	// interview, whatever the joint groups and Options.MaxJointSize, or not
+	// at all: a meeting, such as a recording or a game, rather than
+	// interviews. Ranks then make no sense.
+	Together bool
 }
 
 // Request states that a candidate must meet a recruiter.
 type Request struct {
 	Candidate int // index in Problem.Candidates
 	Recruiter int // index in Problem.Recruiters
+	// Rank orders the meetings of a candidate: those of rank 1 come first,
+	// then those of rank 2, and so on, each in an interview held before the
+	// interviews of the next ranks (so never jointly with them). Meetings of
+	// the same rank come in any order, and may be joint. Zero means any
+	// time: before, between or after the ranked ones.
+	Rank int
 }
 
 // Problem is what has to be planned.
@@ -119,26 +154,66 @@ func (p *Problem) rank(a, b int) int {
 	return cmp.Or(p.priority(b)-p.priority(a), cmp.Compare(p.urgency(a), p.urgency(b)))
 }
 
-// Options tunes the planning. The zero value is usable: a 08:00-12:00 day,
-// one-hour interviews, every candidate meets all their recruiters on the
-// same day, in interviews that follow each other, and DefaultObjectives.
+// Gap is the time between two interviews of a candidate, from the end of one
+// to the start of the next: a Duration or, when Days is set, a number of
+// calendar days from the day of one to the day of the next (Monday to
+// Thursday: 3), whatever the times.
+type Gap struct {
+	Duration time.Duration
+	Days     int
+}
+
+// IsZero tells whether the gap is zero.
+func (g Gap) IsZero() bool {
+	return g == Gap{}
+}
+
+// String formats the gap: "30 min", "3 days", "no limit".
+func (g Gap) String() string {
+	switch {
+	case g.Days == 1:
+		return "1 day"
+	case g.Days > 1:
+		return fmt.Sprintf("%d days", g.Days)
+	case g.Duration == NoLimit:
+		return "no limit"
+	default:
+		return Length(g.Duration)
+	}
+}
+
+// Options tunes the planning. The zero value is usable: one 08:00-12:00 day,
+// one-hour interviews, every candidate meets all their recruiters in
+// interviews that follow each other, and DefaultObjectives.
 type Options struct {
-	// Day is the default availability of everybody; nil means
-	// DefaultDayStart-DefaultDayEnd.
+	// Days is the length of the period, in calendar days; zero means 1. Day
+	// d covers [d*DayLength, (d+1)*DayLength) (see Interval).
+	Days int
+	// Closed lists the days without interviews (weekends, holidays), from 0.
+	Closed []int
+	// NotBefore is the first day of new interviews, to plan again in the
+	// middle of a period: before it, only the fixed interviews of a start
+	// schedule (Interview.Fixed) take place, as they are. 0 means the first
+	// day of the period.
+	NotBefore int
+	// Day is the default availability of everybody on every day that is not
+	// closed, as times of day; nil means DefaultDayStart-DefaultDayEnd.
 	Day []Interval
-	// Breaks, such as lunch, are times without interviews; besides, the
-	// interviews of a candidate never lie on both sides of a break.
+	// Breaks, such as lunch, are times of day without interviews, every
+	// day; besides, two interviews of a candidate on the same day never lie
+	// on both sides of a break.
 	Breaks []Interval
 	// Duration is the default interview length; zero means DefaultDuration.
 	Duration time.Duration
 	// Step is the time grid: interviews start on multiples of it. Zero picks
 	// the coarsest grid on which every duration and availability falls.
 	Step time.Duration
-	// MaxWait is the total time a candidate may wait between their first and
-	// last interview of the day. Zero (the default) means the interviews
-	// follow each other without a break; NoWaitLimit removes the
-	// constraint.
-	MaxWait time.Duration
+	// MinGap and MaxGap bound the gap between two consecutive interviews of
+	// a candidate. Both zero (the default): the interviews follow each other
+	// without a break. A MaxGap of Duration NoLimit removes the upper bound;
+	// a MinGap of Days 3 asks for three days between interviews. A candidate
+	// meets all their recruiters within the period, or none of them.
+	MinGap, MaxGap Gap
 	// MaxJointSize caps the number of recruiters in a joint interview; zero
 	// means no cap.
 	MaxJointSize int
@@ -166,12 +241,42 @@ func (o Options) HalfDays() (morningEnd, afternoonStart time.Duration) {
 	return morningEnd, afternoonStart
 }
 
-// halfDaysOf tells whether [start, end) lies in the morning and in the
-// afternoon (both when it spans noon, without breaks).
+// halfDaysOf tells whether [start, end), within one day, lies in the morning
+// and in the afternoon (both when it spans noon, without breaks).
 func halfDaysOf(o Options, start, end time.Duration) [2]bool {
 	morningEnd, afternoonStart := o.HalfDays()
+	midnight := time.Duration(dayOf(start)) * DayLength
 
-	return [2]bool{start < morningEnd, end > afternoonStart}
+	return [2]bool{start-midnight < morningEnd, end-midnight > afternoonStart}
+}
+
+// days returns the number of days of the period.
+func (o Options) days() int {
+	return max(1, o.Days)
+}
+
+// open tells whether day d has interviews.
+func (o Options) open(d int) bool {
+	return d >= 0 && d < o.days() && !slices.Contains(o.Closed, d)
+}
+
+// everyDay repeats times of day on the days of the period that are not
+// closed.
+func (o Options) everyDay(times []Interval) []Interval {
+	out := []Interval{}
+
+	for d := range o.days() {
+		if !o.open(d) {
+			continue
+		}
+
+		midnight := time.Duration(d) * DayLength
+		for _, iv := range times {
+			out = append(out, Interval{midnight + iv.Start, midnight + iv.End})
+		}
+	}
+
+	return out
 }
 
 // withDefaults returns the options with the defaults applied, or an error
@@ -181,15 +286,19 @@ func (o Options) withDefaults() (Options, error) {
 		o.Day = []Interval{{DefaultDayStart, DefaultDayEnd}}
 	}
 
-	day, err := normalize(o.Day)
+	day, err := normalize(o.Day, 1)
 	if err != nil {
 		return o, fmt.Errorf("planning: day: %w", err)
 	}
 
 	o.Day = day
 
-	if o.Breaks, err = normalize(o.Breaks); err != nil {
+	if o.Breaks, err = normalize(o.Breaks, 1); err != nil {
 		return o, fmt.Errorf("planning: breaks: %w", err)
+	}
+
+	if err := o.checkPeriod(); err != nil {
+		return o, err
 	}
 
 	if o.Duration == 0 {
@@ -201,8 +310,6 @@ func (o Options) withDefaults() (Options, error) {
 		return o, errors.New("planning: negative duration")
 	case o.Step < 0:
 		return o, errors.New("planning: negative step")
-	case o.MaxWait < 0 && o.MaxWait != NoWaitLimit:
-		return o, errors.New("planning: negative maximum wait")
 	case o.MaxJointSize < 0:
 		return o, errors.New("planning: negative maximum joint size")
 	}
@@ -228,8 +335,39 @@ func (o Options) withDefaults() (Options, error) {
 	return o, nil
 }
 
-// check validates the problem itself.
-func (p *Problem) check() error {
+// checkPeriod validates the period and the gaps.
+func (o Options) checkPeriod() error {
+	switch {
+	case o.Days < 0:
+		return errors.New("planning: negative number of days")
+	case o.MinGap.Duration < 0 || o.MinGap.Days < 0 || o.MaxGap.Days < 0:
+		return errors.New("planning: negative gap")
+	case o.MaxGap.Duration < 0 && o.MaxGap.Duration != NoLimit:
+		return errors.New("planning: negative maximum gap")
+	case o.MinGap.Days > 0 && o.MinGap.Duration != 0, o.MaxGap.Days > 0 && o.MaxGap.Duration != 0:
+		return errors.New("planning: a gap is a duration or a number of days, not both")
+	case o.MinGap.Days > 0 && o.MaxGap.Days == 0 && o.MaxGap.Duration != NoLimit:
+		return fmt.Errorf("planning: a minimum gap of %s needs a maximum gap in days, or no limit", o.MinGap)
+	case o.MinGap.Days > o.MaxGap.Days && o.MaxGap.Days > 0,
+		o.MaxGap.Days == 0 && o.MaxGap.Duration != NoLimit && o.MinGap.Duration > o.MaxGap.Duration:
+		return fmt.Errorf("planning: the minimum gap, %s, is more than the maximum gap, %s", o.MinGap, o.MaxGap)
+	}
+
+	for _, d := range o.Closed {
+		if d < 0 || d >= o.days() {
+			return fmt.Errorf("planning: closed day %d out of the period of %d days", d, o.days())
+		}
+	}
+
+	if o.NotBefore < 0 || o.NotBefore >= o.days() {
+		return fmt.Errorf("planning: first day of new interviews %d out of the period of %d days", o.NotBefore, o.days())
+	}
+
+	return nil
+}
+
+// check validates the problem itself, for the period of o.
+func (p *Problem) check(o Options) error {
 	if err := uniqueNames("recruiter", len(p.Recruiters), func(i int) string { return p.Recruiters[i].Name }); err != nil {
 		return err
 	}
@@ -243,13 +381,13 @@ func (p *Problem) check() error {
 			return fmt.Errorf("planning: recruiter %s: negative duration", r.Name)
 		}
 
-		if _, err := normalize(r.Availability); err != nil {
+		if _, err := normalize(r.Availability, o.days()); err != nil {
 			return fmt.Errorf("planning: recruiter %s: %w", r.Name, err)
 		}
 	}
 
 	for _, c := range p.Candidates {
-		if _, err := normalize(c.Availability); err != nil {
+		if _, err := normalize(c.Availability, o.days()); err != nil {
 			return fmt.Errorf("planning: candidate %s: %w", c.Name, err)
 		}
 
@@ -259,6 +397,10 @@ func (p *Problem) check() error {
 
 		if c.DaysLeft < 0 {
 			return fmt.Errorf("planning: candidate %s: negative days left", c.Name)
+		}
+
+		if c.Duration < 0 {
+			return fmt.Errorf("planning: candidate %s: negative duration", c.Name)
 		}
 	}
 
@@ -281,6 +423,14 @@ func (p *Problem) check() error {
 	for i, r := range p.Requests {
 		if r.Candidate < 0 || r.Candidate >= len(p.Candidates) || r.Recruiter < 0 || r.Recruiter >= len(p.Recruiters) {
 			return fmt.Errorf("planning: request %d: unknown candidate or recruiter", i)
+		}
+
+		if r.Rank < 0 {
+			return fmt.Errorf("planning: %s: negative rank", p.Candidates[r.Candidate].Name)
+		}
+
+		if r.Rank > 0 && p.Candidates[r.Candidate].Together {
+			return fmt.Errorf("planning: %s meets everybody together: no ranks", p.Candidates[r.Candidate].Name)
 		}
 
 		key := pair{r.Candidate, r.Recruiter}
@@ -311,17 +461,23 @@ func uniqueNames(kind string, n int, name func(int) string) error {
 	return nil
 }
 
-// normalize returns the intervals sorted, with the overlapping ones merged.
-// A nil input stays nil (meaning "use the default").
-func normalize(intervals []Interval) ([]Interval, error) {
+// normalize returns the intervals sorted, with the overlapping ones merged;
+// each lies within one of the days of a period. A nil input stays nil
+// (meaning "use the default").
+func normalize(intervals []Interval, days int) ([]Interval, error) {
 	if intervals == nil {
 		return nil, nil
 	}
 
 	out := slices.Clone(intervals)
 	for _, iv := range out {
-		if iv.Start < 0 || iv.End > 24*time.Hour || iv.Start >= iv.End {
+		switch {
+		case iv.Start < 0 || iv.Start >= iv.End:
 			return nil, fmt.Errorf("invalid interval %s", iv)
+		case iv.End > time.Duration(iv.Day()+1)*DayLength:
+			return nil, fmt.Errorf("interval %s spans midnight", iv)
+		case iv.Day() >= days:
+			return nil, fmt.Errorf("interval %s on day %d, out of the period of %d days", iv, iv.Day(), days)
 		}
 	}
 
@@ -346,15 +502,16 @@ func normalize(intervals []Interval) ([]Interval, error) {
 	return merged, nil
 }
 
-// availability returns own when set, the day otherwise.
-func availability(own, day []Interval) []Interval {
+// availability returns own when set, the default day on every open day
+// otherwise; never on closed days.
+func availability(own []Interval, o Options) []Interval {
 	if own == nil {
-		return day
+		return o.everyDay(o.Day)
 	}
 
-	merged, _ := normalize(own) // already validated by check
+	merged, _ := normalize(own, o.days()) // already validated by check
 
-	return merged
+	return slices.DeleteFunc(merged, func(iv Interval) bool { return !o.open(iv.Day()) })
 }
 
 // jointAllowed tells whether the recruiters belong to a common joint group.
@@ -375,6 +532,34 @@ func (p *Problem) jointAllowed(recruiters []int) bool {
 }
 
 // duration returns the interview length of recruiter h.
+// length returns the length of an interview of candidate c with recruiters.
+func (p *Problem) length(c int, recruiters []int, o Options) time.Duration {
+	if d := p.Candidates[c].Duration; d > 0 {
+		return d
+	}
+
+	var length time.Duration
+	for _, h := range recruiters {
+		length = max(length, p.duration(h, o))
+	}
+
+	return length
+}
+
+// joint tells whether candidate c may meet recruiters in one interview.
+func (p *Problem) joint(c int, recruiters []int, o Options) error {
+	switch {
+	case len(recruiters) < 2 || p.Candidates[c].Together:
+		return nil
+	case !p.jointAllowed(recruiters):
+		return errors.New("recruiters of no common joint group")
+	case o.MaxJointSize > 0 && len(recruiters) > o.MaxJointSize:
+		return fmt.Errorf("more than %d recruiters", o.MaxJointSize)
+	}
+
+	return nil
+}
+
 func (p *Problem) duration(h int, o Options) time.Duration {
 	if d := p.Recruiters[h].Duration; d > 0 {
 		return d

@@ -13,10 +13,14 @@ Chaque candidat doit rencontrer certains recruteurs. Les règles :
 - un recruteur reçoit un candidat à la fois ; un candidat peut rencontrer
   plusieurs recruteurs en un seul entretien commun quand ils font partie d'un
   même **groupe commun** ;
-- un candidat rencontre **tous ses recruteurs le même jour**, ou aucun ce
-  jour-là ;
-- les entretiens d'un candidat **s'enchaînent**, et ne sont jamais de part et
-  d'autre d'une **pause** comme le déjeuner ;
+- un candidat rencontre **tous ses recruteurs dans la période** planifiée
+  (une journée, une semaine…), ou aucun ;
+- entre deux entretiens d'un candidat, un **écart minimal et maximal** :
+  enchaînés par défaut, ou par exemple au moins trois jours d'écart ; deux
+  entretiens d'une même journée ne sont jamais de part et d'autre d'une
+  **pause** comme le déjeuner ;
+- les rencontres d'un candidat peuvent avoir un **ordre** : tel recruteur
+  d'abord, puis tel autre, les autres à n'importe quel moment ;
 - chacun a des disponibilités, les mêmes chaque jour ou **par date**, et
   chaque recruteur une durée d'entretien ;
 - les candidats peuvent avoir une **priorité** : un candidat passe avant
@@ -25,8 +29,13 @@ Chaque candidat doit rencontrer certains recruteurs. Les règles :
   à qui il reste le moins de jours.
 
 Tout est décrit dans un seul **fichier problème**, en YAML ou en JSON. Un
-lancement planifie **une journée** ; les rencontres qui ne tiennent pas sont
-écrites dans le fichier problème du lendemain.
+lancement planifie **une période**, d'une première à une dernière date, du
+lundi au vendredi par défaut, sans les jours fériés ; les candidats qui ne
+tiennent pas sont écrits dans le fichier problème de la période suivante.
+
+Pas seulement des entretiens : les enregistrements d'une émission avec des
+invités difficiles à réunir, le programme d'un colloque, des parties de jeu
+de rôle… voir [Autres usages](#autres-usages).
 
 ## Premier planning, pas à pas
 
@@ -97,14 +106,17 @@ tapez `igiveyouarendezvous problem.yaml > planning.txt` (Mac et Linux : avec
 **6. Le lendemain.** Pour les personnes qui n'ont pas pu passer, tapez
 `igiveyouarendezvous -rest demain.yaml problem.yaml` (Mac et Linux : avec
 `./` devant). Le programme écrit aussi `demain.yaml` : le même fichier, avec
-seulement les rencontres restantes. Complétez-le si besoin, et utilisez-le le
-lendemain à la place de `problem.yaml`.
+seulement les candidats restants. Complétez-le si besoin, et utilisez-le le
+lendemain à la place de `problem.yaml`. (Pour planifier toute une semaine
+d'un coup, voyez `from` et `to` dans `example-full.yaml`.)
 
 **En cas d'erreur**, le programme indique la ligne du fichier en cause :
 vérifiez les espaces en début de ligne, les deux-points, et que les noms sont
 écrits comme sous `recruiters`. L'exemple complet et commenté,
 `example-full.yaml`, montre tout le reste : disponibilités par personne et
-par date, priorités, entretiens communs…
+par date, priorités, entretiens communs… Les autres fichiers
+`example-….yaml` planifient autre chose que des entretiens : une émission,
+un colloque, des parties de jeu de rôle.
 
 ## Installation
 
@@ -146,14 +158,18 @@ contre 103 avec les réglages par défaut (voir
 ## Utilisation
 
 ```sh
-igiveyouarendezvous -date 2026-11-03 -rest jour2.yaml example/problem.yaml
-igiveyouarendezvous -date 2026-11-04 -rest jour3.yaml jour2.yaml
+igiveyouarendezvous -rest semaine2.yaml example/problem.yaml   # la semaine du fichier
+igiveyouarendezvous -from 2026-11-16 -to 2026-11-20 -rest semaine3.yaml semaine2.yaml
+igiveyouarendezvous -date 2026-11-23 semaine3.yaml             # un seul jour
 ```
 
 | Option | Sens |
 |---|---|
-| `-date 2026-11-03` | jour à planifier, nécessaire quand des disponibilités sont données par date |
-| `-rest suite.yaml` | écrit le fichier problème du lendemain : le même, avec les rencontres restantes |
+| `-from 2026-11-16` | premier jour de la période à planifier, à la place de `from` dans le fichier |
+| `-to 2026-11-20` | dernier jour, inclus, à la place de `to` dans le fichier (par défaut : le premier jour) |
+| `-date 2026-11-23` | un seul jour : `-from` et `-to` à la fois |
+| `-not-before 2026-11-18` | pour replanifier en cours de période : rien de nouveau avant cette date (voir plus bas) |
+| `-rest suite.yaml` | écrit le fichier problème de la période suivante : le même, sans les candidats servis |
 | `-objectives a,b,c` | objectifs par priorité, à la place de ceux du fichier problème |
 | `-out plan.yaml` | écrit aussi le planning dans un fichier plan, pour reprendre avec `-start` |
 | `-start plan.yaml` | part de ce planning au lieu de partir de zéro (voir plus bas) |
@@ -172,12 +188,13 @@ problème est lu sur l'entrée standard.
 La commande sort avec le code 0 quand tout va bien, 2 quand des rendez-vous
 figés ne tiennent plus (voir plus bas), et 1 en cas d'erreur.
 
-La commande affiche le planning par heure, l'agenda de chaque recruteur, la
-valeur atteinte sur chaque objectif et les rencontres restantes. Elle signale
-aussi les rencontres **impossibles** : un candidat et un recruteur jamais
-libres ensemble assez longtemps. Elles restent dans le fichier problème du
-lendemain et reviendront chaque jour tant que les disponibilités ne changent
-pas.
+La commande affiche le planning par heure (avec les dates, sur plusieurs
+jours), l'agenda de chaque recruteur jour par jour, la valeur atteinte sur
+chaque objectif et les rencontres restantes. Elle signale aussi les
+rencontres **impossibles** : un candidat et un recruteur jamais libres
+ensemble assez longtemps. Elles restent dans le fichier problème de la
+période suivante et reviendront à chaque fois tant que les disponibilités ne
+changent pas.
 
 ## Le fichier problème
 
@@ -186,6 +203,9 @@ Un [exemple commenté](example/problem.yaml), et
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/FrederickFrance/igiveyouarendezvous/main/schema/problem.schema.json
+from: 2026-11-09
+to: 2026-11-13
+closed: [2026-11-11]
 day: 08:00-17:00
 breaks: 12:00-13:30
 joint-groups:
@@ -201,10 +221,10 @@ candidates:
     meet: [recruteur 1, recruteur 2, recruteur 3]
     priority: 2
   candidat B:
-    meet: [recruteur 3]
+    meet: {recruteur 1: 1, recruteur 2: X, recruteur 3: 2}
     availability:
-      2026-11-03: none
-      2026-11-04: 08:00-12:00
+      2026-11-09: none
+      2026-11-10: 08:00-12:00
 ```
 
 Les clés sont en anglais, comme le reste du programme. `recruiters` et
@@ -212,19 +232,26 @@ Les clés sont en anglais, comme le reste du programme. `recruiters` et
 
 | Clé | Défaut | Sens |
 |---|---|---|
-| `day` | `08:00-12:00` | disponibilité par défaut de tout le monde ; plusieurs plages possibles : `08:00-12:00, 14:00-17:00` |
-| `breaks` | aucune | pauses comme le déjeuner (`12:00-13:30`) : pas d'entretien pendant, et jamais d'entretiens d'un candidat de part et d'autre |
+| `from`, `to` | aucune | la période à planifier, les deux jours inclus (`to` : `from` par défaut) ; `-from` et `-to` les remplacent |
+| `not-before` | aucune | pour replanifier en cours de période : aucun nouvel entretien avant cette date (voir plus bas) |
+| `weekdays` | `[mon, tue, wed, thu, fri]` | les jours de la semaine avec des entretiens (`mon` ou `monday`…) |
+| `closed` | aucune | dates sans entretien : `[2026-11-11, 2026-12-25]` |
+| `day` | `08:00-12:00` | disponibilité par défaut de tout le monde, chaque jour ; plusieurs plages possibles : `08:00-12:00, 14:00-17:00` |
+| `breaks` | aucune | pauses comme le déjeuner (`12:00-13:30`) : pas d'entretien pendant, et jamais deux entretiens d'un candidat d'une même journée de part et d'autre |
 | `duration` | `1h` | durée d'entretien par défaut (`45m`, `1h30`, `90`) |
 | `step` | automatique | grille horaire ; par défaut la plus grossière sur laquelle tombent toutes les durées et heures |
-| `max-wait` | `0` | attente totale permise à un candidat entre ses entretiens : `0` = ils s'enchaînent, `unlimited` = sans limite |
+| `min-gap` | `0` | le temps minimal entre deux entretiens d'un candidat : une durée (`30m`, `2h`) ou des jours calendaires (`3d`) |
+| `max-gap` | `0` | le temps maximal entre deux entretiens d'un candidat : une durée, des jours calendaires (`1d` : le lendemain au plus tard) ou `unlimited` ; `0` et `0` : enchaînés |
 | `joint-groups` | aucun | groupes de recruteurs qui peuvent recevoir ensemble (voir plus bas) |
 | `max-joint-size` | `0` | nombre maximal de recruteurs dans un entretien commun (`0` : sans limite) |
 | `objectives` | voir plus bas | objectifs, le plus important d'abord |
 | `recruiters.<nom>.duration` | `duration` | durée des entretiens avec ce recruteur ; un entretien commun dure autant que sa plus longue partie |
 | `recruiters.<nom>.availability` | `day` | plages du recruteur (`none` : absent), chaque jour ou par date (voir plus bas) |
-| `candidates.<nom>.meet` | obligatoire | les recruteurs à rencontrer |
+| `candidates.<nom>.meet` | obligatoire | les recruteurs à rencontrer, dans n'importe quel ordre, ou avec leurs rangs (voir plus bas) |
 | `candidates.<nom>.availability` | `day` | plages du candidat, chaque jour ou par date |
 | `candidates.<nom>.priority` | `1` | plus c'est haut, plus c'est important (objectif `priorities`) |
+| `candidates.<nom>.duration` | celle des recruteurs | durée des entretiens de ce candidat, à la place de celles des recruteurs |
+| `candidates.<nom>.together` | `false` | `true` : une réunion, tous les recruteurs à la fois en un seul entretien, ou rien (voir [Autres usages](#autres-usages)) |
 
 Une clé inconnue (une faute de frappe), un recruteur inconnu ou un nom donné
 deux fois est une erreur, avec son numéro de ligne. Entre accolades,
@@ -246,8 +273,41 @@ candidates:
 ```
 
 Une personne dont la disponibilité est donnée par date est absente les
-autres jours. Le jour à planifier se choisit alors avec `-date` : la commande
-refuse de tourner sans, et liste les dates trouvées dans le fichier.
+autres jours. Il faut alors une période, `from` et `to` dans le fichier ou
+`-from` et `-to` : sans, la commande refuse de tourner, et liste les dates
+trouvées dans le fichier. Sans aucune date, un fichier sans période planifie
+une journée sans date, comme dans le tutoriel.
+
+**La période.** Les entretiens ont lieu les jours de `weekdays` entre `from`
+et `to`, sans les dates de `closed`. Un candidat rencontre tous ses
+recruteurs dans la période, ou aucun, et un entretien ne déborde jamais
+après minuit.
+
+**Les écarts.** `min-gap` et `max-gap` encadrent le temps entre la fin d'un
+entretien d'un candidat et le début du suivant. Les durées comptent le
+temps ; les jours comptent les jours calendaires, de la date d'un entretien à
+celle du suivant, quelles que soient les heures : avec `min-gap: 3d`, un
+entretien un lundi est suivi le jeudi au plus tôt, et avec `max-gap: 1d` le
+mardi au plus tard (un vendredi n'est suivi le lundi qu'avec 3 jours).
+
+```yaml
+min-gap: 0          # par défaut : enchaînés, le même jour
+max-gap: 0
+
+min-gap: 3d         # au moins trois jours entre deux entretiens
+max-gap: unlimited
+
+min-gap: 30m        # le même jour, avec 30 minutes à 2 heures entre deux
+max-gap: 2h
+```
+
+**L'ordre.** `meet` est une liste, dans n'importe quel ordre, ou les
+recruteurs avec leurs rangs : le rang 1 d'abord, puis le rang 2, et ainsi de
+suite ; `X` (ou `any`, ou rien) à n'importe quel moment. Avec
+`{recruteur 1: 1, recruteur 2: X, recruteur 3: 2}`, le recruteur 1 passe
+avant le recruteur 3, et le recruteur 2 avant, entre ou après. Plusieurs
+recruteurs peuvent avoir le même rang, dans n'importe quel ordre entre eux ;
+un entretien commun ne mélange jamais deux rangs.
 
 **Groupes communs.** Un candidat qui doit rencontrer des recruteurs d'un même
 groupe **peut** les voir en un seul entretien commun, ou séparément. Un
@@ -257,11 +317,13 @@ demande que tous ses recruteurs soient dans un même groupe : avec
 groupe reçoit toujours seul ; sans groupes, tous les entretiens sont
 individuels.
 
-**Le lendemain.** `-rest` réécrit le fichier problème, sans les candidats
-servis et, pour les autres, avec les rencontres restantes. Tout le reste est
-conservé tel quel, les commentaires aussi en YAML (mais pas les lignes
-vides), pour que le fichier du lendemain se modifie à la main comme le
-premier : nouveaux candidats, nouvelles disponibilités…
+**La période suivante.** `-rest` réécrit le fichier problème, sans les
+candidats servis ; les autres gardent toutes leurs rencontres. La période
+(`from`, `to`, `not-before`), planifiée, est retirée, pour choisir la
+suivante. Tout le reste est conservé tel quel, les commentaires aussi en
+YAML (mais pas les lignes vides), pour que le fichier de la période suivante
+se modifie à la main comme le premier : nouveaux candidats, nouvelles
+disponibilités…
 
 ### Dans un éditeur
 
@@ -284,6 +346,71 @@ et pour le JSON, une clé :
 Un chemin relatif vers une copie locale du schéma marche aussi. La clé
 `$schema` est ignorée par la commande.
 
+## Autres usages
+
+Le programme place des « candidats » qui doivent rencontrer des
+« recruteurs », chacun à un seul endroit à la fois. Bien d'autres plannings
+entrent dans ce moule : les noms des clés restent, seul leur sens change.
+
+**Réunions : tout le monde à la fois.** Avec `together: true`, un candidat
+rencontre tous ses recruteurs en un seul entretien, quels que soient les
+groupes communs, ou pas du tout : un enregistrement, une partie, une réunion.
+Le programme trouve un moment où tous sont libres ; s'il n'y en a pas, la
+réunion n'est pas planifiée (et signalée comme impossible), jamais découpée
+en morceaux. `duration` sur le candidat donne sa durée. Une réunion seule,
+c'est ce que fait un sondage comme Doodle ; le programme aide quand plusieurs
+réunions se disputent les mêmes personnes.
+
+```yaml
+from: 2026-11-16
+to: 2026-11-20
+day: 09:00-18:00
+recruiters:              # les personnes
+  Camille (animatrice):
+  Ada: {availability: {2026-11-17: 09:00-12:00, 2026-11-19: 14:00-18:00}}
+  Blaise: {availability: {2026-11-19: 09:00-18:00}}
+candidates:              # les émissions
+  les joies de la recherche opérationnelle:
+    meet: [Camille (animatrice), Ada, Blaise]
+    together: true
+    duration: 2h
+  une courte sur la planification:
+    meet: [Camille (animatrice), Blaise]
+    together: true
+    duration: 30m
+```
+
+L'animatrice est de chaque émission : comme un « recruteur » ne fait qu'une
+chose à la fois, deux enregistrements ne se chevauchent jamais, pas plus que
+pour les invités communs à plusieurs émissions. Exemples complets : [les
+enregistrements d'une émission](example/show.yaml), [des parties de jeu de
+rôle](example/roleplay.yaml) dont la meneuse de jeu anime deux tables.
+
+**Un programme : une chose après l'autre.** Pour un colloque dans une seule
+salle, le colloque est le candidat et les intervenants ses recruteurs : il
+n'est qu'à un endroit à la fois, donc les interventions s'enchaînent. La
+`duration` de chaque intervenant est la durée de son intervention, les rangs
+mettent l'ouverture en premier et la clôture en dernier, et leurs
+disponibilités fixent leurs jours ([exemple complet](example/colloquium.yaml)) :
+
+```yaml
+day: 09:00-12:00, 14:00-17:00   # le déjeuner comme un trou dans la journée : interventions avant et après
+max-gap: unlimited
+objectives: [complete-candidates, earliest]
+candidates:
+  colloque:
+    meet: {ouverture: 1, Ada: 2, Blaise: 2, Grace: 2, clôture: 3}
+```
+
+Quelques pièges :
+- le déjeuner se met dans `day`, pas dans `breaks` : une pause interdit les
+  entretiens d'un candidat de part et d'autre dans la même journée, donc une
+  journée n'aurait d'interventions que le matin ou que l'après-midi ;
+- l'objectif `candidate-wait` compte le déjeuner comme de l'attente et tasse
+  les interventions le matin : ne le mettez pas ;
+- tout ou rien : un intervenant impossible à placer laisse tout le colloque
+  non planifié (l'affichage dit qui) ; une seule salle.
+
 ## Objectifs
 
 | Nom | Sens |
@@ -292,12 +419,12 @@ Un chemin relatif vers une copie locale du schéma marche aussi. La clé
 | `urgency` | parmi eux, préfère les candidats à qui il reste le moins de jours (voir plus bas) |
 | `complete-candidates` | maximise les candidats qui voient tous leurs recruteurs, quelle que soit leur priorité |
 | `meetings` | maximise les rencontres tenues |
-| `recruiters` | minimise les recruteurs qui ont au moins un entretien dans la journée |
-| `recruiter-half-days` | minimise les demi-journées (matin, après-midi) où des recruteurs ont un entretien, sommées sur les recruteurs |
+| `recruiters` | minimise les recruteurs qui ont au moins un entretien, jour par jour : un recruteur qui vient deux jours compte deux |
+| `recruiter-half-days` | minimise les demi-journées (matin, après-midi) où des recruteurs ont un entretien, sommées sur les recruteurs et les jours |
 | `interviews` | minimise les entretiens, donc les rencontres groupées quand c'est permis |
-| `recruiter-span` | minimise le temps de présence des recruteurs, du début de leur premier entretien à la fin du dernier |
-| `candidate-wait` | minimise l'attente des candidats entre leurs entretiens (utile quand `max-wait` n'est pas `0`) |
-| `earliest` | place les entretiens le plus tôt possible |
+| `recruiter-span` | minimise le temps de présence des recruteurs, du début de leur premier entretien à la fin du dernier, jour par jour |
+| `candidate-wait` | minimise l'attente des candidats entre deux entretiens d'une même journée (utile quand `max-gap` n'est pas `0`) |
+| `earliest` | place les entretiens le plus tôt possible dans la période |
 
 L'optimisation est **lexicographique** : un planning est meilleur qu'un autre
 s'il fait mieux sur le premier objectif, ou aussi bien sur le premier et
@@ -313,14 +440,15 @@ servir permettrait de voir plus de monde : un candidat de priorité 2 qui doit
 voir quatre recruteurs peut coûter trois candidats de priorité 1. Sans
 priorités, c'est le nombre de candidats qui voient tous leurs recruteurs.
 
-`urgency` regarde les **jours restants** de chaque candidat : les dates du
-fichier, à partir du jour planifié, où le candidat et tous ses recruteurs sont
-disponibles. Un candidat à son dernier jour passe avant n'importe quel nombre
-de candidats à qui il reste deux jours, et ainsi de suite ; quelqu'un
-disponible tous les jours n'est jamais urgent. Placé après `priorities`, il ne
-coûte jamais un candidat : le nombre de candidats vus reste le plus haut
-possible, et `urgency` choisit seulement lesquels, pour que le candidat qui ne
-peut venir qu'aujourd'hui ne soit pas sacrifié à celui qui peut venir demain.
+`urgency` regarde les **jours restants** de chaque candidat : les dates
+ouvrées du fichier, à partir du premier jour planifié (ou de `not-before`),
+où le candidat et tous ses recruteurs sont disponibles. Un candidat à son
+dernier jour passe avant n'importe quel nombre de candidats à qui il reste
+deux jours, et ainsi de suite ; quelqu'un disponible tous les jours n'est
+jamais urgent. Placé après `priorities`, il ne coûte jamais un candidat : le
+nombre de candidats vus reste le plus haut possible, et `urgency` choisit
+seulement lesquels, pour que le candidat qui ne peut venir qu'à une date ne
+soit pas sacrifié à celui qui en a d'autres.
 Les jours restants ne comptent que les dates (on ne vérifie pas que tout le
 monde est libre en même temps ce jour-là), et la commande les affiche en
 `last day`, `2 days left`…
@@ -329,8 +457,8 @@ La **pause du déjeuner** sépare le matin de l'après-midi : avec plusieurs
 pauses, la plus longue ; sans pause, midi. Un recruteur qui n'a d'entretiens
 qu'avant le déjeuner compte une demi-journée, des deux côtés deux.
 
-L'ordre change le résultat. Avec la règle par défaut (toutes les rencontres
-d'un candidat le même jour), `meetings` en premier favorise les candidats qui
+L'ordre change le résultat. Comme toutes les rencontres d'un candidat ont
+lieu dans la période, `meetings` en premier favorise les candidats qui
 doivent voir beaucoup de recruteurs, `complete-candidates` en premier ceux
 qui en voient peu.
 
@@ -347,25 +475,29 @@ qui en voient peu.
   désigner le même fichier, remplacé seulement à la fin :
 
   ```sh
-  igiveyouarendezvous -date 2026-11-03 -timeout 10m -out plan.yaml problem.yaml
-  igiveyouarendezvous -date 2026-11-03 -timeout 10m -start plan.yaml -out plan.yaml problem.yaml
+  igiveyouarendezvous -timeout 10m -out plan.yaml problem.yaml
+  igiveyouarendezvous -timeout 10m -start plan.yaml -out plan.yaml problem.yaml
   ```
 
-Le fichier plan liste les candidats, chacun **figé** ou non, et note la date
-du planning : partir du planning d'un autre jour est refusé.
+Le fichier plan liste les candidats, chacun **figé** ou non, avec la date de
+chaque entretien, et note la période du planning : partir du planning d'une
+autre période est refusé.
 
 ```yaml
-date: 2026-11-03
+from: 2026-11-09
+to: 2026-11-13
 candidates:
   candidat A:
     fixed: true
     interviews:
-      - time: 08:00-09:00
+      - date: 2026-11-10
+        time: 08:00-09:00
         recruiters: [recruteur 2, recruteur 3]
   candidat B:
     fixed: false
     interviews:
-      - time: 09:00-09:30
+      - date: 2026-11-12
+        time: 09:00-09:30
         recruiters: [recruteur 1]
 ```
 
@@ -376,7 +508,7 @@ candidates:
   nouvelle pause, une rencontre ajoutée ou retirée depuis, un chevauchement
   avec un planning ajouté avant…) n'est **pas** gardé : une **alerte** en tête
   de l'affichage dit pourquoi, et ce qu'est devenu le candidat, replanifié
-  entièrement (nouveaux horaires, ou pas planifié aujourd'hui). La commande
+  entièrement (nouveaux horaires, ou pas planifié dans la période). La commande
   sort alors avec le code 2, pour que la convocation soit renvoyée.
 - **Un candidat non figé** peut être déplacé, ou laissé de côté. Ses
   entretiens qui ne tiennent plus sont abandonnés, chacun avec la raison, et
@@ -388,6 +520,21 @@ candidates:
   les figés ; une fois les convocations envoyées, `-fix-all` fige tout le
   fichier.
 
+**Replanifier en cours de période.** Mercredi, le candidat X a été recalé
+après deux entretiens, A et B sont convoqués, C pas encore, et N arrive. Dans
+le fichier plan de la semaine, A et B passent à `fixed: true` et C reste à
+`fixed: false` ; dans le fichier problème, X est retiré et N ajouté. Puis,
+sur la même période :
+
+```sh
+igiveyouarendezvous -start plan.yaml -not-before 2026-11-11 -out plan.yaml problem.yaml
+```
+
+Les rendez-vous de A et B restent tels quels, lundi et mardi compris ; rien
+de nouveau n'est placé avant mercredi, donc C, dont l'entretien tombait
+lundi, et N sont planifiés à partir de mercredi. X apparaît en alerte (code
+de sortie 2) : un rappel pour annuler ses rendez-vous restants.
+
 ## Comme bibliothèque
 
 ```go
@@ -396,8 +543,8 @@ import (
 	"github.com/FrederickFrance/igiveyouarendezvous/planning"
 )
 
-f, err := config.Load("problem.yaml") // ou config.Parse(data), YAML ou JSON
-p, o, err := f.Problem("2026-11-03")  // le problème et les options de ce jour
+f, err := config.Load("problem.yaml")             // ou config.Parse(data), YAML ou JSON
+p, o, err := f.Problem("2026-11-09", "2026-11-13") // le problème et les options de cette période
 
 ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 defer cancel()
@@ -410,7 +557,7 @@ s, err := planning.Search(ctx, p, o, planning.SearchOptions{
 // s.Interviews : le planning ; s.Scores : la valeur atteinte sur chaque objectif ;
 // s.Unscheduled, s.Impossible : ce qui n'a pas pu être placé.
 
-next, err := f.Next(p, s)          // le fichier problème du lendemain
+next, err := f.Next(p, s)          // le fichier problème de la période suivante
 err = next.Write(w, config.YAML)   // avec ses commentaires
 ```
 
@@ -430,10 +577,19 @@ p := &planning.Problem{
 }
 
 s, err := planning.Search(ctx, p, planning.Options{
+	Days:   5,                 // une semaine : les heures comptent depuis le minuit de son premier jour
+	Closed: []int{2},          // sans le mercredi
 	Day:    []planning.Interval{{Start: 8 * time.Hour, End: 17 * time.Hour}},
 	Breaks: []planning.Interval{{Start: 12 * time.Hour, End: 13*time.Hour + 30*time.Minute}},
+	MinGap: planning.Gap{Days: 3}, // au moins trois jours entre deux entretiens
+	MaxGap: planning.Gap{Duration: planning.NoLimit},
 }, planning.SearchOptions{Patience: 10 * time.Second})
 ```
+
+Le jour `d` de la période commence à `d*planning.DayLength` : un entretien
+le jeudi à 9:00 commence à `3*planning.DayLength + 9*time.Hour`, et
+`Interval.Day` donne son jour. `Request.Rank` donne l'ordre des rencontres,
+et `Options.NotBefore` le premier jour des nouveaux entretiens.
 
 - **Suivre** : `Progress` est appelé à chaque amélioration. En plus des
   scores, `pr.Schedule` est le planning lui-même, à afficher ou à garder.
@@ -452,16 +608,19 @@ s, err := planning.Search(ctx, p, planning.Options{
   (calculé par `config` à partir des dates) ; `Score.Priority` et
   `Score.DaysLeft` donnent le niveau de chaque score des objectifs
   `priorities` et `urgency`.
+- **Réunions** : `Candidate.Together` (tout le monde à la fois, ou rien) et
+  `Candidate.Duration` (à la place des durées des recruteurs).
 
 `planning.Solve(ctx, gomilp.New(), p, options)` fait de même avec le solveur
-exact, sur de petits problèmes seulement (voir [le modèle exact](#le-modèle-exact)).
+exact, sur de petits problèmes d'une journée seulement (voir [le modèle
+exact](#le-modèle-exact)).
 
 | Paquet | Contenu |
 |---|---|
 | `planning` | le problème, les options, `Search`, `Solve`, `Check` (vérifie un planning indépendamment), `Evaluate`, `Clean` |
 | `mip` | modèle linéaire générique et interface `Solver`, pour brancher un autre solveur exact |
 | `mip/gomilp` | le solveur exact fourni |
-| `config` | lit le fichier problème (`Load`, `Parse`, `Problem(date)`), écrit celui du lendemain (`Next`, `Write`) ; écrit et lit les fichiers plan (`WritePlan`, `ReadPlan`), en YAML ou en JSON |
+| `config` | lit le fichier problème (`Load`, `Parse`, `Problem(from, to)`), écrit celui de la période suivante (`Next`, `Write`) ; écrit et lit les fichiers plan (`WritePlan`, `ReadPlan`), en YAML ou en JSON |
 
 `planning` et `mip` ne dépendent que de la bibliothèque standard.
 
@@ -495,10 +654,11 @@ heure de présence ; sur le cas le plus dur (une journée entière avec
 déjeuner), il manque 8 rencontres sur 111 en 30 s, et 1 quand la recherche
 tourne plus longtemps.
 
-Les tests vérifient aussi, sur 60 petits problèmes aléatoires (avec ou sans
-pauses, attente, priorités et urgence), que la recherche trouve le
-même résultat qu'une énumération de tous les plannings possibles ; elle le
-fait aussi sur 300. Chaque planning rendu, par n'importe quel moteur, est
+Les tests vérifient aussi, sur 60 petits problèmes aléatoires d'une journée
+(avec ou sans pauses, attente, priorités et urgence) et sur 80 petites
+périodes aléatoires de deux ou trois jours (écarts en temps ou en jours,
+ordres, jours fermés, disponibilités par jour), que la recherche trouve le
+même résultat qu'une énumération de tous les plannings possibles. Chaque planning rendu, par n'importe quel moteur, est
 revérifié par `planning.Check`.
 
 ## Le modèle exact
@@ -509,9 +669,11 @@ entiers : le temps est découpé en créneaux ; chaque variable binaire dit
 créneau ». Les objectifs sont optimisés l'un après l'autre, chacun étant figé
 avant le suivant.
 
-Avec [go-milp](https://github.com/daniel-sullivan/go-milp) (Go pur), il
-prouve l'optimum de petits problèmes, quelques candidats : les tests s'en
-servent de référence. Sur des cas réels il ne sert à rien, d'où son absence
+Il planifie une journée, avec des entretiens enchaînés ou une attente
+quelconque, sans ordre : au-delà, il rend `planning.ErrUnsupported`. Avec
+[go-milp](https://github.com/daniel-sullivan/go-milp) (Go pur), il prouve
+l'optimum de petits problèmes, quelques candidats : les tests s'en servent
+de référence. Sur des cas réels il ne sert à rien, d'où son absence
 de la commande : sur 60 à 100 candidats, il ne trouve aucun planning en
 plusieurs minutes, même avec la valeur du planning glouton comme borne, et
 la recherche locale suivie d'une réoptimisation exacte de morceaux du
@@ -534,6 +696,11 @@ pull request, et l'analyse à nouveau chaque semaine. Dependabot propose les
 mises à jour des modules Go et des actions. Un tag de version (`git tag
 v0.1.0 && git push origin v0.1.0`) publie une version avec les zips prêts à
 l'emploi du tutoriel (`.github/workflows/release.yml`, `scripts/package.sh`).
+
+Les changements de chaque version sont dans le [journal des
+modifications](CHANGELOG.md) (en anglais) : avant de pousser un tag, ajoutez-y
+la section de la version ; la page de la version la reprend comme notes
+(`scripts/notes.sh`).
 
 ## Dépendances
 

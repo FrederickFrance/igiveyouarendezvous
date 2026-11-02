@@ -120,7 +120,7 @@ func fixedProblem(p *Problem, o Options, accepted []Interview, c int, plan []Int
 	}
 
 	if len(missing) > 0 {
-		return fmt.Sprintf("new meetings since the plan, with %s (all the meetings of a candidate take place the same day)", strings.Join(missing, ", "))
+		return fmt.Sprintf("new meetings since the plan, with %s (all the meetings of a candidate take place in the period)", strings.Join(missing, ", "))
 	}
 
 	// The rules of Check, on the plans accepted so far and this one.

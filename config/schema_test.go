@@ -44,7 +44,7 @@ func TestTheExamplesFollowTheSchema(t *testing.T) {
 
 	sch := compileSchema(t, "problem.schema.json")
 
-	for _, name := range []string{"problem.yaml", "problem.json", "simple.yaml"} {
+	for _, name := range []string{"problem.yaml", "problem.json", "simple.yaml", "show.yaml", "colloquium.yaml", "roleplay.yaml"} {
 		data, err := os.ReadFile(filepath.Join("..", "example", name))
 		require.NoError(t, err)
 		require.NoError(t, sch.Validate(asJSON(t, data)), name)
@@ -72,7 +72,7 @@ func TestWrittenPlansFollowTheSchema(t *testing.T) {
 	for _, fm := range []Format{YAML, JSON} {
 		for _, s := range []*planning.Schedule{smallSchedule(), {}} {
 			var b bytes.Buffer
-			require.NoError(t, WritePlan(&b, p, s, "2026-11-03", fm))
+			require.NoError(t, WritePlan(&b, p, s, "2026-11-03", "2026-11-03", fm))
 			require.NoError(t, sch.Validate(asJSON(t, b.Bytes())), b.String())
 		}
 	}
@@ -105,12 +105,22 @@ func TestTheSchemaRejectsWhatTheCodeRejects(t *testing.T) {
 		"recruiters: {}\ncandidates: {}\nmax-joint-size: -1",
 		"recruiters: {R: , S: }\ncandidates: {}\njoint-groups: [[R]]",
 		"recruiters: {R: , S: }\ncandidates: {}\njoint-groups: [[R, R]]",
+		"recruiters: {}\ncandidates: {}\nmin-gap: soon",
+		"recruiters: {}\ncandidates: {}\nmin-gap: unlimited",
+		"recruiters: {}\ncandidates: {}\nmax-gap: -1h",
+		"recruiters: {}\ncandidates: {}\nweekdays: [lundi]",
+		"recruiters: {}\ncandidates: {}\nclosed: [demain]",
+		"recruiters: {}\ncandidates: {}\nfrom: 2026-13-01",
+		"recruiters: {}\ncandidates: {}\nnot-before: soon",
+		"recruiters: {R: }\ncandidates:\n  A: {meet: {R: 0}}",
+		"recruiters: {R: }\ncandidates:\n  A: {meet: {R: Y}}",
+		"recruiters: {R: }\ncandidates:\n  A: {meet: {R: 1.5}}",
 	} {
 		require.Error(t, problem.Validate(asJSON(t, []byte(text))), text)
 
 		f, err := Parse([]byte(text))
 		if err == nil {
-			p, o, err2 := f.Problem("")
+			p, o, err2 := f.Problem("", "")
 			err = err2
 
 			if err == nil {
@@ -129,7 +139,8 @@ func TestTheSchemaRejectsWhatTheCodeRejects(t *testing.T) {
 		"candidates:\n  A: {fixed: true, interviews: [{time: 9h, recruiters: [R1]}]}",
 		"candidates:\n  A: {fixed: true, interviews: [{time: 9h-10h}]}",
 		"candidates:\n  A: {fixed: true, interviews: [{time: 9h-10h, recruiters: [R1, R1]}]}",
-		"date: 3/11\ncandidates: {}",
+		"from: 3/11\ncandidates: {}",
+		"from: 2026-11-03\ncandidates:\n  A: {fixed: true, interviews: [{date: soon, time: 9h-10h, recruiters: [R1]}]}",
 		"candidates: [A]",
 		"candidates: {}\nextra: 1",
 	} {

@@ -18,7 +18,7 @@ day: 08:00-17:00   # everybody
 breaks: 12:00-13:30
 duration: 1h
 step: 15m
-max-wait: unlimited
+max-gap: unlimited
 joint-groups: [[R2, R3]]
 max-joint-size: 2
 objectives: [meetings, recruiters]
@@ -49,7 +49,7 @@ func smallProblem(t *testing.T, date string) (*File, *planning.Problem, planning
 	f, err := Parse([]byte(small))
 	require.NoError(t, err)
 
-	p, o, err := f.Problem(date)
+	p, o, err := f.Problem(date, "")
 	require.NoError(t, err)
 
 	return f, p, o
@@ -69,7 +69,8 @@ func TestProblem(t *testing.T) {
 		Breaks:       []planning.Interval{{Start: h(12, 0), End: h(13, 30)}},
 		Duration:     time.Hour,
 		Step:         15 * time.Minute,
-		MaxWait:      planning.NoWaitLimit,
+		Days:         1,
+		MaxGap:       planning.Gap{Duration: planning.NoLimit},
 		MaxJointSize: 2,
 		Objectives:   []planning.Objective{planning.MaxMeetings, planning.MinRecruiters},
 	}, o)
@@ -100,10 +101,10 @@ func TestProblem(t *testing.T) {
 	f, err := Parse([]byte(small))
 	require.NoError(t, err)
 
-	_, _, err = f.Problem("")
-	require.ErrorContains(t, err, "line 18: candidate A: the availability is given by date: give the date to plan")
+	_, _, err = f.Problem("", "")
+	require.ErrorContains(t, err, "line 18: candidate A: the availability is given by date: give the period to plan")
 
-	_, _, err = f.Problem("tomorrow")
+	_, _, err = f.Problem("tomorrow", "")
 	require.ErrorContains(t, err, "invalid date")
 
 	require.Equal(t, []string{"2026-11-03"}, f.Dates())
@@ -141,7 +142,7 @@ candidates:
 		"2026-11-06": {0, 0, 1, 0},
 		"2026-11-07": {0, 0, 0, 0},
 	} {
-		p, _, err := f.Problem(date)
+		p, _, err := f.Problem(date, "")
 		require.NoError(t, err)
 
 		got := make([]int, len(p.Candidates))
@@ -156,7 +157,7 @@ candidates:
 	f, err = Parse([]byte("day: none\nrecruiters: {R1: }\ncandidates:\n  A: {meet: [R1], availability: {2026-11-03: 8h-9h}}\n"))
 	require.NoError(t, err)
 
-	p, _, err := f.Problem("2026-11-03")
+	p, _, err := f.Problem("2026-11-03", "")
 	require.NoError(t, err)
 	require.Equal(t, 0, p.Candidates[0].DaysLeft, "R1 is never available")
 }
@@ -170,19 +171,67 @@ func TestJSONAndYAMLGiveTheSameProblem(t *testing.T) {
 	fromJSON, err := Load(filepath.Join("..", "example", "problem.json"))
 	require.NoError(t, err)
 
-	require.Equal(t, []string{"2026-11-03", "2026-11-04"}, fromYAML.Dates())
+	require.Equal(t, []string{"2026-11-09", "2026-11-10", "2026-11-12", "2026-11-13"}, fromYAML.Dates())
 	require.Equal(t, fromYAML.Dates(), fromJSON.Dates())
 
-	for _, date := range fromYAML.Dates() {
-		py, oy, err := fromYAML.Problem(date)
+	for _, period := range [][2]string{{string(fromYAML.From), string(fromYAML.To)}, {"2026-11-10", ""}, {"2026-11-12", "2026-11-20"}} {
+		py, oy, err := fromYAML.Problem(period[0], period[1])
 		require.NoError(t, err)
 
-		pj, oj, err := fromJSON.Problem(date)
+		pj, oj, err := fromJSON.Problem(period[0], period[1])
 		require.NoError(t, err)
 
-		require.Equal(t, py, pj, date)
-		require.Equal(t, oy, oj, date)
+		require.Equal(t, py, pj, period)
+		require.Equal(t, oy, oj, period)
 		require.Len(t, py.Requests, 9)
+	}
+
+	p, o, err := fromYAML.Problem(string(fromYAML.From), string(fromYAML.To))
+	require.NoError(t, err)
+	require.Equal(t, 5, o.Days)
+	require.Equal(t, []int{2}, o.Closed, "Wednesday 11th is closed")
+	require.Equal(t, []planning.Request{
+		{Candidate: 3, Recruiter: 0, Rank: 1}, {Candidate: 3, Recruiter: 1}, {Candidate: 3, Recruiter: 4, Rank: 2},
+	}, p.Requests[6:], "candidate D: recruiter 1, then 5")
+	require.Equal(t, []planning.Interval{
+		{Start: 3*planning.DayLength + at(9, 0), End: 3*planning.DayLength + at(12, 0)},
+		{Start: 4*planning.DayLength + at(14, 0), End: 4*planning.DayLength + at(17, 0)},
+	}, p.Candidates[3].Availability, "on Thursday and Friday, days 3 and 4")
+	require.Equal(t, []int{0, 1, 0, 2}, []int{p.Candidates[0].DaysLeft, p.Candidates[1].DaysLeft, p.Candidates[2].DaysLeft, p.Candidates[3].DaysLeft})
+}
+
+func TestPeriodOfTheFile(t *testing.T) {
+	t.Parallel()
+
+	f, err := Parse([]byte(`
+weekdays: [Monday, sat]
+closed: [2026-11-02]
+min-gap: 3d
+max-gap: unlimited
+recruiters: {R: {availability: {2026-11-07: 9h-10h}}}
+candidates:
+  A: {meet: [R], availability: 8h-12h}
+`))
+	require.NoError(t, err)
+
+	p, o, err := f.Problem("2026-11-01", "2026-11-09") // Sunday to Monday
+	require.NoError(t, err)
+	require.Equal(t, 9, o.Days)
+	require.Equal(t, []int{0, 1, 2, 3, 4, 5, 7}, o.Closed, "Monday 2nd is closed, Saturday 7th and Monday 9th are open")
+	require.Equal(t, planning.Gap{Days: 3}, o.MinGap)
+	require.Equal(t, planning.Gap{Duration: planning.NoLimit}, o.MaxGap)
+	require.Len(t, p.Candidates[0].Availability, 9, "every day, closed or not: planning skips the closed days")
+	require.Equal(t, []planning.Interval{{Start: 6*planning.DayLength + at(9, 0), End: 6*planning.DayLength + at(10, 0)}}, p.Recruiters[0].Availability)
+	require.Equal(t, 1, p.Candidates[0].DaysLeft)
+
+	for text, msg := range map[string]string{
+		"weekdays: [mon, lundi]\nrecruiters: {}\ncandidates: {}": `line 1: invalid day of the week "lundi"`,
+		"recruiters: {}\ncandidates: {}\nclosed: [soon]":         `line 3: invalid date "soon"`,
+		"closed: [[2026-11-11]]\nrecruiters: {}\ncandidates: {}": "line 1: a date is expected",
+		"max-wait: 0\nrecruiters: {}\ncandidates: {}":            "line 1: max-wait is replaced by max-gap",
+	} {
+		_, err := Parse([]byte(text))
+		require.ErrorContains(t, err, msg, text)
 	}
 }
 
@@ -221,7 +270,7 @@ func TestProblemFileErrors(t *testing.T) {
 		f, err := Parse([]byte(text))
 		require.NoError(t, err, text)
 
-		_, _, err = f.Problem("")
+		_, _, err = f.Problem("", "")
 		require.ErrorContains(t, err, msg, text)
 	}
 }
@@ -244,8 +293,8 @@ func TestNext(t *testing.T) {
 
 	f, p, _ := smallProblem(t, "2026-11-03")
 
-	// A met R1 and R3, B met everybody, C nobody.
-	s := &planning.Schedule{Unscheduled: []int{1, 5}}
+	// B met everybody, A and C nobody.
+	s := &planning.Schedule{Unscheduled: []int{0, 1, 2, 5}}
 
 	next, err := f.Next(p, s)
 	require.NoError(t, err)
@@ -253,14 +302,16 @@ func TestNext(t *testing.T) {
 	var b bytes.Buffer
 	require.NoError(t, next.Write(&b, YAML))
 
-	want := strings.Replace(small, "    meet: [R1, R2, R3]   # all of them\n", "    meet: [R2] # all of them\n", 1)
-	want = strings.Replace(want, "  B:\n    meet:\n      - R2\n      - R3\n", "", 1)
+	want := strings.Replace(small, "  B:\n    meet:\n      - R2\n      - R3\n", "", 1)
 	want = strings.Replace(want, "day: 08:00-17:00   # everybody", "day: 08:00-17:00 # everybody", 1)
+	want = strings.Replace(want, "    meet: [R1, R2, R3]   # all of them", "    meet: [R1, R2, R3] # all of them", 1)
 	require.Equal(t, want, b.String(), "the comments are kept")
 
-	np, _, err := next.Problem("2026-11-03")
+	np, _, err := next.Problem("2026-11-03", "")
 	require.NoError(t, err)
-	require.Equal(t, []planning.Request{{Candidate: 0, Recruiter: 1}, {Candidate: 1, Recruiter: 2}}, np.Requests)
+	require.Equal(t, []planning.Request{
+		{Candidate: 0, Recruiter: 0}, {Candidate: 0, Recruiter: 1}, {Candidate: 0, Recruiter: 2}, {Candidate: 1, Recruiter: 2},
+	}, np.Requests)
 
 	// The original is unchanged.
 	require.Len(t, f.Candidates, 3)
@@ -294,18 +345,60 @@ func TestWriteConvertsTheProblemFile(t *testing.T) {
 	want, err := Load(filepath.Join("..", "example", "problem.json"))
 	require.NoError(t, err)
 
-	for _, date := range f.Dates() {
-		p1, o1, err := back.Problem(date)
-		require.NoError(t, err)
+	p1, o1, err := back.Problem(string(f.From), string(f.To))
+	require.NoError(t, err)
 
-		p2, o2, err := want.Problem(date)
-		require.NoError(t, err)
+	p2, o2, err := want.Problem(string(f.From), string(f.To))
+	require.NoError(t, err)
 
-		require.Equal(t, p2, p1)
-		require.Equal(t, o2, o1)
-	}
+	require.Equal(t, p2, p1)
+	require.Equal(t, o2, o1)
 
 	b.Reset()
 	require.NoError(t, back.Write(&b, YAML))
 	require.Contains(t, b.String(), "  candidate A:\n    meet: [recruiter 1, recruiter 2, recruiter 3]\n")
+}
+
+func TestNotBefore(t *testing.T) {
+	t.Parallel()
+
+	const text = `from: 2026-11-09   # the week
+to: 2026-11-13
+not-before: 2026-11-11
+recruiters:
+  R: {availability: 9h-10h}
+candidates:
+  A:
+    meet: [R]
+    availability: {2026-11-09: 9h-10h, 2026-11-12: 9h-10h}
+  B: {meet: [R]}
+`
+
+	f, err := Parse([]byte(text))
+	require.NoError(t, err)
+
+	p, o, err := f.Problem(string(f.From), string(f.To))
+	require.NoError(t, err)
+	require.Equal(t, 2, o.NotBefore)
+	require.Equal(t, 1, p.Candidates[0].DaysLeft, "Monday is gone, Thursday is left")
+
+	_, _, err = f.Problem("2026-11-12", "2026-11-13")
+	require.EqualError(t, err, "not-before: 2026-11-11 is out of the period, from 2026-11-12 to 2026-11-13")
+
+	_, _, err = f.Problem("", "")
+	require.EqualError(t, err, "not-before: 2026-11-11 needs a period to plan, from and to")
+
+	// The file of the rest is for another period.
+	next, err := f.Next(p, &planning.Schedule{Unscheduled: []int{0}})
+	require.NoError(t, err)
+
+	var b bytes.Buffer
+	require.NoError(t, next.Write(&b, YAML))
+	require.Equal(t, `recruiters:
+  R: {availability: 9h-10h}
+candidates:
+  A:
+    meet: [R]
+    availability: {2026-11-09: 9h-10h, 2026-11-12: 9h-10h}
+`, b.String())
 }
