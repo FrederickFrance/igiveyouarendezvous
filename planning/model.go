@@ -13,31 +13,69 @@ const (
 	// maxOptionsPerGroup bounds the number of ways to combine the
 	// requests that one candidate may group together.
 	maxOptionsPerGroup = 4096
-	// maxSlots bounds the size of the time grid.
-	maxSlots = 24 * 60
+	// maxSlots bounds the size of the time grid, over the period.
+	maxSlots = 20000
 )
 
 var inf = math.Inf(1)
 
-// grid is the discretised day: slot t covers [time(t), time(t+1)).
+// grid is the discretised period: every day has perDay slots of step from
+// the time of day start, and slot t covers [time(t), time(t)+step) on day
+// t/perDay. The nights are left out.
 type grid struct {
-	start time.Duration
-	step  time.Duration
-	slots int
+	start  time.Duration // time of day of the first slot of every day
+	step   time.Duration
+	perDay int
+	slots  int // days * perDay
 }
 
-func (g grid) time(slot int) time.Duration {
-	return g.start + time.Duration(slot)*g.step
+// time returns the start of slot t, from the midnight of the first day.
+func (g grid) time(t int) time.Duration {
+	return time.Duration(t/g.perDay)*DayLength + g.start + time.Duration(t%g.perDay)*g.step
+}
+
+// end returns the end of length slots from slot t, within its day.
+func (g grid) end(t, length int) time.Duration {
+	return g.time(t) + time.Duration(length)*g.step
+}
+
+// day returns the day of slot t.
+func (g grid) day(t int) int {
+	return t / g.perDay
+}
+
+// slot returns the slot starting at time t, or false when t is off the grid.
+func (g grid) slot(t time.Duration) (int, bool) {
+	if g.perDay == 0 || t < 0 {
+		return 0, false
+	}
+
+	d := dayOf(t)
+	offset := t - time.Duration(d)*DayLength - g.start
+
+	if offset < 0 || offset%g.step != 0 || int(offset/g.step) >= g.perDay || d*g.perDay >= g.slots {
+		return 0, false
+	}
+
+	return d*g.perDay + int(offset/g.step), true
 }
 
 // mask tells, for each slot, whether it lies inside the intervals.
 func (g grid) mask(intervals []Interval) []bool {
 	m := make([]bool, g.slots)
 	for t := range m {
-		m[t] = inside(intervals, g.time(t), g.time(t+1))
+		m[t] = inside(intervals, g.time(t), g.time(t)+g.step)
 	}
 
 	return m
+}
+
+// timesOfDay returns the times of day of an interval, from the midnight of
+// its day.
+func timesOfDay(iv Interval) (time.Duration, time.Duration) {
+	midnight := time.Duration(iv.Day()) * DayLength
+
+	return iv.Start - midnight, iv.End - midnight
 }
 
 // instance is a problem with its options resolved and every time converted
@@ -49,8 +87,10 @@ type instance struct {
 	length     []int    // interview length per recruiter, in slots
 	availC     [][]bool // [candidate][slot]
 	availR     [][]bool // [recruiter][slot]
-	wait       int      // maximum wait in slots, -1 for no limit
-	session    []int    // [slot]: part of the day between breaks, -1 during a break
+	wait       int      // for the exact model: 0, back to back, or -1, no limit
+	day        []int    // [slot]: its day
+	minute     []int    // [slot]: its start, in minutes from the midnight of the first day
+	session    []int    // [slot]: part of a day between breaks, -1 during a break
 	sessions   int      // number of sessions
 	requestsOf [][]int  // requests of each candidate
 	options    []option
@@ -73,38 +113,42 @@ func newInstance(p *Problem, opts Options) (*instance, error) {
 		return nil, err
 	}
 
-	if err := p.check(); err != nil {
+	if err := p.check(o); err != nil {
 		return nil, err
 	}
 
 	in := &instance{p: p, o: o, wait: -1, crit: criteria(p, o.Objectives)}
+	if o.MaxGap.IsZero() {
+		in.wait = 0
+	}
 
-	// Everything the grid must represent exactly.
+	// Everything the grid must represent exactly, as times of day.
 	values := []time.Duration{o.Duration}
 	first, last := time.Duration(math.MaxInt64), time.Duration(0)
 
 	addIntervals := func(intervals []Interval) {
 		for _, iv := range intervals {
-			values = append(values, iv.Start, iv.End)
-			first, last = min(first, iv.Start), max(last, iv.End)
+			start, end := timesOfDay(iv)
+			values = append(values, start, end)
+			first, last = min(first, start), max(last, end)
 		}
 	}
 
 	recAvail := make([][]Interval, len(p.Recruiters))
 	for h := range p.Recruiters {
-		recAvail[h] = availability(p.Recruiters[h].Availability, o.Day)
+		recAvail[h] = availability(p.Recruiters[h].Availability, o)
 		addIntervals(recAvail[h])
 		values = append(values, p.duration(h, o))
 	}
 
 	candAvail := make([][]Interval, len(p.Candidates))
 	for c := range p.Candidates {
-		candAvail[c] = availability(p.Candidates[c].Availability, o.Day)
+		candAvail[c] = availability(p.Candidates[c].Availability, o)
 		addIntervals(candAvail[c])
-	}
 
-	if o.MaxWait > 0 {
-		values = append(values, o.MaxWait)
+		if d := p.Candidates[c].Duration; d > 0 {
+			values = append(values, d)
+		}
 	}
 
 	for _, b := range o.Breaks {
@@ -120,15 +164,22 @@ func newInstance(p *Problem, opts Options) (*instance, error) {
 		first, last = 0, 0
 	}
 
-	in.g = grid{start: first, step: step, slots: int((last - first) / step)}
+	perDay := int((last - first) / step)
+	in.g = grid{start: first, step: step, perDay: perDay, slots: o.days() * perDay}
+
 	if in.g.slots > maxSlots {
-		return nil, fmt.Errorf("planning: %d time slots, use a coarser step", in.g.slots)
+		return nil, fmt.Errorf("planning: %d time slots, use a coarser step or a shorter period", in.g.slots)
 	}
 
-	// Sessions: the parts of the day between breaks. Nobody is available
+	in.day, in.minute = make([]int, in.g.slots), make([]int, in.g.slots)
+	for t := range in.g.slots {
+		in.day[t], in.minute[t] = in.g.day(t), int(in.g.time(t)/time.Minute)
+	}
+
+	// Sessions: the parts of each day between breaks. Nobody is available
 	// during a break.
 	in.session = make([]int, in.g.slots)
-	pause := in.g.mask(o.Breaks)
+	pause := in.g.mask(o.everyDay(o.Breaks))
 	current, seen := 0, false
 
 	for t := range in.session {
@@ -138,7 +189,7 @@ func newInstance(p *Problem, opts Options) (*instance, error) {
 			continue
 		}
 
-		if seen && pause[t-1] {
+		if seen && (pause[t-1] || t%perDay == 0) {
 			current++
 		}
 
@@ -160,10 +211,7 @@ func newInstance(p *Problem, opts Options) (*instance, error) {
 	for c := range p.Candidates {
 		in.availC[c] = in.g.mask(candAvail[c])
 		removeBreaks(in.availC[c], pause)
-	}
-
-	if o.MaxWait != NoWaitLimit {
-		in.wait = int(o.MaxWait / step)
+		clear(in.availC[c][:o.NotBefore*in.g.perDay]) // the fixed interviews, only, come before
 	}
 
 	in.requestsOf = make([][]int, len(p.Candidates))
@@ -232,10 +280,28 @@ func gcd(a, b int) int {
 func (in *instance) addOptions(c int) error {
 	seen := map[string]bool{}
 	add := func(subset []int) {
+		rank := 0
+
+		for _, r := range subset { // never two ranks in one interview
+			if k := in.p.Requests[r].Rank; k > 0 && rank > 0 && k != rank {
+				return
+			} else if k > 0 {
+				rank = k
+			}
+		}
+
 		if key := fmt.Sprint(subset); !seen[key] {
 			seen[key] = true
 			in.addOption(c, subset)
 		}
+	}
+
+	if in.p.Candidates[c].Together { // one interview with everybody
+		if len(in.requestsOf[c]) > 0 {
+			add(slices.Clone(in.requestsOf[c]))
+		}
+
+		return nil
 	}
 
 	for _, r := range in.requestsOf[c] {
@@ -319,15 +385,14 @@ func (in *instance) addOption(c int, requests []int) {
 	opt := option{candidate: c, requests: requests}
 
 	for _, r := range requests {
-		h := in.p.Requests[r].Recruiter
-		opt.recruiters = append(opt.recruiters, h)
-		opt.length = max(opt.length, in.length[h])
+		opt.recruiters = append(opt.recruiters, in.p.Requests[r].Recruiter)
 	}
 
 	slices.Sort(opt.recruiters)
+	opt.length = int(in.p.length(c, opt.recruiters, in.o) / in.g.step)
 
 	for t := 0; t+opt.length <= in.g.slots; t++ {
-		if in.free(c, opt.recruiters, t, opt.length) {
+		if t%in.g.perDay+opt.length <= in.g.perDay && in.free(c, opt.recruiters, t, opt.length) {
 			opt.starts = append(opt.starts, t)
 		}
 	}
@@ -501,7 +566,7 @@ func (f *formulation) addCapacities() {
 }
 
 // addChaining makes the interviews of each candidate follow each other,
-// with at most in.wait slots of waiting in total.
+// back to back or with any wait (in.wait).
 func (f *formulation) addChaining() {
 	in := f.in
 
@@ -543,10 +608,6 @@ func (f *formulation) addChaining() {
 		}
 
 		f.contiguous(present)
-
-		if in.wait > 0 {
-			f.m.AddRow(-inf, float64(in.wait), waiting...)
-		}
 
 		f.waitTerms = append(f.waitTerms, waiting...)
 	}
@@ -662,7 +723,7 @@ func (f *formulation) addRecruiterUse() {
 
 			f.m.AddRow(0, inf, append([]mip.Term{used}, negate(terms)...)...)
 
-			for k, inside := range halfDaysOf(in.o, in.g.time(t), in.g.time(t+1)) {
+			for k, inside := range halfDaysOf(in.o, in.g.time(t), in.g.time(t)+in.g.step) {
 				if !inside {
 					continue
 				}
@@ -766,7 +827,7 @@ func (f *formulation) schedule(values []float64) *Schedule {
 				Recruiters: slices.Clone(opt.recruiters),
 				Requests:   slices.Clone(opt.requests),
 				Start:      in.g.time(t),
-				End:        in.g.time(t + opt.length),
+				End:        in.g.end(t, opt.length),
 			})
 
 			for _, r := range opt.requests {

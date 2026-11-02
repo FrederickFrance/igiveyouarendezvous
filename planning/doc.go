@@ -4,13 +4,29 @@
 // recruiter meets one candidate at a time; a candidate may meet several
 // recruiters of a same joint group ([Problem.JointGroups]) in one joint
 // interview. Interviews have a duration per recruiter, and everybody has
-// availabilities for the day to plan (package config picks them by date).
+// availabilities over the period to plan (package config reads them by date).
 //
-// A candidate meets all their recruiters the same day, or none of them that
-// day, in interviews that follow each other ([Options.MaxWait]) and never lie on both sides of a break
-// ([Options.Breaks]). Since everything rarely fits in one day, [Search] and
-// [Solve] plan one day and [Schedule.Remaining] returns what is left for the
-// next one.
+// # Period
+//
+// The period is [Options.Days] days, one by default, with [Options.Closed]
+// days without interviews. Times count from the midnight of its first day:
+// day d runs from d*[DayLength], and every day has the hours of [Options.Day]
+// and the breaks of [Options.Breaks]. An interview never crosses midnight.
+//
+// A candidate meets all their recruiters in the period, or none of them:
+// [Schedule.Remaining] returns what is left for the next period. Between two
+// interviews of a candidate, the gap is at least [Options.MinGap] and at most
+// [Options.MaxGap], a duration or a number of calendar days ([Gap]); by
+// default, interviews follow each other. Two interviews of the same day never
+// lie on both sides of a break. A request may have a rank
+// ([Request.Rank]): the meetings of rank 1 come first, then those of rank 2,
+// and so on; rank 0 meets at any time. A joint interview never mixes two
+// ranks.
+//
+// A candidate with [Candidate.Together] meets all their recruiters in one
+// single interview, or not at all: a meeting rather than interviews, such
+// as the recording of a show with its host and guests. [Candidate.Duration]
+// then gives its length.
 //
 // # Objectives
 //
@@ -19,9 +35,10 @@
 // on the first objective, or as well on the first and better on the second,
 // and so on. [DefaultObjectives] gives the default order: the candidates who
 // meet all their recruiters, priority level by priority level
-// ([Candidate.Priority], [MaxPriorities]), then the meetings, then the
-// recruiters mobilised in the day and their half-days, then the interviews
-// and the presence of the recruiters.
+// ([Candidate.Priority], [MaxPriorities]), then the candidates who have the
+// fewest days left ([MaxUrgency]), then the meetings, then the recruiters
+// mobilised and their half-days, day by day, then the interviews and the
+// presence of the recruiters.
 //
 // # Engines
 //
@@ -33,7 +50,8 @@
 //
 // [Solve] writes the problem as a mixed-integer program and hands it to a
 // [mip.Solver], such as mip/gomilp, which proves optimality on small
-// problems only.
+// problems only. It plans one day, with interviews back to back or with any
+// wait, without ranks: beyond, it returns [ErrUnsupported].
 //
 // [Check] verifies any schedule independently of the engines, and [Evaluate]
 // scores it.

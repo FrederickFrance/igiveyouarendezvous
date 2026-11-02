@@ -37,29 +37,34 @@ func TestWritePlan(t *testing.T) {
 	_, p, _ := smallProblem(t, "2026-11-03")
 
 	var b bytes.Buffer
-	require.NoError(t, WritePlan(&b, p, smallSchedule(), "2026-11-03", YAML))
-	require.Equal(t, `date: 2026-11-03
+	require.NoError(t, WritePlan(&b, p, smallSchedule(), "2026-11-03", "2026-11-03", YAML))
+	require.Equal(t, `from: 2026-11-03
+to: 2026-11-03
 candidates:
   A:
     fixed: true
     interviews:
-      - time: 10:00-10:30
+      - date: 2026-11-03
+        time: 10:00-10:30
         recruiters: [R1]
-      - time: 11:00-12:00
+      - date: 2026-11-03
+        time: 11:00-12:00
         recruiters: [R2, R3]
   B:
     fixed: false
     interviews:
-      - time: 10:00-11:00
+      - date: 2026-11-03
+        time: 10:00-11:00
         recruiters: [R2, R3]
 scores:
   - {objective: priorities, priority: 2, value: 1, proven: false}
   - {objective: meetings, value: 5, proven: true}
 `, b.String())
 
+	// Without a period, the plan has no date.
 	// The layout counts, not only the content: line by line.
 	b.Reset()
-	require.NoError(t, WritePlan(&b, p, smallSchedule(), "", JSON))
+	require.NoError(t, WritePlan(&b, p, smallSchedule(), "", "", JSON))
 	require.Equal(t, strings.Split(`{
   "candidates": {
     "A": {
@@ -84,7 +89,7 @@ scores:
 `, "\n"), strings.Split(b.String(), "\n"))
 
 	b.Reset()
-	require.NoError(t, WritePlan(&b, p, &planning.Schedule{}, "", YAML))
+	require.NoError(t, WritePlan(&b, p, &planning.Schedule{}, "", "", YAML))
 	require.Equal(t, "candidates: {}\n", b.String())
 }
 
@@ -96,11 +101,11 @@ func TestReadPlanReadsWhatWritePlanWrites(t *testing.T) {
 
 	for _, fm := range []Format{YAML, JSON} {
 		var b bytes.Buffer
-		require.NoError(t, WritePlan(&b, p, smallSchedule(), "2026-11-03", fm))
+		require.NoError(t, WritePlan(&b, p, smallSchedule(), "2026-11-03", "2026-11-03", fm))
 
 		plan, err := ReadPlan(b.Bytes(), p, false)
 		require.NoError(t, err)
-		require.Equal(t, "2026-11-03", plan.Date)
+		require.Equal(t, "2026-11-03", plan.From)
 		require.Empty(t, plan.Rejected)
 		require.Empty(t, plan.Dropped)
 		require.ElementsMatch(t, want, plan.Schedule.Interviews)
@@ -112,6 +117,26 @@ func TestReadPlanReadsWhatWritePlanWrites(t *testing.T) {
 			require.True(t, iv.Fixed, "fix-all")
 		}
 	}
+}
+
+func TestReadPlanOfAPeriod(t *testing.T) {
+	t.Parallel()
+
+	_, p, _ := smallProblem(t, "2026-11-03")
+	s := smallSchedule()
+	s.Interviews[1].Start += 2 * planning.DayLength // B on Thursday 5th
+	s.Interviews[1].End += 2 * planning.DayLength
+
+	var b bytes.Buffer
+	require.NoError(t, WritePlan(&b, p, s, "2026-11-03", "2026-11-06", YAML))
+	require.Contains(t, b.String(), "from: 2026-11-03\nto: 2026-11-06\n")
+	require.Contains(t, b.String(), "  B:\n    fixed: false\n    interviews:\n      - date: 2026-11-05\n        time: 10:00-11:00\n")
+
+	plan, err := ReadPlan(b.Bytes(), p, false)
+	require.NoError(t, err)
+	require.Equal(t, "2026-11-03", plan.From)
+	require.Equal(t, "2026-11-06", plan.To)
+	require.ElementsMatch(t, s.Interviews, plan.Schedule.Interviews)
 }
 
 func TestReadPlanAndTheNamesThatChanged(t *testing.T) {
@@ -158,17 +183,22 @@ func TestReadPlanErrors(t *testing.T) {
 	_, p, _ := smallProblem(t, "2026-11-03")
 
 	for text, msg := range map[string]string{
-		"candidates:\n  A:\n    interviews: []":                                                                `line 2: A: "fixed" is missing`,
-		"candidates:\n  A:\n    fixed: true\n    interview: []":                                                `line 4: unknown key "interview" in candidates > A`,
-		"candidates:\n  A:\n    fixed: true\n    interviews:\n      - {time: 9h-8h, recruiters: [R1]}":         "A: line 5: invalid time span",
-		"candidates:\n  A:\n    fixed: true\n    interviews:\n      - {time: 9h-10h}":                          "A: line 5: an interview without recruiters",
-		"candidates:\n  A:\n    fixed: true\n    interviews:\n      - {time: 9h-10h, recruiters: [R1, ' R1']}": "A: line 5: R1 is given twice",
-		"candidates:\n  A:\n    fixed: maybe":                                                                  "A: line 3",
-		"date: 3/11\ncandidates: {}":                                                                           "invalid date",
-		"candidates: {A: {fixed: true}, ' A ': {fixed: true}}":                                                 `"A" is already given`,
-		"{\"candidates\": {}, \"extra\": 1}":                                                                   `unknown key "extra"`,
-		"{\"candidates\": ":                                                                                    "line 1",
-		"candidates: [A]":                                                                                      "names are expected",
+		"candidates:\n  A:\n    interviews: []":                                                                           `line 2: A: "fixed" is missing`,
+		"candidates:\n  A:\n    fixed: true\n    interview: []":                                                           `line 4: unknown key "interview" in candidates > A`,
+		"candidates:\n  A:\n    fixed: true\n    interviews:\n      - {time: 9h-8h, recruiters: [R1]}":                    "A: line 5: invalid time span",
+		"candidates:\n  A:\n    fixed: true\n    interviews:\n      - {time: 9h-10h}":                                     "A: line 5: an interview without recruiters",
+		"candidates:\n  A:\n    fixed: true\n    interviews:\n      - {time: 9h-10h, recruiters: [R1, ' R1']}":            "A: line 5: R1 is given twice",
+		"candidates:\n  A:\n    fixed: maybe":                                                                             "A: line 3",
+		"from: 3/11\ncandidates: {}":                                                                                      "invalid date",
+		"from: 2026-11-04\nto: 2026-11-03\ncandidates: {}":                                                                "the period ends (2026-11-03) before it starts (2026-11-04)",
+		"to: 2026-11-03\ncandidates: {}":                                                                                  "the end of the period is given, not its start",
+		"from: 2026-11-03\ncandidates:\n  A:\n    fixed: true\n    interviews:\n      - {time: 9h-10h, recruiters: [R1]}": `A: line 6: the "date" of the interview is missing`,
+		"candidates:\n  A:\n    fixed: true\n    interviews:\n      - {date: 2026-11-03, time: 9h-10h, recruiters: [R1]}": "A: line 5: an interview with a date in a plan without from and to",
+		"from: 2026-11-03\nto: 2026-11-04\ncandidates:\n  A:\n    fixed: true\n    interviews:\n      - {date: 2026-11-05, time: 9h-10h, recruiters: [R1]}": "A: line 7: 2026-11-05 is out of the period of the plan, from 2026-11-03 to 2026-11-04",
+		"candidates: {A: {fixed: true}, ' A ': {fixed: true}}": `"A" is already given`,
+		"{\"candidates\": {}, \"extra\": 1}":                   `unknown key "extra"`,
+		"{\"candidates\": ":                                    "line 1",
+		"candidates: [A]":                                      "names are expected",
 	} {
 		_, err := ReadPlan([]byte(text), p, false)
 		require.ErrorContains(t, err, msg, text)

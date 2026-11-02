@@ -111,7 +111,7 @@ func TestRejectedFixedPlans(t *testing.T) {
 	}{
 		"request added since": {
 			interviews: []planning.Interview{iv(0, []int{0}, []int{0}, 800, 900, true)},
-			reason:     "new meetings since the plan, with R2 (all the meetings of a candidate take place the same day)",
+			reason:     "new meetings since the plan, with R2 (all the meetings of a candidate take place in the period)",
 		},
 		"request removed since": {
 			interviews: []planning.Interview{iv(2, []int{0}, nil, 800, 900, true)},
@@ -135,16 +135,16 @@ func TestRejectedFixedPlans(t *testing.T) {
 		"in a break": {
 			interviews: fullA,
 			options:    planning.Options{Breaks: lunch},
-			reason:     "interview of A during the break 09:00-10:00",
+			reason:     "interview of A 09:00-10:00 during a break",
 		},
 		"split by a break": {
 			interviews: splitA,
-			options:    planning.Options{Breaks: lunch, MaxWait: planning.NoWaitLimit},
-			reason:     "the interviews of A are split by the break 09:00-10:00",
+			options:    planning.Options{Breaks: lunch, MaxGap: planning.Gap{Duration: planning.NoLimit}},
+			reason:     "two interviews of A lie on both sides of a break (08:00-09:00, 10:00-11:00)",
 		},
 		"waiting too long": {
 			interviews: splitA,
-			reason:     "A waits 1h0m0s between interviews, more than 0s",
+			reason:     "A waits 1h between two interviews, which must follow each other",
 		},
 		"unknown candidate": {
 			interviews: []planning.Interview{iv(7, []int{0}, nil, 800, 900, true)},
@@ -249,8 +249,8 @@ func TestCleanAndTheRulesOfTheDay(t *testing.T) {
 		options    planning.Options
 		reason     string
 	}{
-		"split by a break": {both, planning.Options{Breaks: lunch, MaxWait: planning.NoWaitLimit}, "would lie on both sides of a break"},
-		"waiting too long": {both, planning.Options{}, "A would wait 1h between interviews, more than allowed"},
+		"split by a break": {both, planning.Options{Breaks: lunch, MaxGap: planning.Gap{Duration: planning.NoLimit}}, "lie on both sides of a break"},
+		"waiting too long": {both, planning.Options{}, "A waits 1h between two interviews, which must follow each other"},
 		"in a break": {
 			[]planning.Interview{iv(1, []int{0}, []int{2}, 900, 1000, false)},
 			planning.Options{Breaks: lunch}, "09:00-10:00 falls in a break",

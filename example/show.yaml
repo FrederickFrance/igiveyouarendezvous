@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=../schema/problem.schema.json
+#
+# Not only interviews: the recordings of a show. Each episode is a
+# "candidate" who meets everybody at once (together: true): the host and
+# the guests. The program finds, for every episode, a time when all of them
+# are free, without two recordings at once for the host or a guest.
+
+from: 2026-11-16
+to: 2026-11-20
+day: 09:00-18:00
+duration: 1h            # a recording, unless the episode says otherwise
+
+recruiters:             # the people: the host, and the guests
+  Camille (host):
+  Ada:
+    availability:
+      2026-11-17: 09:00-12:00
+      2026-11-19: 14:00-18:00
+  Blaise:
+    availability:
+      2026-11-17: 10:00-12:00
+      2026-11-19: 09:00-18:00
+  Grace:
+    availability:
+      2026-11-16: 09:00-18:00
+      2026-11-19: 14:00-17:00
+
+candidates:             # the episodes
+  the joys of operations research:
+    meet: [Camille (host), Ada, Blaise, Grace]
+    together: true
+    duration: 2h
+  a short one on scheduling:
+    meet: [Camille (host), Blaise]
+    together: true
+    duration: 30m
+  graphs for everybody:
+    meet: [Camille (host), Ada, Grace]
+    together: true

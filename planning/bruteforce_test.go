@@ -2,6 +2,7 @@ package planning_test
 
 import (
 	"context"
+	"errors"
 	"math/rand/v2"
 	"slices"
 	"strings"
@@ -33,6 +34,10 @@ func TestAgainstBruteForce(t *testing.T) {
 			s, err := e.plan(ctx, p, o)
 
 			cancel()
+
+			if e.exact && errors.Is(err, planning.ErrUnsupported) {
+				t.Skip("beyond the exact model")
+			}
 
 			if e.exact && err != nil && strings.Contains(err.Error(), "numerically") {
 				// go-milp, a test oracle here, sometimes fails on its linear
@@ -101,6 +106,13 @@ func randomProblem(rnd *rand.Rand) (*planning.Problem, planning.Options) {
 			cand.Availability = []planning.Interval{windows[rnd.IntN(len(windows))]}
 		}
 
+		switch rnd.IntN(6) {
+		case 0: // a meeting
+			cand.Together = true
+		case 1:
+			cand.Duration = 30 * time.Minute
+		}
+
 		p.Candidates = append(p.Candidates, cand)
 
 		for _, h := range rnd.Perm(3)[:1+rnd.IntN(2)] {
@@ -124,7 +136,7 @@ func randomProblem(rnd *rand.Rand) (*planning.Problem, planning.Options) {
 
 	o := planning.Options{
 		Day:        []planning.Interval{{Start: clock(8, 0), End: clock(11, 0)}},
-		MaxWait:    []time.Duration{0, 30 * time.Minute, planning.NoWaitLimit}[rnd.IntN(3)],
+		MaxGap:     planning.Gap{Duration: []time.Duration{0, 30 * time.Minute, planning.NoLimit}[rnd.IntN(3)]},
 		Objectives: all[:3+rnd.IntN(4)],
 	}
 
@@ -135,17 +147,31 @@ func randomProblem(rnd *rand.Rand) (*planning.Problem, planning.Options) {
 	return p, o
 }
 
-// bestSchedule enumerates every schedule and returns the best valid one and
+// bestSchedule enumerates every schedule, starting on the half-hours of
+// o.Day on the days that are not closed, and returns the best valid one and
 // its scores, in the lexicographic order of the objectives.
 func bestSchedule(t *testing.T, p *planning.Problem, o planning.Options) ([]int, *planning.Schedule) {
 	t.Helper()
 
 	var starts []time.Duration
-	for start := clock(8, 0); start < clock(11, 0); start += 30 * time.Minute {
-		starts = append(starts, start)
+
+	for d := range max(1, o.Days) {
+		if slices.Contains(o.Closed, d) {
+			continue
+		}
+
+		for _, w := range o.Day {
+			for start := w.Start; start < w.End; start += 30 * time.Minute {
+				starts = append(starts, time.Duration(d)*planning.DayLength+start)
+			}
+		}
 	}
 
 	length := func(iv planning.Interview) time.Duration {
+		if d := p.Candidates[iv.Candidate].Duration; d > 0 {
+			return d
+		}
+
 		d := time.Duration(0)
 		for _, h := range iv.Recruiters {
 			d = max(d, p.Recruiters[h].Duration)

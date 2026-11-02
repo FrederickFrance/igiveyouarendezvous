@@ -3,25 +3,39 @@
 # The problem to plan: who must meet whom, when everybody is available, and
 # the settings. Only recruiters and candidates are mandatory: by default, the
 # day runs from 08:00 to 12:00, interviews last one hour, every candidate
-# meets all their recruiters the same day, and their interviews follow each
-# other.
+# meets all their recruiters in interviews that follow each other, and
+# without from and to, the file plans one day without date.
 
-# Default availability of everybody; several time spans may be given,
-# separated by commas.
+# The period to plan, both days included (-from, -to or -date on the command
+# line give another one), the days of the week with interviews (Monday to
+# Friday by default) and the days without interviews, such as holidays.
+from: 2026-11-09
+to: 2026-11-13
+weekdays: [mon, tue, wed, thu, fri]
+closed: [2026-11-11]
+# To plan again in the middle of the period, with the plan of the period
+# (-start): no new interview before this date, the fixed ones stay.
+# not-before: 2026-11-12
+
+# Default availability of everybody, every day; several time spans may be
+# given, separated by commas.
 day: 08:00-17:00
 
-# Breaks, such as lunch: no interview then, and the interviews of a
-# candidate never lie on both sides of a break. The longest break separates
-# the morning from the afternoon.
+# Breaks, such as lunch: no interview then, and two interviews of a
+# candidate on the same day never lie on both sides of a break. The longest
+# break separates the morning from the afternoon.
 breaks: 12:00-13:30
 
 # Default interview length: 45m, 1h, 1h30 or a number of minutes.
 # A joint interview lasts as long as its longest part.
 duration: 1h
 
-# Total time a candidate may wait between their interviews:
-# 0 = they follow each other, "unlimited" = no limit.
-max-wait: 0
+# The least and the most time between two interviews of a candidate: a
+# duration (30m, 2h) or calendar days (3d); max-gap may be "unlimited".
+# 0 and 0: the interviews follow each other, the same day.
+# For "at least three days between two interviews": min-gap: 3d, max-gap: unlimited.
+min-gap: 0
+max-gap: 0
 
 # Recruiters who may hold joint interviews: a candidate may meet several
 # recruiters of a same group in one interview. A recruiter may belong to
@@ -35,15 +49,15 @@ joint-groups:
 # (the full list: igiveyouarendezvous -list-objectives).
 objectives:
   - priorities            # complete candidates, priority level by priority level
+  - urgency               # then those who have the fewest days left
   - meetings
-  - recruiters            # recruiters with an interview in the day
+  - recruiters            # recruiters with an interview, day by day
   - recruiter-half-days   # their half-days (morning, afternoon) with an interview
   - interviews
   - recruiter-span
 
 # The recruiters. Availabilities are the same every day, or given by date: a
-# person whose availability is given by date is absent on the other dates,
-# and the day to plan is then chosen with -date 2026-11-03.
+# person whose availability is given by date is absent on the other dates.
 recruiters:
   recruiter 1:
     duration: 30m
@@ -54,22 +68,24 @@ recruiters:
     availability: 08:00-10:00, 14:00-17:00
   recruiter 5:
 
-# The candidates and the recruiters each of them must meet. A candidate of
-# a higher priority goes before any number of candidates of a lower one (1
-# by default): here, candidate C has already passed preliminary interviews.
+# The candidates and the recruiters each of them must meet: a list, in any
+# order, or the recruiters with their ranks (1 first, then 2..., X any time).
+# A candidate of a higher priority goes before any number of candidates of a
+# lower one (1 by default): here, candidate C has already passed
+# preliminary interviews.
 candidates:
   candidate A:
     meet: [recruiter 1, recruiter 2, recruiter 3]
   candidate B:
     meet: [recruiter 3]
     availability:
-      2026-11-03: none
-      2026-11-04: 08:00-12:00
+      2026-11-09: none
+      2026-11-10: 08:00-12:00
   candidate C:
     meet: [recruiter 4, recruiter 5]
     priority: 2
   candidate D:
-    meet: [recruiter 1, recruiter 2, recruiter 5]
+    meet: {recruiter 1: 1, recruiter 2: X, recruiter 5: 2}   # recruiter 1, then 5; 2 any time
     availability:
-      2026-11-03: 09:00-12:00
-      2026-11-04: 14:00-17:00
+      2026-11-12: 09:00-12:00
+      2026-11-13: 14:00-17:00

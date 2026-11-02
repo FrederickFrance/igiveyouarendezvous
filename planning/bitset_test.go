@@ -48,7 +48,7 @@ func TestBitset(t *testing.T) {
 				}
 			}
 
-			f, l := b.bounds()
+			f, l := b.boundsIn(0, n)
 			require.Equal(t, []int{first, last}, []int{f, l})
 		}
 	}

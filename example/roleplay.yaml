@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=../schema/problem.schema.json
+#
+# Not only interviews: role-playing games. Each game is a "candidate" that
+# meets all its players at once (together: true); the game master runs two
+# tables, so the games never overlap for her.
+
+from: 2026-11-21
+to: 2026-11-29
+weekdays: [fri, sat, sun]        # evenings and weekends
+day: 14:00-23:00
+duration: 4h
+
+recruiters:                      # the players
+  Morgane (game master):
+    availability:
+      2026-11-21: 14:00-23:00
+      2026-11-27: 19:00-23:00
+      2026-11-28: 14:00-23:00
+  Lou:
+    availability: {2026-11-21: 18:00-23:00, 2026-11-28: 14:00-19:00}
+  Max:
+  Noé:
+    availability: {2026-11-22: 14:00-23:00, 2026-11-28: 14:00-23:00}
+  Sacha:
+    availability: {2026-11-21: 14:00-18:00, 2026-11-27: 19:00-23:00}
+
+candidates:                      # the games
+  the spell of Zandar:
+    meet: [Morgane (game master), Lou, Max, Noé]
+    together: true
+  the tower of mists:
+    meet: [Morgane (game master), Max, Sacha]
+    together: true

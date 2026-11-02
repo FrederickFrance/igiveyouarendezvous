@@ -4,9 +4,11 @@ version: 2
 updates:
   - package-ecosystem: gomod
     directory: /
+    target-branch: dev # the work goes through dev, then main
     schedule:
       interval: weekly
   - package-ecosystem: github-actions
     directory: /
+    target-branch: dev
     schedule:
       interval: weekly

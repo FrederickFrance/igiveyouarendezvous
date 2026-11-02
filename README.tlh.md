@@ -7,6 +7,8 @@
 
 nab: DaHjaj ghom Hoch. Qapla'!
 
+`together: true`: ghom Hoch, wa'logh. [Quj](example/roleplay.yaml)
+
 ## nab wa'DIch: mIw
 
 1. **yItlhap**: [Releases](https://github.com/FrederickFrance/igiveyouarendezvous/releases/latest) yIpoSmoH; zip yItlhap:
@@ -45,7 +47,7 @@ go install github.com/FrederickFrance/igiveyouarendezvous/cmd/igiveyouarendezvou
 ## yIlo'
 
 ```sh
-igiveyouarendezvous -date 2026-11-03 -rest "wa'leS.yaml" example/problem.yaml
+igiveyouarendezvous -rest "wa'leS.yaml" example/problem.yaml
 ```
 
 Ctrl+C: yImev!

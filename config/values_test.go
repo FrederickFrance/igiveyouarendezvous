@@ -39,8 +39,9 @@ func TestDurationString(t *testing.T) {
 		require.Equal(t, want, Duration(d).String())
 	}
 
-	require.Equal(t, "unlimited", Wait(planning.NoWaitLimit).String())
-	require.Equal(t, "15m", Wait(15*time.Minute).String())
+	require.Equal(t, "unlimited", Gap{Duration: planning.NoLimit}.String())
+	require.Equal(t, "15m", Gap{Duration: 15 * time.Minute}.String())
+	require.Equal(t, "3d", Gap{Days: 3}.String())
 }
 
 func TestParseClock(t *testing.T) {
@@ -133,7 +134,7 @@ func TestIntervals(t *testing.T) {
 	}
 }
 
-func TestDurationAndWaitFromYAML(t *testing.T) {
+func TestDurationAndGapFromYAML(t *testing.T) {
 	t.Parallel()
 
 	d, err := decodeYAML[Duration](t, "1h30")
@@ -146,16 +147,91 @@ func TestDurationAndWaitFromYAML(t *testing.T) {
 	_, err = decodeYAML[Duration](t, "later")
 	require.ErrorContains(t, err, "line 1: invalid duration")
 
-	w, err := decodeYAML[Wait](t, "Unlimited")
-	require.NoError(t, err)
-	require.Equal(t, Wait(planning.NoWaitLimit), w)
+	for text, want := range map[string]Gap{
+		"Unlimited": {Duration: planning.NoLimit}, "20": {Duration: 20 * time.Minute}, "1h30": {Duration: 90 * time.Minute},
+		"0": {}, "3d": {Days: 3}, "3 days": {Days: 3}, "1 day": {Days: 1},
+	} {
+		g, err := decodeYAML[Gap](t, text)
+		require.NoError(t, err, text)
+		require.Equal(t, want, g, text)
+	}
 
-	w, err = decodeYAML[Wait](t, "20")
-	require.NoError(t, err)
-	require.Equal(t, Wait(20*time.Minute), w)
+	for text, msg := range map[string]string{"forever": "invalid gap", "[1h]": "a gap is expected", "-2d": "invalid gap"} {
+		_, err := decodeYAML[Gap](t, text)
+		require.ErrorContains(t, err, msg, text)
+	}
+}
 
-	_, err = decodeYAML[Wait](t, "forever")
-	require.Error(t, err)
+func TestMeets(t *testing.T) {
+	t.Parallel()
+
+	m, err := decodeYAML[Meets](t, "[R1, R2]")
+	require.NoError(t, err)
+	require.Equal(t, Meets{{Recruiter: "R1"}, {Recruiter: "R2"}}, m)
+
+	m, err = decodeYAML[Meets](t, "{R1: 1, R2: X, R3: 2, R4: any, R5: }")
+	require.NoError(t, err)
+	require.Equal(t, Meets{{"R1", 1}, {"R2", 0}, {"R3", 2}, {"R4", 0}, {"R5", 0}}, m)
+
+	m, err = decodeYAML[Meets](t, "[]")
+	require.NoError(t, err)
+	require.Empty(t, m)
+
+	for text, msg := range map[string]string{
+		"{R1: 0}":     "line 1: R1: a rank is expected, 1, 2... or X",
+		"{R1: first}": "a rank is expected",
+		"{R1: [1]}":   "a rank is expected",
+		"[[R1]]":      "a recruiter name is expected",
+		"R1":          "the recruiters to meet are expected",
+	} {
+		_, err := decodeYAML[Meets](t, text)
+		require.ErrorContains(t, err, msg, text)
+	}
+}
+
+func TestWeekdaysAndDates(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		in   string
+		want time.Weekday
+	}{{"mon", time.Monday}, {" Tuesday ", time.Tuesday}, {"SUN", time.Sunday}} {
+		got, err := ParseWeekday(tc.in)
+		require.NoError(t, err, tc.in)
+		require.Equal(t, tc.want, got, tc.in)
+	}
+
+	_, err := ParseWeekday("lundi")
+	require.ErrorContains(t, err, "invalid day of the week")
+
+	require.Equal(t, "2026-11-02", DateOf("2026-10-30", 3))
+	require.Empty(t, DateOf("someday", 1))
+}
+
+func TestPeriod(t *testing.T) {
+	t.Parallel()
+
+	dates, err := Period("2026-10-30", "2026-11-02")
+	require.NoError(t, err)
+	require.Equal(t, []string{"2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"}, dates)
+
+	dates, err = Period("2026-11-03", "")
+	require.NoError(t, err)
+	require.Equal(t, []string{"2026-11-03"}, dates)
+
+	dates, err = Period("", "")
+	require.NoError(t, err)
+	require.Empty(t, dates)
+
+	for _, c := range [][3]string{
+		{"2026-11-03", "2026-11-02", "ends (2026-11-02) before it starts"},
+		{"", "2026-11-02", "the end of the period is given, not its start"},
+		{"soon", "", "invalid date"},
+		{"2026-11-03", "later", "invalid date"},
+	} {
+		_, err := Period(c[0], c[1])
+		require.ErrorContains(t, err, c[2], c)
+	}
 }
 
 func TestAvailability(t *testing.T) {
@@ -185,7 +261,7 @@ func TestAvailability(t *testing.T) {
 	}
 
 	_, _, err = byDate.On("")
-	require.ErrorContains(t, err, "give the date to plan")
+	require.ErrorContains(t, err, "give the period to plan")
 
 	_, set, err = Availability{}.On("2026-11-03")
 	require.NoError(t, err)

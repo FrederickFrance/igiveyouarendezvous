@@ -79,7 +79,7 @@ type Progress struct {
 	Schedule *Schedule
 }
 
-// Search plans one day with a local search in pure Go: a greedy
+// Search plans the period with a local search in pure Go: a greedy
 // construction, then "ruin and recreate" moves (remove some candidates,
 // insert them back in the best place) accepted with late acceptance hill
 // climbing. The objectives are compared lexicographically, as with Solve.
@@ -207,6 +207,7 @@ type searcher struct {
 	optionsOf [][]int   // options of each candidate, largest first
 	holding   [][][]int // [candidate][request]: the options holding the request
 	longest   [][]int   // [candidate][request]: the longest of them, in slots
+	before    []uint64  // [option]: requests of its candidate to hold before it (ranks)
 	fewest    [][]int8  // [candidate][mask]: fewest interviews holding the requests of mask
 	optMask   []uint64  // requests of each option, as bits of its candidate's request list
 	fullMask  []uint64  // every request of each candidate
@@ -214,15 +215,19 @@ type searcher struct {
 	bound     []int     // obvious bound of each objective, in score units
 	// sessionEnd[t]: the slot after the end of the session holding slot t.
 	sessionEnd []int
-	// halves: the slots of the morning, [0, halves[0]), and of the
-	// afternoon, [halves[1], slots).
-	halves [2]int
+	// halves: the slots of the morning of a day, offsets [0, halves[0]), and
+	// of the afternoon, offsets [halves[1], perDay).
+	halves       [2]int
+	days, perDay int
+	breaks       []Interval // over the period
 
+	// The presence of the recruiters is kept by unit: a recruiter on a day,
+	// unit h*days + d (see unit).
 	busy  []bitset  // [recruiter]: busy slots
-	first []int     // [recruiter]: first busy slot, -1 when free all day
-	last  []int     // [recruiter]: last busy slot
-	span  []int     // [recruiter]: last + 1 - first
-	half  [][2]bool // [recruiter]: busy in the morning, in the afternoon
+	first []int     // [unit]: first busy slot, -1 when free all day
+	last  []int     // [unit]: last busy slot
+	span  []int     // [unit]: last + 1 - first
+	half  [][2]bool // [unit]: busy in the morning, in the afternoon
 
 	plans   [][]placed
 	contrib [][]int // score contribution of each candidate
@@ -243,6 +248,7 @@ type change struct {
 
 func newSearcher(in *instance, seed uint64) (*searcher, error) {
 	nC, nR := len(in.p.Candidates), len(in.p.Recruiters)
+	nU := nR * in.o.days()
 	s := &searcher{
 		in:        in,
 		rnd:       rand.New(rand.NewPCG(seed, 0x6a09e667f3bcc908)), //nolint:gosec // reproducible search, not cryptography
@@ -254,14 +260,18 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 		optionsOf: make([][]int, nC),
 		holding:   make([][][]int, nC),
 		longest:   make([][]int, nC),
+		before:    make([]uint64, len(in.options)),
 		optMask:   make([]uint64, len(in.options)),
 		fullMask:  make([]uint64, nC),
 		possible:  make([]uint64, nC),
+		days:      in.o.days(),
+		perDay:    in.g.perDay,
+		breaks:    in.o.everyDay(in.o.Breaks),
 		busy:      make([]bitset, nR),
-		first:     make([]int, nR),
-		last:      make([]int, nR),
-		span:      make([]int, nR),
-		half:      make([][2]bool, nR),
+		first:     make([]int, nU),
+		last:      make([]int, nU),
+		span:      make([]int, nU),
+		half:      make([][2]bool, nU),
 		plans:     make([][]placed, nC),
 		contrib:   make([][]int, nC),
 		total:     make([]int, len(in.crit)),
@@ -285,6 +295,12 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 	for o, opt := range in.options {
 		for _, r := range opt.requests {
 			s.optMask[o] |= 1 << local[r]
+
+			for _, q := range in.requestsOf[opt.candidate] { // the lower ranks come before
+				if k := in.p.Requests[q].Rank; k > 0 && k < in.p.Requests[r].Rank {
+					s.before[o] |= 1 << local[q]
+				}
+			}
 		}
 
 		s.possible[opt.candidate] |= s.optMask[o]
@@ -310,7 +326,10 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 
 	for h := range s.busy {
 		s.busy[h] = newBitset(in.g.slots)
-		s.first[h] = -1
+	}
+
+	for u := range s.first {
+		s.first[u] = -1
 	}
 
 	s.bound = s.bounds()
@@ -326,9 +345,9 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 		}
 	}
 
-	s.halves = [2]int{0, in.g.slots}
-	for t := range in.g.slots {
-		halves := halfDaysOf(in.o, in.g.time(t), in.g.time(t+1))
+	s.halves = [2]int{0, in.g.perDay}
+	for t := range in.g.perDay {
+		halves := halfDaysOf(in.o, in.g.time(t), in.g.time(t)+in.g.step)
 		if halves[0] {
 			s.halves[0] = t + 1
 		}
@@ -497,51 +516,58 @@ func (s *searcher) firstPlacement(c int) []placed {
 
 	nodes := 0
 
-	var grow func(mask uint64, first, end, busy int) bool
+	// grow completes the plan after an interview from slot start to slot end.
+	var grow func(mask uint64, start, end int) bool
 
-	grow = func(mask uint64, first, end, busy int) bool {
+	grow = func(mask uint64, start, end int) bool {
 		if mask == full {
 			return true
 		}
 
-		if !s.reachable(c, mask, first, end, busy) {
+		if !s.reachable(c, mask, start, end) {
 			return false
 		}
 
-		latest := s.sessionEnd[first] - 1 // never across a break
-		if s.in.wait >= 0 {
-			latest = min(latest, end+s.in.wait-(end-first-busy))
-		}
+		windows := s.windows(make([]window, 0, 4), start, end)
 
 		for _, o := range s.optionsOf[c] {
 			if nodes >= maxNodes {
 				return false
 			}
 
-			if s.optMask[o]&mask != 0 {
+			if s.optMask[o]&mask != 0 || s.before[o]&^mask != 0 {
 				continue
 			}
 
-			t, ok := s.earliestFree(o, end, latest)
-			if !ok {
-				continue
+			for _, w := range windows {
+				t, ok := s.earliestFree(o, w.from, w.to)
+				if !ok {
+					continue
+				}
+
+				if nodes >= maxNodes {
+					return false // give up
+				}
+
+				nodes++
+				cur = append(cur, placed{o, t})
+
+				if grow(mask|s.optMask[o], t, t+s.in.options[o].length) {
+					return true
+				}
+
+				cur = cur[:len(cur)-1]
 			}
-
-			nodes++
-			length := s.in.options[o].length
-			cur = append(cur, placed{o, t})
-
-			if grow(mask|s.optMask[o], first, t+length, busy+length) {
-				return true
-			}
-
-			cur = cur[:len(cur)-1]
 		}
 
 		return false
 	}
 
 	for _, o := range s.optionsOf[c] {
+		if s.before[o] != 0 {
+			continue
+		}
+
 		for _, t := range s.in.options[o].starts {
 			if nodes >= maxNodes {
 				return nil
@@ -552,16 +578,88 @@ func (s *searcher) firstPlacement(c int) []placed {
 			}
 
 			nodes++
-			length := s.in.options[o].length
 			cur = append(cur[:0], placed{o, t})
 
-			if grow(s.optMask[o], t, t+length, length) {
+			if grow(s.optMask[o], t, t+s.in.options[o].length) {
 				return slices.Clone(cur)
 			}
 		}
 	}
 
 	return nil
+}
+
+// window is a range of slots, from and to included.
+type window struct{ from, to int }
+
+// windows appends to dst the ranges of slots where the next interview of a
+// candidate may start, after one from slot start to slot end (exclusive):
+// one range per day, the earliest day first. The gaps of the options decide;
+// on the same day, the next interview stays in the same session (never
+// across a break).
+func (s *searcher) windows(dst []window, start, end int) []window {
+	g, o := &s.in.g, &s.in.o
+	day := g.day(start)
+	finish := g.end(start, end-start)
+	lo, hi := day, s.days-1
+
+	if o.MinGap.Days > 0 {
+		lo = day + o.MinGap.Days
+	}
+
+	switch {
+	case o.MaxGap.Days > 0:
+		hi = min(hi, day+o.MaxGap.Days)
+	case o.MaxGap.Duration != NoLimit:
+		hi = min(hi, dayOf(finish+o.MaxGap.Duration))
+	}
+
+	for d := lo; d <= hi; d++ {
+		from, to := d*s.perDay, (d+1)*s.perDay-1
+		if d == day {
+			from, to = end, min(to, s.sessionEnd[start]-1)
+		}
+
+		if o.MinGap.Days == 0 && o.MinGap.Duration > 0 {
+			from = max(from, s.firstAt(d, finish+o.MinGap.Duration))
+		}
+
+		if o.MaxGap.Days == 0 && o.MaxGap.Duration != NoLimit {
+			to = min(to, s.lastAt(d, finish+o.MaxGap.Duration))
+		}
+
+		if from <= to {
+			dst = append(dst, window{from, to})
+		}
+	}
+
+	return dst
+}
+
+// firstAt returns the first slot of day d that starts at time t or later,
+// or the first slot of the next day when there is none.
+func (s *searcher) firstAt(d int, t time.Duration) int {
+	g := s.in.g
+
+	offset := t - time.Duration(d)*DayLength - g.start
+	if offset <= 0 {
+		return d * s.perDay
+	}
+
+	return d*s.perDay + min(int((offset+g.step-1)/g.step), s.perDay)
+}
+
+// lastAt returns the last slot of day d that starts at time t or earlier,
+// or the last slot of the day before when there is none.
+func (s *searcher) lastAt(d int, t time.Duration) int {
+	g := s.in.g
+
+	offset := t - time.Duration(d)*DayLength - g.start
+	if offset < 0 {
+		return d*s.perDay - 1
+	}
+
+	return d*s.perDay + min(int(offset/g.step), s.perDay-1)
 }
 
 // prepared is a start schedule made ready for the searchers: its fixed
@@ -706,7 +804,7 @@ func (s *searcher) keep(c int, interviews []Interview, dropped *[]Dropped) ([]pl
 	}
 
 	if len(failed) > 0 {
-		return dropAll(fmt.Sprintf("dropped with another interview of %s, all of them being the same day", name))
+		return dropAll(fmt.Sprintf("dropped with another interview of %s, all of them being in the period", name))
 	}
 
 	if len(plan) == 0 {
@@ -733,7 +831,7 @@ func (s *searcher) interview(pl placed) Interview {
 		Recruiters: slices.Clone(opt.recruiters),
 		Requests:   slices.Clone(opt.requests),
 		Start:      s.in.g.time(pl.start),
-		End:        s.in.g.time(pl.start + opt.length),
+		End:        s.in.g.end(pl.start, opt.length),
 	}
 }
 
@@ -747,13 +845,19 @@ func (s *searcher) apply(pr *prepared) {
 
 	for _, iv := range pr.fixed {
 		// The slots the interview overlaps, even when it is off the grid.
-		from := max(0, int((iv.Start-g.start)/g.step))
-		to := min(g.slots, int((iv.End-g.start+g.step-1)/g.step))
+		d := dayOf(iv.Start)
+		if d < 0 || d >= s.days {
+			continue
+		}
+
+		start, end := timesOfDay(Interval{iv.Start, iv.End})
+		from := d*s.perDay + min(max(0, int((start-g.start)/g.step)), s.perDay)
+		to := d*s.perDay + min(max(0, int((end-g.start+g.step-1)/g.step)), s.perDay)
 
 		for _, h := range iv.Recruiters {
 			if from < to {
 				s.busy[h].set(from, to, true)
-				s.refresh(h)
+				s.refresh(s.unit(h, from))
 			}
 		}
 	}
@@ -795,7 +899,7 @@ func (s *searcher) locate(iv Interview) (placed, string) {
 		}
 	}
 
-	if len(recruiters) > 1 && !in.p.jointAllowed(recruiters) {
+	if in.p.joint(c, recruiters, in.o) != nil {
 		return placed{}, s.names(recruiters) + " may no longer interview together"
 	}
 
@@ -811,12 +915,11 @@ func (s *searcher) locate(iv Interview) (placed, string) {
 		return placed{}, fmt.Sprintf("lasts %s, the interview now lasts %s", Length(iv.End-iv.Start), Length(length))
 	}
 
-	offset := iv.Start - in.g.start
-	if offset < 0 || offset%in.g.step != 0 || int(offset/in.g.step)+opt.length > in.g.slots {
+	t, ok := in.g.slot(iv.Start)
+	if !ok || t%in.g.perDay+opt.length > in.g.perDay {
 		return placed{}, fmt.Sprintf("no longer on the time grid (every %s within the day)", Length(in.g.step))
 	}
 
-	t := int(offset / in.g.step)
 	if _, ok := slices.BinarySearch(opt.starts, t); !ok {
 		return placed{}, s.unavailable(c, recruiters, t, opt.length)
 	}
@@ -827,7 +930,15 @@ func (s *searcher) locate(iv Interview) (placed, string) {
 // unavailable tells who is not available from slot t for length slots.
 func (s *searcher) unavailable(c int, recruiters []int, t, length int) string {
 	in := s.in
-	when := Interval{in.g.time(t), in.g.time(t + length)}
+	when := Interval{in.g.time(t), in.g.end(t, length)}
+
+	if !in.o.open(when.Day()) {
+		return "the day is closed"
+	}
+
+	if when.Day() < in.o.NotBefore {
+		return "before the first day of new interviews"
+	}
 
 	for u := t; u < t+length; u++ {
 		if in.session[u] < 0 {
@@ -859,7 +970,8 @@ func (s *searcher) fits(c int, plan []placed) string {
 
 	var mask uint64
 
-	busy, end := 0, 0
+	end := 0
+	interviews := make([]Interview, 0, len(plan))
 
 	for i, pl := range plan {
 		opt := &s.in.options[pl.option]
@@ -874,19 +986,16 @@ func (s *searcher) fits(c int, plan []placed) string {
 		}
 
 		mask |= s.optMask[pl.option]
-		busy += opt.length
 		end = pl.start + opt.length
+		interviews = append(interviews, s.interview(pl))
 	}
 
-	first := plan[0].start
+	if mask != s.fullMask[c] {
+		return "not all the meetings of " + name + " would be kept, and they all take place in the period"
+	}
 
-	switch {
-	case mask != s.fullMask[c]:
-		return "not all the meetings of " + name + " would be kept, and they are all the same day"
-	case s.sessionEnd[first] < end:
-		return "the interviews of " + name + " would lie on both sides of a break"
-	case s.in.wait >= 0 && end-first-busy > s.in.wait:
-		return fmt.Sprintf("%s would wait %s between interviews, more than allowed", name, Length(time.Duration(end-first-busy)*s.in.g.step))
+	if err := planProblem(s.in.p, s.in.o, interviews, s.breaks); err != nil {
+		return err.Error()
 	}
 
 	return ""
@@ -895,7 +1004,7 @@ func (s *searcher) fits(c int, plan []placed) string {
 // takenBy tells who already holds the recruiters of pl.
 func (s *searcher) takenBy(pl placed) string {
 	opt := &s.in.options[pl.option]
-	from, to := s.in.g.time(pl.start), s.in.g.time(pl.start+opt.length)
+	from, to := s.in.g.time(pl.start), s.in.g.end(pl.start, opt.length)
 
 	for _, iv := range s.fixed {
 		if iv.Start < to && from < iv.End && shareAny(iv.Recruiters, opt.recruiters) {
@@ -908,7 +1017,7 @@ func (s *searcher) takenBy(pl placed) string {
 			o := &s.in.options[other.option]
 			if other.start < pl.start+opt.length && pl.start < other.start+o.length && shareAny(o.recruiters, opt.recruiters) {
 				return fmt.Sprintf("overlaps the interview of %s %s, kept first", s.in.p.Candidates[c].Name,
-					Interval{s.in.g.time(other.start), s.in.g.time(other.start + o.length)})
+					Interval{s.in.g.time(other.start), s.in.g.end(other.start, o.length)})
 			}
 		}
 	}
@@ -1057,10 +1166,12 @@ func (s *searcher) ruin() []int {
 				victims = append(victims, c)
 			}
 		}
-	default: // everybody a recruiter meets during a time window
-		h := s.in.options[s.plans[served[s.rnd.IntN(len(served))]][0].option].recruiters[0]
-		width := 1 + s.rnd.IntN(max(1, s.in.g.slots/2))
-		from := s.first[h] + s.rnd.IntN(max(1, s.span[h]))
+	default: // everybody a recruiter meets during a time window of a day
+		pl := s.plans[served[s.rnd.IntN(len(served))]][0]
+		h := s.in.options[pl.option].recruiters[0]
+		u := s.unit(h, pl.start)
+		width := 1 + s.rnd.IntN(max(1, s.perDay/2))
+		from := s.first[u] + s.rnd.IntN(max(1, s.span[u]))
 
 		for _, c := range served {
 			for _, pl := range s.plans[c] {
@@ -1216,34 +1327,61 @@ func shareAny(a, b []int) bool {
 	return false
 }
 
-// node is a partial placement of a candidate: some interviews, back to
-// back or with waits.
+// node is a partial placement of a candidate: some interviews, in the order
+// of time.
 type node struct {
-	mask       uint64 // requests held
-	blocks     int
-	firstStart int
-	end        int // end of the last interview
-	busy       int // total length of the interviews
-	endSum     int // sum of the end slots, after midnight
-	spanDelta  int // increase of the recruiters' presence
-	usedDelta  int // recruiters who had no interview
-	halfDelta  int // recruiters' half-days that had no interview
+	mask      uint64 // requests held
+	blocks    int
+	start     int // start of the last interview
+	end       int // end of the last interview (exclusive)
+	wait      int // slots between the interviews of a same day
+	endSum    int // sum of the end times, in minutes
+	spanDelta int // increase of the recruiters' presence
+	usedDelta int // recruiters' days that had no interview
+	halfDelta int // recruiters' half-days that had no interview
+}
+
+// unit returns the unit of recruiter h on the day of slot t.
+func (s *searcher) unit(h, t int) int {
+	return h*s.days + s.in.day[t]
+}
+
+// endMinutes returns the end of length slots from slot t, in minutes.
+func (s *searcher) endMinutes(t, length int) int {
+	return s.in.minute[t] + length*int(s.in.g.step/time.Minute)
+}
+
+// then returns n followed by option o at slot t.
+func (s *searcher) then(n node, o, t int) node {
+	opt := &s.in.options[o]
+	end := t + opt.length
+
+	if n.blocks > 0 && s.in.day[t] == s.in.day[n.start] {
+		n.wait += t - n.end
+	}
+
+	n.mask |= s.optMask[o]
+	n.blocks++
+	n.start, n.end = t, end
+	n.endSum += s.endMinutes(t, opt.length)
+
+	return n
 }
 
 // bestPlacement returns the best way to insert candidate c, who has no
 // interview, given the other candidates; nil when inserting nothing is best.
 //
 // The first interview may start at any free slot; each next one starts at
-// the earliest free slot after the previous one, which minimises the wait
-// and the end of the day for this order of interviews. Every order and
-// grouping of the requests is tried, within maxNodes placements.
+// the earliest free slot after the previous one on each day the gaps allow,
+// which minimises the wait and the end of the day for this order of
+// interviews. Every order and grouping of the requests is tried, within
+// maxNodes placements.
 func (s *searcher) bestPlacement(c int) []placed {
 	full := s.fullMask[c]
 	if full == 0 || s.possible[c] != full {
 		return nil
 	}
 
-	origin := int(s.in.g.start / s.in.g.step)
 	best := make([]int, len(s.crit)) // inserting nothing scores zero
 	vec := make([]int, len(s.crit))
 	cur := make([]placed, 0, 8)
@@ -1282,35 +1420,26 @@ func (s *searcher) bestPlacement(c int) []placed {
 
 	add := func(n node, o, t int) node {
 		opt := &s.in.options[o]
-		end := t + opt.length
+		offset := t - s.in.day[t]*s.perDay
 
 		for _, h := range opt.recruiters {
-			n.spanDelta += s.spanIncrease(h, t, end)
+			u := s.unit(h, t)
+			n.spanDelta += s.spanIncrease(u, t, t+opt.length)
 
-			if s.first[h] < 0 {
+			if s.first[u] < 0 {
 				n.usedDelta++
 			}
 
-			if t < s.halves[0] && !s.half[h][0] {
+			if offset < s.halves[0] && !s.half[u][0] {
 				n.halfDelta++
 			}
 
-			if end > s.halves[1] && !s.half[h][1] {
+			if offset+opt.length > s.halves[1] && !s.half[u][1] {
 				n.halfDelta++
 			}
 		}
 
-		if n.blocks == 0 {
-			n.firstStart = t
-		}
-
-		n.mask |= s.optMask[o]
-		n.blocks++
-		n.end = end
-		n.busy += opt.length
-		n.endSum += origin + end
-
-		return n
+		return s.then(n, o, t)
 	}
 
 	var grow func(n node)
@@ -1318,37 +1447,40 @@ func (s *searcher) bestPlacement(c int) []placed {
 	grow = func(n node) {
 		consider(n)
 
-		if !s.reachable(c, n.mask, n.firstStart, n.end, n.busy) {
+		if n.mask == full || !s.reachable(c, n.mask, n.start, n.end) {
 			return
 		}
 
-		latest := s.sessionEnd[n.firstStart] - 1 // never across a break
-		if s.in.wait >= 0 {
-			latest = min(latest, n.end+s.in.wait-(n.end-n.firstStart-n.busy))
-		}
+		windows := s.windows(make([]window, 0, 4), n.start, n.end)
 
 		for _, o := range s.optionsOf[c] {
-			if nodes >= maxNodes {
-				return
-			}
-
-			if s.optMask[o]&n.mask != 0 {
+			if s.optMask[o]&n.mask != 0 || s.before[o]&^n.mask != 0 {
 				continue
 			}
 
-			t, ok := s.earliestFree(o, n.end, latest)
-			if !ok {
-				continue
-			}
+			for _, w := range windows {
+				if nodes >= maxNodes {
+					return
+				}
 
-			nodes++
-			cur = append(cur, placed{o, t})
-			grow(add(n, o, t))
-			cur = cur[:len(cur)-1]
+				t, ok := s.earliestFree(o, w.from, w.to)
+				if !ok {
+					continue
+				}
+
+				nodes++
+				cur = append(cur, placed{o, t})
+				grow(add(n, o, t))
+				cur = cur[:len(cur)-1]
+			}
 		}
 	}
 
 	for _, o := range s.optionsOf[c] {
+		if s.before[o] != 0 {
+			continue
+		}
+
 		for _, t := range s.in.options[o].starts {
 			if nodes >= maxNodes {
 				return pick(randomPlan, bestPlan)
@@ -1368,32 +1500,49 @@ func (s *searcher) bestPlacement(c int) []placed {
 }
 
 // reachable tells whether the interviews of candidate c placed so far (the
-// requests of mask, from slot first to slot end, busy slots of them) may
-// still lead to a complete placement: every request left needs an option
-// that can start after end and end before the latest end of the day of c,
-// given the session and the wait allowed. It ignores the other candidates,
-// so as to stay cheap: it only cuts the dead ends due to the availabilities,
-// such as an order that passes the only free time of a recruiter, which
-// would otherwise use up the budget of the exploration (maxNodes).
-func (s *searcher) reachable(c int, mask uint64, first, end, busy int) bool {
+// requests of mask, the last one from slot start to slot end) may still lead
+// to a complete placement: every request left needs an option that can
+// start after the earliest next start and end before the latest end the
+// gaps allow. It ignores the other candidates, so as to stay cheap: it only
+// cuts the dead ends due to the availabilities, such as an order that passes
+// the only free time of a recruiter, which would otherwise use up the
+// budget of the exploration (maxNodes).
+func (s *searcher) reachable(c int, mask uint64, start, end int) bool {
+	g, o := s.in.g, s.in.o
 	rest := s.fullMask[c] &^ mask
-	limit := s.sessionEnd[first]
+	day, left := g.day(start), bits.OnesCount64(rest)
 
-	if s.in.wait >= 0 { // the day of c lasts at most its interviews and the wait allowed
-		left := 0
-		for m := rest; m != 0; m &= m - 1 {
-			left += s.longest[c][bits.TrailingZeros64(m)]
-		}
-
-		limit = min(limit, end+left+s.in.wait-(end-first-busy))
+	from := end
+	if o.MinGap.Days > 0 {
+		from = max(from, (day+o.MinGap.Days)*s.perDay)
 	}
 
-	for m := rest; m != 0; m &= m - 1 {
-		if !slices.ContainsFunc(s.holding[c][bits.TrailingZeros64(m)], func(o int) bool {
-			opt := &s.in.options[o]
-			k := sort.SearchInts(opt.starts, end)
+	var limit time.Duration // the latest end of the last interview
 
-			return s.optMask[o]&mask == 0 && k < len(opt.starts) && opt.starts[k]+opt.length <= limit
+	switch {
+	case o.MaxGap.Days > 0:
+		limit = time.Duration(day+left*o.MaxGap.Days+1) * DayLength
+	case o.MaxGap.Duration == NoLimit:
+		limit = time.Duration(s.days) * DayLength
+	default: // the interviews left, and at most MaxGap before each
+		limit = g.end(start, end-start) + time.Duration(left)*o.MaxGap.Duration
+		for m := rest; m != 0; m &= m - 1 {
+			limit += time.Duration(s.longest[c][bits.TrailingZeros64(m)]) * g.step
+		}
+
+		if dayOf(limit-1) == day { // all on this day, so in this session
+			limit = min(limit, g.end(s.sessionEnd[start]-1, 1))
+		}
+	}
+
+	latest := int(limit / time.Minute)
+
+	for m := rest; m != 0; m &= m - 1 {
+		if !slices.ContainsFunc(s.holding[c][bits.TrailingZeros64(m)], func(op int) bool {
+			opt := &s.in.options[op]
+			k := sort.SearchInts(opt.starts, from)
+
+			return s.optMask[op]&mask == 0 && k < len(opt.starts) && s.endMinutes(opt.starts[k], opt.length) <= latest
 		}) {
 			return false
 		}
@@ -1429,7 +1578,7 @@ func (s *searcher) vector(dst []int, c int, n node) {
 		case MinRecruiterSpan:
 			dst[i] = n.spanDelta
 		case MinCandidateWait:
-			dst[i] = n.end - n.firstStart - n.busy
+			dst[i] = n.wait
 		case MinEndTimes:
 			dst[i] = n.endSum
 		case MinRecruiters:
@@ -1440,13 +1589,13 @@ func (s *searcher) vector(dst []int, c int, n node) {
 	}
 }
 
-// spanIncrease is the growth of recruiter h's presence if busy in [t, end).
-func (s *searcher) spanIncrease(h, t, end int) int {
-	if s.first[h] < 0 {
+// spanIncrease is the growth of the presence of unit u if busy in [t, end).
+func (s *searcher) spanIncrease(u, t, end int) int {
+	if s.first[u] < 0 {
 		return end - t
 	}
 
-	return max(s.last[h]+1, end) - min(s.first[h], t) - s.span[h]
+	return max(s.last[u]+1, end) - min(s.first[u], t) - s.span[u]
 }
 
 // free tells whether the recruiters of option o are free from slot t.
@@ -1498,8 +1647,8 @@ func (s *searcher) replace(c int, plan []placed) {
 	touched = append(touched, s.mark(plan, true)...)
 	s.plans[c] = plan
 
-	for _, h := range touched {
-		s.refresh(h)
+	for _, u := range touched {
+		s.refresh(u)
 	}
 
 	for i, v := range s.contrib[c] {
@@ -1513,22 +1662,23 @@ func (s *searcher) replace(c int, plan []placed) {
 	}
 }
 
-// refresh recomputes the presence of recruiter h from their busy slots.
-func (s *searcher) refresh(h int) {
-	s.first[h], s.last[h] = s.busy[h].bounds()
-	s.span[h] = 0
+// refresh recomputes the presence of unit u from the busy slots.
+func (s *searcher) refresh(u int) {
+	h, day := u/s.days, (u%s.days)*s.perDay
+	s.first[u], s.last[u] = s.busy[h].boundsIn(day, day+s.perDay)
+	s.span[u] = 0
 
-	if s.first[h] >= 0 {
-		s.span[h] = s.last[h] + 1 - s.first[h]
+	if s.first[u] >= 0 {
+		s.span[u] = s.last[u] + 1 - s.first[u]
 	}
 
-	s.half[h] = [2]bool{
-		!s.busy[h].free(0, s.halves[0]),
-		!s.busy[h].free(s.halves[1], s.in.g.slots),
+	s.half[u] = [2]bool{
+		!s.busy[h].free(day, day+s.halves[0]),
+		!s.busy[h].free(day+s.halves[1], day+s.perDay),
 	}
 }
 
-// mark sets or clears the busy slots of a plan and returns the recruiters.
+// mark sets or clears the busy slots of a plan and returns the units.
 func (s *searcher) mark(plan []placed, busy bool) []int {
 	var touched []int
 
@@ -1536,7 +1686,7 @@ func (s *searcher) mark(plan []placed, busy bool) []int {
 		opt := &s.in.options[pl.option]
 		for _, h := range opt.recruiters {
 			s.busy[h].set(pl.start, pl.start+opt.length, busy)
-			touched = append(touched, h)
+			touched = append(touched, s.unit(h, pl.start))
 		}
 	}
 
@@ -1551,18 +1701,13 @@ func (s *searcher) contribution(dst []int, c int, plan []placed) {
 		return
 	}
 
-	origin := int(s.in.g.start / s.in.g.step)
-	n := node{firstStart: s.in.g.slots}
+	if !slices.IsSortedFunc(plan, func(a, b placed) int { return a.start - b.start }) {
+		plan = slices.SortedFunc(slices.Values(plan), func(a, b placed) int { return a.start - b.start })
+	}
 
+	var n node
 	for _, pl := range plan {
-		opt := &s.in.options[pl.option]
-		end := pl.start + opt.length
-		n.mask |= s.optMask[pl.option]
-		n.blocks++
-		n.firstStart = min(n.firstStart, pl.start)
-		n.end = max(n.end, end)
-		n.busy += opt.length
-		n.endSum += origin + end
+		n = s.then(n, pl.option, pl.start)
 	}
 
 	s.vector(dst, c, n)
@@ -1578,17 +1723,17 @@ func (s *searcher) contribution(dst []int, c int, plan []placed) {
 func (s *searcher) score() []int {
 	score := slices.Clone(s.total)
 
-	for h := range s.span {
+	for u := range s.span {
 		if s.spanAt >= 0 {
-			score[s.spanAt] += s.span[h]
+			score[s.spanAt] += s.span[u]
 		}
 
-		if s.usedAt >= 0 && s.first[h] >= 0 {
+		if s.usedAt >= 0 && s.first[u] >= 0 {
 			score[s.usedAt]++
 		}
 
 		if s.halfAt >= 0 {
-			score[s.halfAt] += count(s.half[h][:])
+			score[s.halfAt] += count(s.half[u][:])
 		}
 	}
 
@@ -1698,11 +1843,21 @@ func (b bitset) set(from, to int, on bool) {
 	}
 }
 
-// bounds returns the first and last slots of the set, or -1, -1.
-func (b bitset) bounds() (int, int) {
+// boundsIn returns the first and last slots of the set in [from, to), or
+// -1, -1.
+func (b bitset) boundsIn(from, to int) (int, int) {
 	first, last := -1, -1
 
-	for i, w := range b {
+	for i := from >> 6; from < to && i <= (to-1)>>6; i++ {
+		w := b[i]
+		if i == from>>6 {
+			w &= ^uint64(0) << (from & 63)
+		}
+
+		if i == (to-1)>>6 {
+			w &= ^uint64(0) >> (63 - (to-1)&63)
+		}
+
 		if w == 0 {
 			continue
 		}

@@ -13,9 +13,13 @@
       "type": "string",
       "description": "This schema, for editors; ignored."
     },
-    "date": {
+    "from": {
       "$ref": "#/$defs/date",
-      "description": "The day of the schedule."
+      "description": "First day of the period of the schedule (none for one day without date)."
+    },
+    "to": {
+      "$ref": "#/$defs/date",
+      "description": "Last day of the period of the schedule."
     },
     "candidates": {
       "description": "The appointments, by candidate. The fixed plans are added one by one, in this order.",
@@ -44,6 +48,10 @@
               ],
               "additionalProperties": false,
               "properties": {
+                "date": {
+                  "$ref": "#/$defs/date",
+                  "description": "The day of the interview, in the period (none for one day without date)."
+                },
                 "time": {
                   "type": "string",
                   "pattern": "^\\s*\\d{1,2}(?:[:hH]\\d{2}|[hH])?\\s*-\\s*\\d{1,2}(?:[:hH]\\d{2}|[hH])?\\s*$",
@@ -71,7 +79,7 @@
   "$defs": {
     "date": {
       "type": "string",
-      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
       "description": "A date: 2026-11-03."
     },
     "name": {
