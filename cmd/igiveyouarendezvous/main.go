@@ -313,7 +313,7 @@ func loadStart(o *options, p *planning.Problem, opts planning.Options, pe period
 		return nil, nil, nil
 	}
 
-	data, err := os.ReadFile(o.startPath) //nolint:gosec // the user names the file to read
+	data, err := os.ReadFile(o.startPath) //nolint:gosec,nolintlint // the user names the file to read (gosec flags it in some runs only)
 	if err != nil {
 		return nil, nil, err
 	}
