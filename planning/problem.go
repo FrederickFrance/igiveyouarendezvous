@@ -132,6 +132,12 @@ type Problem struct {
 	// same group in one interview (it is allowed, not required). A recruiter
 	// may belong to several groups; one of no group always interviews alone.
 	JointGroups [][]int
+	// Panels lists groups of recruiters (indexes in Recruiters) who always
+	// interview together, such as a jury: the members of a panel that a
+	// candidate must meet, they meet in one interview, without anybody else
+	// (and whatever Options.MaxJointSize). A recruiter belongs to one panel
+	// at most, and then to no joint group.
+	Panels [][]int
 }
 
 // priority returns the priority of candidate c, 1 by default.
@@ -416,6 +422,10 @@ func (p *Problem) check(o Options) error {
 		}
 	}
 
+	if err := p.checkPanels(); err != nil {
+		return err
+	}
+
 	type pair struct{ candidate, recruiter int }
 
 	seen := map[pair]bool{}
@@ -531,7 +541,6 @@ func (p *Problem) jointAllowed(recruiters []int) bool {
 	return false
 }
 
-// duration returns the interview length of recruiter h.
 // length returns the length of an interview of candidate c with recruiters.
 func (p *Problem) length(c int, recruiters []int, o Options) time.Duration {
 	if d := p.Candidates[c].Duration; d > 0 {
@@ -546,10 +555,11 @@ func (p *Problem) length(c int, recruiters []int, o Options) time.Duration {
 	return length
 }
 
-// joint tells whether candidate c may meet recruiters in one interview.
+// joint tells whether candidate c may meet recruiters in one interview, as
+// far as the joint groups go (see panel for the panels).
 func (p *Problem) joint(c int, recruiters []int, o Options) error {
 	switch {
-	case len(recruiters) < 2 || p.Candidates[c].Together:
+	case len(recruiters) < 2 || p.Candidates[c].Together || p.panelOf(recruiters[0]) >= 0:
 		return nil
 	case !p.jointAllowed(recruiters):
 		return errors.New("recruiters of no common joint group")
@@ -560,6 +570,99 @@ func (p *Problem) joint(c int, recruiters []int, o Options) error {
 	return nil
 }
 
+// checkPanels validates the panels: two members at least, known, in one
+// panel at most and in no joint group; and a candidate meets the members of
+// a panel with one rank at most.
+func (p *Problem) checkPanels() error {
+	in := map[int]bool{}
+
+	for _, panel := range p.Panels {
+		if len(panel) < 2 {
+			return errors.New("planning: a panel needs at least two recruiters")
+		}
+
+		for _, h := range panel {
+			switch {
+			case h < 0 || h >= len(p.Recruiters):
+				return fmt.Errorf("planning: panel %v: unknown recruiter", panel)
+			case in[h]:
+				return fmt.Errorf("planning: %s is in two panels, or twice in one", p.Recruiters[h].Name)
+			case slices.ContainsFunc(p.JointGroups, func(g []int) bool { return slices.Contains(g, h) }):
+				return fmt.Errorf("planning: %s is in a panel and in a joint group: a panel always interviews alone", p.Recruiters[h].Name)
+			}
+
+			in[h] = true
+		}
+	}
+
+	type key struct{ candidate, panel int }
+
+	ranks := map[key]int{}
+
+	for _, r := range p.Requests {
+		k := key{r.Candidate, p.panelOf(r.Recruiter)}
+		if k.panel < 0 || r.Rank == 0 {
+			continue
+		}
+
+		if rank, seen := ranks[k]; seen && rank != r.Rank {
+			return fmt.Errorf("planning: %s meets the panel %s at once: their ranks differ",
+				p.Candidates[r.Candidate].Name, recruiterNames(p, p.Panels[k.panel]))
+		}
+
+		ranks[k] = r.Rank
+	}
+
+	return nil
+}
+
+// panelOf returns the index of the panel of recruiter h, or -1.
+func (p *Problem) panelOf(h int) int {
+	return slices.IndexFunc(p.Panels, func(panel []int) bool { return slices.Contains(panel, h) })
+}
+
+// panelMembers returns the members of panel k that candidate c must meet,
+// sorted.
+func (p *Problem) panelMembers(c, k int) []int {
+	var members []int
+
+	for _, r := range p.Requests {
+		if r.Candidate == c && slices.Contains(p.Panels[k], r.Recruiter) {
+			members = append(members, r.Recruiter)
+		}
+	}
+
+	slices.Sort(members)
+
+	return members
+}
+
+// panel tells whether recruiters, in one interview of candidate c, respect
+// the panels: the members of a panel that c must meet, all of them, and
+// nobody else.
+func (p *Problem) panel(c int, recruiters []int) error {
+	if p.Candidates[c].Together {
+		return nil
+	}
+
+	for _, h := range recruiters {
+		k := p.panelOf(h)
+		if k < 0 {
+			continue
+		}
+
+		members := p.panelMembers(c, k)
+		if !slices.Equal(slices.Sorted(slices.Values(recruiters)), members) {
+			return fmt.Errorf("%s meets %s in one interview, without anybody else", p.Candidates[c].Name, recruiterNames(p, members))
+		}
+
+		return nil
+	}
+
+	return nil
+}
+
+// duration returns the interview length of recruiter h.
 func (p *Problem) duration(h int, o Options) time.Duration {
 	if d := p.Recruiters[h].Duration; d > 0 {
 		return d

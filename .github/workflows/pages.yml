@@ -1,0 +1,37 @@
+# The online demo (web/), built by scripts/web.sh and published on GitHub
+# Pages whenever main changes, or with the "Run workflow" button. Pages must
+# first be set to "GitHub Actions" in Settings > Pages > Build and deployment.
+name: Demo
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency: # one publication at a time, none cancelled halfway
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: sh scripts/web.sh site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

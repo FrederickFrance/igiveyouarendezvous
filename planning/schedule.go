@@ -63,8 +63,10 @@ func (s *Schedule) Proven() bool {
 // availabilities, and only the requests that were not held.
 func (s *Schedule) Remaining(p *Problem) *Problem {
 	next := &Problem{
-		Recruiters: slices.Clone(p.Recruiters),
-		Candidates: slices.Clone(p.Candidates),
+		Recruiters:  slices.Clone(p.Recruiters),
+		Candidates:  slices.Clone(p.Candidates),
+		JointGroups: p.JointGroups,
+		Panels:      p.Panels,
 	}
 
 	for _, r := range s.Unscheduled {
@@ -147,6 +149,10 @@ func checkInterview(p *Problem, o Options, iv Interview, held []int, breaks []In
 
 		held[r]++
 		recruiters = append(recruiters, p.Requests[r].Recruiter)
+	}
+
+	if err := p.panel(iv.Candidate, recruiters); err != nil {
+		return err
 	}
 
 	if err := p.joint(iv.Candidate, recruiters, o); err != nil {

@@ -20,8 +20,11 @@ Pas qu'des intertiens : avec `together: true`, un « candidat » i vot tous ses
 « recruteus » in même temps, ou bin personne, pour inregistrer eune émission,
 pour eune partie d'jeu d'rôle… Et un colloque dins eune salle, ch'est un
 « candidat » qu'ses intervintions i s'suivtent. Vos ches exempes
-[émission](example/show.yaml), [colloque](example/colloquium.yaml) et [jeu
-d'rôle](example/roleplay.yaml).
+[émission](example/fr/show.yaml), [colloque](example/fr/colloquium.yaml) et [jeu
+d'rôle](example/fr/roleplay.yaml).
+
+**[Essayer dins ch'navigateur](https://frederickfrance.github.io/igiveyouarendezvous/)**, sans rin installer : tout i s'calcule
+su vot' ordinateur, rin n'est invoyé.
 
 ## Ch'premier planning, pas à pas
 

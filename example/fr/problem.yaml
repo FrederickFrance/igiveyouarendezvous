@@ -1,0 +1,94 @@
+# yaml-language-server: $schema=../../schema/problem.schema.json
+#
+# Le problème à planifier : qui doit rencontrer qui, quand chacun est
+# disponible, et les réglages. Les clés restent en anglais. Seuls recruiters
+# et candidates sont obligatoires : par défaut, la journée va de 08:00 à
+# 12:00, un entretien dure une heure, chaque candidat voit tous ses
+# recruteurs en entretiens qui s'enchaînent, et sans from ni to, le fichier
+# planifie une journée sans date.
+
+# La période à planifier, les deux jours compris (-from, -to ou -date en
+# ligne de commande en donnent une autre), les jours de la semaine avec des
+# entretiens (du lundi au vendredi par défaut) et les jours sans entretien,
+# comme les jours fériés.
+from: 2026-11-09
+to: 2026-11-13
+weekdays: [mon, tue, wed, thu, fri]
+closed: [2026-11-11]
+# Pour replanifier en cours de période, avec le plan de la période (-start) :
+# aucun nouvel entretien avant cette date, les rendez-vous figés restent.
+# not-before: 2026-11-12
+
+# La disponibilité par défaut de tout le monde, chaque jour ; plusieurs
+# plages possibles, séparées par des virgules.
+day: 08:00-17:00
+
+# Les pauses, comme le déjeuner : pas d'entretien pendant, et deux entretiens
+# d'un candidat le même jour ne sont jamais de part et d'autre d'une pause.
+# La plus longue sépare le matin de l'après-midi.
+breaks: 12:00-13:30
+
+# La durée d'un entretien par défaut : 45m, 1h, 1h30 ou un nombre de
+# minutes. Un entretien commun dure autant que sa plus longue partie.
+duration: 1h
+
+# Le temps minimal et maximal entre deux entretiens d'un candidat : une durée
+# (30m, 2h) ou des jours calendaires (3d) ; max-gap peut valoir « unlimited ».
+# 0 et 0 : les entretiens s'enchaînent, le même jour.
+# Pour « au moins trois jours entre deux entretiens » : min-gap: 3d, max-gap: unlimited.
+min-gap: 0
+max-gap: 0
+
+# Les recruteurs qui peuvent recevoir ensemble : un candidat peut voir
+# plusieurs recruteurs d'un même groupe en un seul entretien. Un recruteur
+# peut être dans plusieurs groupes ; un recruteur sans groupe (ici Amélie)
+# reçoit toujours seul. Sans groupes, tous les entretiens sont individuels.
+joint-groups:
+  - [Bruno (manager), Chloé (technique), Élodie (direction)]
+  - [David (technique), Élodie (direction)]
+
+# Les objectifs, le plus important d'abord
+# (la liste complète : igiveyouarendezvous -list-objectives).
+objectives:
+  - priorities            # les candidats complets, niveau de priorité par niveau
+  - urgency               # puis ceux à qui il reste le moins de jours
+  - meetings
+  - recruiters            # les recruteurs avec un entretien, jour par jour
+  - recruiter-half-days   # leurs demi-journées (matin, après-midi) avec un entretien
+  - interviews
+  - recruiter-span
+
+# Les recruteurs. Les disponibilités sont les mêmes chaque jour, ou données
+# par date : une personne dont la disponibilité est donnée par date est
+# absente les autres jours.
+recruiters:
+  Amélie (RH):
+    duration: 30m
+    availability: 09:00-12:00
+  Bruno (manager):          # les valeurs par défaut : la journée, des entretiens d'une heure
+  Chloé (technique):
+  David (technique):
+    availability: 08:00-10:00, 14:00-17:00
+  Élodie (direction):
+
+# Les candidats et les recruteurs que chacun doit rencontrer : une liste,
+# dans n'importe quel ordre, ou les recruteurs avec leurs rangs (1 d'abord,
+# puis 2…, X à n'importe quel moment). Un candidat de priorité plus haute
+# passe avant n'importe quel nombre de candidats de priorité plus basse (1
+# par défaut) : ici, Hugo a déjà passé des entretiens préalables.
+candidates:
+  Fatou:
+    meet: [Amélie (RH), Bruno (manager), Chloé (technique)]
+  Gaspard:
+    meet: [Chloé (technique)]
+    availability:
+      2026-11-09: none
+      2026-11-10: 08:00-12:00
+  Hugo:
+    meet: [David (technique), Élodie (direction)]
+    priority: 2
+  Inès:
+    meet: {Amélie (RH): 1, Bruno (manager): X, Élodie (direction): 2}   # Amélie, puis Élodie ; Bruno n'importe quand
+    availability:
+      2026-11-12: 09:00-12:00
+      2026-11-13: 14:00-17:00

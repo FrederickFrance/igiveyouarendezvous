@@ -899,6 +899,10 @@ func (s *searcher) locate(iv Interview) (placed, string) {
 		}
 	}
 
+	if err := in.p.panel(c, recruiters); err != nil {
+		return placed{}, err.Error()
+	}
+
 	if in.p.joint(c, recruiters, in.o) != nil {
 		return placed{}, s.names(recruiters) + " may no longer interview together"
 	}

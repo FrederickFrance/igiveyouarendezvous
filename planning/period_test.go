@@ -103,7 +103,14 @@ func randomPeriod(rnd *rand.Rand) (*planning.Problem, planning.Options) {
 		return ivs
 	}
 
-	p := &planning.Problem{JointGroups: [][][]int{nil, {{0, 1}}, {{0, 1, 2}}}[rnd.IntN(3)]}
+	p := &planning.Problem{}
+
+	switch k := rnd.IntN(4); k {
+	case 3: // a panel, so no joint group
+		p.Panels = [][]int{{1, 2}}
+	default:
+		p.JointGroups = [][][]int{nil, {{0, 1}}, {{0, 1, 2}}}[k]
+	}
 
 	for h := range 3 {
 		r := planning.Recruiter{Name: string(rune('P' + h)), Duration: []time.Duration{30 * time.Minute, time.Hour}[rnd.IntN(2)]}
@@ -135,6 +142,10 @@ func randomPeriod(rnd *rand.Rand) (*planning.Problem, planning.Options) {
 			rank := rnd.IntN(3)
 			if cand.Together {
 				rank = 0
+			}
+
+			if h > 0 && len(p.Panels) > 0 && !cand.Together { // one rank for the panel
+				rank = c % 3
 			}
 
 			p.Requests = append(p.Requests, planning.Request{Candidate: c, Recruiter: h, Rank: rank})

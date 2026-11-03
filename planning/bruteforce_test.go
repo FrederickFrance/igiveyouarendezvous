@@ -120,7 +120,12 @@ func randomProblem(rnd *rand.Rand) (*planning.Problem, planning.Options) {
 		}
 	}
 
-	p.JointGroups = [][][]int{nil, {{0, 1, 2}}, {{0, 1}}, {{0, 1}, {1, 2}}}[rnd.IntN(4)]
+	switch k := rnd.IntN(5); k {
+	case 4: // a panel, so no joint group
+		p.Panels = [][]int{{0, 1}}
+	default:
+		p.JointGroups = [][][]int{nil, {{0, 1, 2}}, {{0, 1}}, {{0, 1}, {1, 2}}}[k]
+	}
 
 	// Start with an objective that schedules something, then any order.
 	all := planning.AllObjectives()

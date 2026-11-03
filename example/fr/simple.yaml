@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=../../schema/problem.schema.json
+#
+# Un premier fichier problème : changez les noms, gardez les espaces en
+# début de ligne (deux par niveau, jamais de tabulation). Les clés restent en
+# anglais (day, recruiters, meet…).
+
+day: 09:00-17:00        # quand tout le monde est disponible
+breaks: 12:00-13:30     # le déjeuner : pas d'entretien pendant
+duration: 1h            # durée d'un entretien
+
+recruiters:             # les recruteurs
+  Alice:
+  Bruno:
+  Chloé:
+
+candidates:             # les candidats, et les recruteurs à rencontrer
+  David:
+    meet: [Alice, Bruno]
+  Emma:
+    meet: [Bruno, Chloé]
+  Farid:
+    meet: [Alice]

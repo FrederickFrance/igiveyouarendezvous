@@ -127,6 +127,18 @@
         }
       }
     },
+    "panels": {
+      "description": "Groups of recruiters who always interview together, such as a jury: a candidate meets the members of a panel they need at once, with nobody else. A recruiter is in one panel at most, and then in no joint group.",
+      "type": "array",
+      "items": {
+        "type": "array",
+        "minItems": 2,
+        "uniqueItems": true,
+        "items": {
+          "$ref": "#/$defs/name"
+        }
+      }
+    },
     "max-joint-size": {
       "type": "integer",
       "minimum": 0,

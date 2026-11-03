@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=../../schema/problem.schema.json
+#
+# Pas seulement des entretiens : le programme d'un colloque de trois jours,
+# dans une seule salle. Le colloque est le « candidat », les intervenants ses
+# « recruteurs » : il n'est qu'à un endroit à la fois, donc les
+# interventions s'enchaînent. Les rangs mettent l'ouverture en premier et la
+# clôture en dernier ; leurs disponibilités fixent leurs jours.
+
+from: 2026-11-16
+to: 2026-11-18
+day: 09:00-12:00, 14:00-17:00   # le déjeuner comme un trou dans la journée : interventions avant et après
+duration: 1h                    # une intervention
+max-gap: unlimited              # les interventions n'ont pas à s'enchaîner aussitôt
+objectives: [complete-candidates, earliest]
+
+recruiters:
+  ouverture:
+    duration: 30m
+    availability: {2026-11-16: 09:00-09:30}
+  Ada:
+  Blaise:
+    availability: {2026-11-16: none, 2026-11-17: 14:00-17:00, 2026-11-18: 09:00-12:00}
+  Grace:
+  Alan:
+    duration: 1h30
+  Emmy:
+  clôture:
+    duration: 30m
+    availability: {2026-11-18: 16:30-17:00}
+
+candidates:
+  colloque:
+    meet: {ouverture: 1, Ada: 2, Blaise: 2, Grace: 2, Alan: 2, Emmy: 2, clôture: 3}

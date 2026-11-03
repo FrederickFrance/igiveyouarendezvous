@@ -25,6 +25,9 @@ di ruolo; e un convegno in una sola sala è un «candidato» i cui interventi si
 susseguono. Vedete gli esempi [trasmissione](example/show.yaml),
 [convegno](example/colloquium.yaml) e [gioco di ruolo](example/roleplay.yaml).
 
+**[Provalo online](https://frederickfrance.github.io/igiveyouarendezvous/)**: nel browser, senza installare nulla; tutto viene
+calcolato sul vostro computer, niente viene inviato.
+
 ## Il primo calendario, passo dopo passo
 
 Senza saper programmare né usare la riga di comando: seguite esattamente

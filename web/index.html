@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>igiveyouarendezvous demo</title>
+<meta name="description" content="Plan interviews, recordings or a colloquium in your browser: nothing you type leaves it.">
+<link rel="stylesheet" href="style.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<header class="masthead">
+  <div class="masthead-text">
+    <h1>igiveyouarendezvous</h1>
+    <p class="tagline" data-i18n="tagline"></p>
+    <p class="privacy" data-i18n="privacy"></p>
+  </div>
+  <nav class="masthead-links">
+    <div class="languages" role="group" aria-label="Language">
+      <button type="button" data-lang="en" lang="en">English</button>
+      <button type="button" data-lang="fr" lang="fr">Français</button>
+    </div>
+    <a href="https://github.com/FrederickFrance/igiveyouarendezvous" data-i18n="source"></a>
+  </nav>
+</header>
+
+<main class="workspace">
+  <section class="pane problem" aria-labelledby="problem-heading">
+    <h2 id="problem-heading" data-i18n="problemHeading"></h2>
+
+    <div class="examples" role="group" aria-labelledby="examples-label">
+      <span id="examples-label" class="label" data-i18n="examplesLabel"></span>
+      <div class="example-list"></div>
+    </div>
+
+    <label class="label" for="problem" data-i18n="editorLabel"></label>
+    <p class="help" id="problem-help" data-i18n="editorHelp"></p>
+    <textarea id="problem" class="code" spellcheck="false" autocomplete="off" autocapitalize="off" aria-describedby="problem-help"></textarea>
+
+    <details class="start">
+      <summary data-i18n="startSummary"></summary>
+      <p class="help" data-i18n="startHelp"></p>
+      <div class="start-actions">
+        <button type="button" id="use-last" data-i18n="useLast" disabled></button>
+        <label class="file-button">
+          <input type="file" id="import-plan" accept=".yaml,.yml,.json,.txt">
+          <span data-i18n="importFile"></span>
+        </label>
+        <button type="button" id="clear-start" data-i18n="clearStart"></button>
+      </div>
+      <label class="label" for="start-plan" data-i18n="startLabel"></label>
+      <textarea id="start-plan" class="code short" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+      <label class="check"><input type="checkbox" id="fix-all"> <span data-i18n="fixAll"></span></label>
+      <label class="inline-field"><span data-i18n="notBefore"></span> <input type="date" id="not-before"></label>
+    </details>
+
+    <div class="run">
+      <label class="inline-field"><span data-i18n="from"></span> <input type="date" id="from"></label>
+      <label class="inline-field"><span data-i18n="to"></span> <input type="date" id="to"></label>
+      <label class="inline-field"><span data-i18n="timeLimit"></span>
+        <select id="time-limit">
+          <option value="15">15 s</option>
+          <option value="60" selected>1 min</option>
+          <option value="120">2 min</option>
+          <option value="300">5 min</option>
+        </select>
+      </label>
+      <p class="help period-help" data-i18n="periodHelp"></p>
+      <button type="button" id="plan" class="primary" disabled data-i18n="plan"></button>
+    </div>
+  </section>
+
+  <section class="pane schedule" aria-labelledby="schedule-heading" aria-live="polite">
+    <h2 id="schedule-heading" data-i18n="scheduleHeading"></h2>
+    <p class="status" id="status"></p>
+    <div class="message error" id="error" hidden></div>
+    <ul class="notes" id="notes" hidden></ul>
+    <p class="legend" id="legend" data-i18n="legend" hidden></p>
+    <div class="board" id="board"></div>
+    <p class="summary" id="summary" hidden></p>
+    <div class="downloads" id="downloads" hidden></div>
+    <details class="output" id="output-box" hidden>
+      <summary data-i18n="textSummary"></summary>
+      <pre class="code" id="output"></pre>
+    </details>
+  </section>
+</main>
+
+<footer class="limits">
+  <h2 data-i18n="limitsTitle"></h2>
+  <ul>
+    <li data-i18n="limitCores"></li>
+    <li data-i18n="limitFiles"></li>
+    <li data-i18n="limitProgram"></li>
+  </ul>
+  <p class="links">
+    <a href="https://github.com/FrederickFrance/igiveyouarendezvous/releases/latest" data-i18n="download"></a>
+    <a href="https://github.com/FrederickFrance/igiveyouarendezvous#readme" data-i18n="documentation"></a>
+  </p>
+</footer>
+</body>
+</html>

@@ -3,8 +3,10 @@
 // Each candidate must meet some recruiters: the requests of a [Problem]. A
 // recruiter meets one candidate at a time; a candidate may meet several
 // recruiters of a same joint group ([Problem.JointGroups]) in one joint
-// interview. Interviews have a duration per recruiter, and everybody has
-// availabilities over the period to plan (package config reads them by date).
+// interview, and always meets the members of a panel ([Problem.Panels]),
+// such as a jury, at once. Interviews have a duration per recruiter, and
+// everybody has availabilities over the period to plan (package config reads
+// them by date).
 //
 // # Period
 //

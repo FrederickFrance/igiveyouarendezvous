@@ -52,3 +52,20 @@ jobs:
         run: |
           go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest
           osv-scanner scan source -r .
+
+  # The online demo (web/) runs the program compiled to WebAssembly: its
+  # tests run the same way, by Node.js, and the demo must build.
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Tests compiled to WebAssembly, run by Node.js
+        # env -i: a Go program run by Node.js accepts little environment.
+        run: |
+          goroot=$(go env GOROOT)
+          env -i PATH="$goroot/lib/wasm:$PATH" HOME="$HOME" GOPATH="$(go env GOPATH)" GOCACHE="$(go env GOCACHE)" \
+            GOTOOLCHAIN=local GOOS=js GOARCH=wasm go test -short ./...
+      - run: sh scripts/web.sh

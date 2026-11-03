@@ -18,6 +18,8 @@
 //	max-gap: 0                # ...and at most (0 and 0: back to back; 3d: three days; unlimited)
 //	joint-groups:             # recruiters who may interview together (none by default)
 //	  - [recruiter 1, recruiter 2, recruiter 3]
+//	panels:                   # recruiters who always interview together, such as a jury
+//	  - [recruiter 4, recruiter 5]
 //	max-joint-size: 0         # maximum recruiters in a joint interview (0: no limit)
 //	objectives: [priorities, meetings, recruiters, recruiter-half-days, interviews, recruiter-span]
 //	recruiters:
@@ -81,6 +83,7 @@ type File struct {
 	MinGap       Gap              `yaml:"min-gap"`
 	MaxGap       Gap              `yaml:"max-gap"`
 	JointGroups  [][]string       `yaml:"joint-groups"`
+	Panels       [][]string       `yaml:"panels"`
 	MaxJointSize int              `yaml:"max-joint-size"`
 	Objectives   []string         `yaml:"objectives"`
 	Recruiters   Named[Recruiter] `yaml:"recruiters"`
@@ -199,7 +202,7 @@ func (nm *Named[T]) UnmarshalYAML(n *yaml.Node) error {
 var problemKeys = shape{
 	"$schema": nil, "from": nil, "to": nil, "not-before": nil, "weekdays": nil, "closed": nil,
 	"day": nil, "breaks": nil, "duration": nil, "step": nil, "min-gap": nil, "max-gap": nil,
-	"joint-groups": nil, "max-joint-size": nil, "objectives": nil,
+	"joint-groups": nil, "panels": nil, "max-joint-size": nil, "objectives": nil,
 	"recruiters": {"*": {"duration": nil, "availability": nil}},
 	"candidates": {"*": {"meet": nil, "priority": nil, "availability": nil, "duration": nil, "together": nil}},
 }
@@ -475,22 +478,72 @@ func (f *File) Problem(from, to string) (*planning.Problem, planning.Options, er
 		}
 	}
 
-	for _, names := range f.JointGroups {
-		group := make([]int, 0, len(names))
+	if p.JointGroups, err = groups("joint-groups", f.JointGroups, recruiters); err != nil {
+		return nil, o, err
+	}
 
-		for _, name := range names {
-			h, ok := recruiters[NormalizeName(name)]
-			if !ok {
-				return nil, o, fmt.Errorf("joint-groups: %q is not a recruiter of the file", name)
-			}
-
-			group = append(group, h)
-		}
-
-		p.JointGroups = append(p.JointGroups, group)
+	if p.Panels, err = groups("panels", f.Panels, recruiters); err != nil {
+		return nil, o, err
 	}
 
 	return p, o, nil
+}
+
+// WithoutAvailability lists the people, recruiters then candidates, who
+// have no availability when others have one: they are available whenever
+// the day (key day) allows, which may be an oversight. It is nil when
+// nobody, or everybody, has an availability. A meeting (together: true) is
+// not a person: it is left out.
+func (f *File) WithoutAvailability() []string {
+	var without []string
+
+	given := false
+
+	for _, e := range f.Recruiters {
+		if e.Value.Availability.IsSet() {
+			given = true
+		} else {
+			without = append(without, e.Name)
+		}
+	}
+
+	for _, e := range f.Candidates {
+		switch {
+		case e.Value.Availability.IsSet():
+			given = true
+		case !e.Value.Together:
+			without = append(without, e.Name)
+		}
+	}
+
+	if !given {
+		return nil
+	}
+
+	return without
+}
+
+// groups converts groups of recruiters' names (the key named key) to
+// indexes.
+func groups(key string, names [][]string, recruiters map[string]int) ([][]int, error) {
+	var out [][]int
+
+	for _, group := range names {
+		indexes := make([]int, 0, len(group))
+
+		for _, name := range group {
+			h, ok := recruiters[NormalizeName(name)]
+			if !ok {
+				return nil, fmt.Errorf("%s: %q is not a recruiter of the file", key, name)
+			}
+
+			indexes = append(indexes, h)
+		}
+
+		out = append(out, indexes)
+	}
+
+	return out, nil
 }
 
 // daysLeft counts the working dates of the file, from date on, on which
@@ -582,6 +635,16 @@ func (f *File) Next(p *planning.Problem, s *planning.Schedule) (*File, error) {
 		}
 
 		cands.Content = kept
+
+		if len(kept) == 0 { // "candidates: {}", with the comment of the key after it: yaml.v3 would put {} on the next line, unreadable
+			cands.Style |= yaml.FlowStyle
+
+			for i := 0; i+1 < len(root.Content); i += 2 {
+				if key := root.Content[i]; key.Value == "candidates" && key.LineComment != "" {
+					cands.LineComment, key.LineComment = key.LineComment, ""
+				}
+			}
+		}
 	}
 
 	return decode(doc)
