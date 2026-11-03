@@ -7,7 +7,7 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
-## [Unreleased]
+## [0.3.0] - 2026-11-03
 
 ### Added
 
