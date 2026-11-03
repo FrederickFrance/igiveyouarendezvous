@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=../schema/problem.schema.json
+#
+# A selection panel. Each candidate first has a technical interview, then
+# meets the panel (the chair, HR and the manager) all at once: a panel
+# never splits, and nobody else joins it. The ranks give the order, and the
+# gaps keep both interviews of a candidate on the same day, close together.
+
+from: 2026-11-24
+to: 2026-11-26
+day: 08:30-17:30
+breaks: 12:00-13:30
+duration: 45m
+min-gap: 0
+max-gap: 1h
+
+panels:                          # who always interview together
+  - [Nadia (chair), Paul (HR), Rose (manager)]
+
+recruiters:
+  Nadia (chair):
+    availability:
+      2026-11-24: 08:30-17:30
+      2026-11-26: 08:30-12:00
+  Paul (HR):
+  Rose (manager):
+    availability: 08:30-12:00, 14:00-17:30
+  Tom (technical):
+    duration: 1h
+  Yan (technical):
+    duration: 1h
+    availability:
+      2026-11-25: 08:30-17:30
+      2026-11-26: 08:30-17:30
+
+candidates:                      # 1: first, 2: then
+  Alix:
+    meet: {Tom (technical): 1, Nadia (chair): 2, Paul (HR): 2, Rose (manager): 2}
+  Basile:
+    meet: {Tom (technical): 1, Nadia (chair): 2, Paul (HR): 2, Rose (manager): 2}
+  Cyrine:
+    meet: {Yan (technical): 1, Nadia (chair): 2, Paul (HR): 2, Rose (manager): 2}
+    availability:
+      2026-11-26: 08:30-12:00
+  Dorian:
+    meet: {Tom (technical): 1, Nadia (chair): 2, Paul (HR): 2, Rose (manager): 2}
+  Eva:
+    meet: {Yan (technical): 1, Nadia (chair): 2, Paul (HR): 2, Rose (manager): 2}
+  Félix:
+    meet: {Tom (technical): 1, Nadia (chair): 2, Paul (HR): 2, Rose (manager): 2}
+    availability:
+      2026-11-24: 14:00-17:30

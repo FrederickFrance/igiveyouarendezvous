@@ -7,6 +7,32 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
+## [Unreleased]
+
+### Added
+
+- **Online demo**, on GitHub Pages: the examples, or any problem file, are
+  planned in the browser, by the program compiled to WebAssembly; the
+  schedule shows as a board, one row per person, and improves as the search
+  goes on. It can start from a plan (fixed appointments, `-fix-all`,
+  `-not-before`); nothing typed leaves the browser.
+- **Panels**: `panels` lists recruiters who always interview together, such
+  as a jury: a candidate meets the members of a panel at once, with nobody
+  else, or not at all. With them, a shoot over several days in a row keeps
+  each day's team together (README, other uses).
+- **Examples in French** (`example/fr`, `exemples-fr/` in the zips, and in
+  the demo when it is in French), and an example of a selection panel.
+- A note lists the people without availability when others have one: they
+  are available whenever the day allows, which may be an oversight.
+
+### Fixed
+
+- The problem file of the next period (`-rest`) was unreadable when every
+  candidate was served and the `candidates` key had a comment.
+- The linter of the CI no longer depends on a varying report of gosec.
+- `planning.Schedule.Remaining` kept no joint groups; it keeps them, and the
+  panels.
+
 ## [0.2.0] - 2026-11-02
 
 ### Breaking

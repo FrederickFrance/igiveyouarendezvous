@@ -304,8 +304,29 @@ func (in *instance) addOptions(c int) error {
 		return nil
 	}
 
+	// The members of a panel, all at once; the others alone, or with the
+	// joint groups (which have no member of a panel).
+	held := map[int]bool{}
+
+	for k := range in.p.Panels {
+		var members []int
+
+		for _, r := range in.requestsOf[c] {
+			if in.p.panelOf(in.p.Requests[r].Recruiter) == k {
+				members = append(members, r)
+				held[r] = true
+			}
+		}
+
+		if len(members) > 0 {
+			add(members)
+		}
+	}
+
 	for _, r := range in.requestsOf[c] {
-		add([]int{r})
+		if !held[r] {
+			add([]int{r})
+		}
 	}
 
 	for _, group := range in.p.JointGroups {

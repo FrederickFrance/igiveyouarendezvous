@@ -17,7 +17,10 @@ import (
 func compileSchema(t *testing.T, name string) *jsonschema.Schema {
 	t.Helper()
 
-	sch, err := jsonschema.NewCompiler().Compile(filepath.Join("..", "schema", name))
+	path, err := filepath.Abs(filepath.Join("..", "schema", name)) // absolute: also under WebAssembly
+	require.NoError(t, err)
+
+	sch, err := jsonschema.NewCompiler().Compile(path)
 	require.NoError(t, err)
 
 	return sch
@@ -44,8 +47,16 @@ func TestTheExamplesFollowTheSchema(t *testing.T) {
 
 	sch := compileSchema(t, "problem.schema.json")
 
-	for _, name := range []string{"problem.yaml", "problem.json", "simple.yaml", "show.yaml", "colloquium.yaml", "roleplay.yaml"} {
-		data, err := os.ReadFile(filepath.Join("..", "example", name))
+	names, err := filepath.Glob(filepath.Join("..", "example", "*.*"))
+	require.NoError(t, err)
+
+	french, err := filepath.Glob(filepath.Join("..", "example", "fr", "*.yaml"))
+	require.NoError(t, err)
+
+	require.Len(t, french, 6, "every example has its French version, and the panel")
+
+	for _, name := range append(names, french...) {
+		data, err := os.ReadFile(name)
 		require.NoError(t, err)
 		require.NoError(t, sch.Validate(asJSON(t, data)), name)
 	}
@@ -106,6 +117,8 @@ func TestTheSchemaRejectsWhatTheCodeRejects(t *testing.T) {
 		"recruiters: {R: , S: }\ncandidates: {}\njoint-groups: [[R]]",
 		"recruiters: {R: , S: }\ncandidates: {}\njoint-groups: [[R, R]]",
 		"recruiters: {}\ncandidates: {}\nmin-gap: soon",
+		"recruiters: {R: , S: }\ncandidates: {}\npanels: [[R]]",
+		"recruiters: {R: , S: }\ncandidates: {}\npanels: [[R, R]]",
 		"recruiters: {}\ncandidates: {}\nmin-gap: unlimited",
 		"recruiters: {}\ncandidates: {}\nmax-gap: -1h",
 		"recruiters: {}\ncandidates: {}\nweekdays: [lundi]",

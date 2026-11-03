@@ -57,6 +57,11 @@ func (a Availability) On(date string) (Intervals, bool, error) {
 	return Intervals{}, true, nil
 }
 
+// IsSet tells whether the availability is given, every day or by date.
+func (a Availability) IsSet() bool {
+	return a.Daily != nil || a.Dates != nil
+}
+
 // UnmarshalYAML implements yaml.Unmarshaler.
 func (a *Availability) UnmarshalYAML(n *yaml.Node) error {
 	if n.Kind != yaml.MappingNode {

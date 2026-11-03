@@ -486,6 +486,27 @@ candidates:
 		`-not-before: invalid date "Wednesday"`)
 }
 
+// Every example, in English and in French, plans everybody.
+func TestRunEveryExample(t *testing.T) {
+	t.Parallel()
+
+	names, err := filepath.Glob(filepath.Join("..", "..", "example", "*.*"))
+	require.NoError(t, err)
+
+	french, err := filepath.Glob(filepath.Join("..", "..", "example", "fr", "*.yaml"))
+	require.NoError(t, err)
+
+	for _, name := range append(names, french...) {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var out bytes.Buffer
+			require.NoError(t, run(t.Context(), []string{"-patience", "300ms", name}, nil, &out, &out))
+			require.Contains(t, out.String(), "All meetings are planned.")
+		})
+	}
+}
+
 // The examples of other uses (README): meetings with everybody at once, and
 // the programme of a colloquium.
 func TestRunOtherUses(t *testing.T) {
@@ -523,4 +544,61 @@ candidates:
 	require.NoError(t, run(t.Context(), []string{"-patience", "100ms"}, strings.NewReader(problem), &out, &out))
 	require.Contains(t, out.String(), "To plan later: episode (host, guest, other guest)")
 	require.Contains(t, out.String(), "Impossible with these availabilities")
+}
+
+// A shoot over two days in a row (README, other uses): each day gathers its
+// whole team, thanks to the panels, or the shoot is not planned.
+func TestRunShootOverDays(t *testing.T) {
+	t.Parallel()
+
+	problem := `from: 2026-11-16
+to: 2026-11-20
+day: 09:00-18:00
+min-gap: 1d
+max-gap: 1d
+panels:
+  - [Ada day 1, Blaise day 1]
+  - [Ada day 2, Blaise day 2]
+recruiters:
+  Ada day 1: {availability: {2026-11-17: 09:00-18:00, 2026-11-18: 09:00-18:00}}
+  Blaise day 1: {availability: {2026-11-16: 09:00-18:00, 2026-11-18: 09:00-18:00}}
+  Ada day 2: {availability: {2026-11-17: 09:00-18:00, 2026-11-19: 09:00-18:00}}
+  Blaise day 2: {availability: {2026-11-17: 09:00-18:00, 2026-11-19: 09:00-18:00}}
+candidates:
+  the shoot:
+    duration: 6h
+    meet: {Ada day 1: 1, Blaise day 1: 1, Ada day 2: 2, Blaise day 2: 2}
+`
+
+	var out bytes.Buffer
+	require.NoError(t, run(t.Context(), []string{"-patience", "200ms"}, strings.NewReader(problem), &out, &out))
+	require.Contains(t, out.String(), "Wed 2026-11-18 ")
+	require.Contains(t, out.String(), "the shoot   Ada day 1 + Blaise day 1")
+	require.Contains(t, out.String(), "Thu 2026-11-19 ")
+	require.Contains(t, out.String(), "the shoot   Ada day 2 + Blaise day 2")
+
+	// Blaise is no longer there on the 18th: no two days in a row with the
+	// whole team, so no shoot, rather than Ada and Blaise on separate days.
+	out.Reset()
+	problem = strings.Replace(problem, "Blaise day 1: {availability: {2026-11-16: 09:00-18:00, 2026-11-18: 09:00-18:00}}",
+		"Blaise day 1: {availability: {2026-11-16: 09:00-18:00}}", 1)
+	require.NoError(t, run(t.Context(), []string{"-patience", "200ms"}, strings.NewReader(problem), &out, &out))
+	require.Contains(t, out.String(), "To plan later: the shoot")
+}
+
+// A person without availability when others have one may be an oversight:
+// the command says who is available whenever the day allows.
+func TestRunNotesPeopleWithoutAvailability(t *testing.T) {
+	t.Parallel()
+
+	var out, errs bytes.Buffer
+	require.NoError(t, run(t.Context(), []string{"-patience", "100ms"},
+		strings.NewReader("day: 09:00-17:00\nrecruiters:\n  R1: {availability: 09:00-12:00}\n  R2:\ncandidates:\n  A: {meet: [R1, R2]}\n"), &out, &errs))
+	require.Contains(t, errs.String(), "note: no availability for R2, A: available whenever the day allows (09:00-17:00)\n")
+
+	// Nobody has one: the day is everybody's, on purpose.
+	errs.Reset()
+	require.NoError(t, run(t.Context(), []string{"-patience", "100ms"},
+		strings.NewReader("recruiters:\n  R1:\ncandidates:\n  A: {meet: [R1]}\n"), &out, &errs))
+	require.NotContains(t, errs.String(), "no availability")
 }

@@ -36,9 +36,14 @@ Not only interviews: the recordings of a show with guests who are hard to
 gather, the programme of a colloquium, role-playing games… see [Other
 uses](#other-uses).
 
+**[Try it online](https://frederickfrance.github.io/igiveyouarendezvous/)**: edit an example and plan it, in your browser,
+without installing anything. Everything is computed on your computer: what
+you type is sent nowhere.
+
 ## Your first schedule, step by step
 
-No programming, no installation: follow these steps exactly, in order.
+No programming, no installation: follow these steps exactly, in order. (To
+just try, the [online demo](https://frederickfrance.github.io/igiveyouarendezvous/) needs none of them.)
 
 **1. Get the program.** Open the [Releases](https://github.com/FrederickFrance/igiveyouarendezvous/releases/latest) page and download the zip
 of your computer:
@@ -109,8 +114,10 @@ place of `problem.yaml`. (To plan a whole week in one go, see `from` and
 wrong: check the spaces at the start of that line, the colon, and that the
 names are written as under `recruiters`. The full commented example,
 `example-full.yaml`, shows everything else: availabilities by person and by
-date, priorities, joint interviews… The other `example-….yaml` files plan
-other things than interviews: a show, a colloquium, role-playing games.
+date, priorities, joint interviews… `example-panel.yaml` plans a selection
+panel, and the other `example-….yaml` files other things than interviews: a
+show, a colloquium, role-playing games. The folder `exemples-fr` has all of
+them in French.
 
 ## Install
 
@@ -233,6 +240,7 @@ candidates:
 | `min-gap` | `0` | the least time between two interviews of a candidate: a duration (`30m`, `2h`) or calendar days (`3d`) |
 | `max-gap` | `0` | the most time between two interviews of a candidate: a duration, calendar days (`1d`: the next day at the latest) or `unlimited`; `0` and `0`: back to back |
 | `joint-groups` | none | groups of recruiters who may interview together (see below) |
+| `panels` | none | groups of recruiters who always interview together, such as a jury (see below) |
 | `max-joint-size` | `0` | most recruiters in a joint interview (`0`: no limit) |
 | `objectives` | see below | objectives, the most important first |
 | `recruiters.<name>.duration` | `duration` | length of the interviews with this recruiter; a joint interview lasts as long as its longest part |
@@ -262,6 +270,8 @@ candidates:
       2026-11-05: 09:00-12:00
 ```
 
+A person without availability is available whenever `day` allows. When
+others have one, it may be an oversight: the command lists them in a note.
 A person whose availability is given by date is absent on the other dates.
 A period is then needed, `from` and `to` in the file or `-from` and `-to`:
 without one, the command refuses to run, and lists the dates found in the
@@ -304,6 +314,13 @@ may belong to several groups, and a joint interview needs all its recruiters
 in one group: with `[[R2, R3], [R3, R4]]`, 2+3 and 3+4 are possible, 2+4 is
 not. A recruiter of no group always interviews alone; without groups, every
 interview is one-to-one.
+
+**Panels.** Recruiters who always interview together, such as a jury:
+`panels: [[Alice, Bob, Chloé]]`. The members of a panel that a candidate
+must meet, the candidate meets in one interview, with nobody else, or not at
+all: never one after the other. A recruiter belongs to one panel at most,
+and then to no joint group; `max-joint-size` does not apply to panels. Full
+example: [a selection panel](example/panel.yaml).
 
 **The next period.** `-rest` writes the problem file again, with the
 candidates served removed; the others keep all their meetings. The period
@@ -367,7 +384,7 @@ candidates:              # the episodes
 
 The host is in every episode: as a "recruiter" does one thing at a time, two
 recordings never overlap, and the guests shared by several episodes neither.
-Full examples: [the recordings of a show](example/show.yaml),
+Full examples ([in French](example/fr) too): [the recordings of a show](example/show.yaml),
 [role-playing games](example/roleplay.yaml) whose game master runs two
 tables.
 
@@ -395,6 +412,28 @@ Some traps:
   talks into the mornings: leave it out;
 - all or nothing: a speaker who cannot be placed leaves the whole colloquium
   unplanned (the output says who); one room only.
+
+**A shoot over several days in a row.** The shoot is one candidate; each
+person appears once per day (`Ada day 1`, `Ada day 2`…, with their
+availabilities); the people of a day form a panel, so that each day gathers
+its whole team; the ranks give the order of the days, and the gaps make them
+follow each other:
+
+```yaml
+min-gap: 1d
+max-gap: 1d
+panels:
+  - [Ada day 1, Blaise day 1]
+  - [Ada day 2, Blaise day 2]
+candidates:
+  the shoot:
+    duration: 6h
+    meet: {Ada day 1: 1, Blaise day 1: 1, Ada day 2: 2, Blaise day 2: 2}
+```
+
+Without two days in a row with the whole team, the shoot is not planned.
+The limit: for the program, `Ada day 1` is not Ada, so a clash with another
+recording of the same person, in the same file, goes unseen.
 
 ## Objectives
 
@@ -680,6 +719,15 @@ the tutorial (`.github/workflows/release.yml`, `scripts/package.sh`).
 The changes of each version are in the [changelog](CHANGELOG.md): before
 pushing a tag, add the section of the version there; the release takes it as
 its notes (`scripts/notes.sh`).
+
+The [online demo](https://frederickfrance.github.io/igiveyouarendezvous/) is the program compiled to WebAssembly
+(`cmd/igiveyouarendezvous/main_js.go`) behind a static page (`web/`), which
+runs it in a worker: the files it reads and writes stay in memory
+(`demo.go`). `scripts/web.sh` builds it into `dist/web`
+(`python3 -m http.server -d dist/web` to try it), the CI runs the tests
+compiled to WebAssembly with Node.js, and `.github/workflows/pages.yml`
+publishes it on GitHub Pages whenever `main` changes. Pages must be set to
+"GitHub Actions" once, in Settings > Pages.
 
 ## Dependencies
 

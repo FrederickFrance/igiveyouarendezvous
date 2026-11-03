@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=../../schema/problem.schema.json
+#
+# Pas seulement des entretiens : les enregistrements d'une émission. Chaque
+# épisode est un « candidat » qui rencontre tout le monde à la fois
+# (together: true) : l'animatrice et les invités. Le programme trouve, pour
+# chaque épisode, un moment où tous sont libres, sans jamais deux
+# enregistrements en même temps pour l'animatrice ou un invité.
+
+from: 2026-11-16
+to: 2026-11-20
+day: 09:00-18:00
+duration: 1h            # un enregistrement, sauf si l'épisode en dit autrement
+
+recruiters:             # les personnes : l'animatrice et les invités
+  Camille (animatrice):
+  Ada:
+    availability:
+      2026-11-17: 09:00-12:00
+      2026-11-19: 14:00-18:00
+  Blaise:
+    availability:
+      2026-11-17: 10:00-12:00
+      2026-11-19: 09:00-18:00
+  Grace:
+    availability:
+      2026-11-16: 09:00-18:00
+      2026-11-19: 14:00-17:00
+
+candidates:             # les épisodes
+  les joies de la recherche opérationnelle:
+    meet: [Camille (animatrice), Ada, Blaise, Grace]
+    together: true
+    duration: 2h
+  une courte sur la planification:
+    meet: [Camille (animatrice), Blaise]
+    together: true
+    duration: 30m
+  les graphes pour tous:
+    meet: [Camille (animatrice), Ada, Grace]
+    together: true

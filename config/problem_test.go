@@ -402,3 +402,56 @@ candidates:
     availability: {2026-11-09: 9h-10h, 2026-11-12: 9h-10h}
 `, b.String())
 }
+
+// Everybody served: the file of the rest stays readable, the comment of the
+// candidates kept.
+func TestNextWithNobodyLeft(t *testing.T) {
+	t.Parallel()
+
+	f, err := Parse([]byte("recruiters: # the people\n  R:\ncandidates: # the episodes\n  A: {meet: [R]}\n"))
+	require.NoError(t, err)
+
+	p, _, err := f.Problem("", "")
+	require.NoError(t, err)
+
+	next, err := f.Next(p, &planning.Schedule{})
+	require.NoError(t, err)
+
+	var b bytes.Buffer
+	require.NoError(t, next.Write(&b, YAML))
+	require.Equal(t, "recruiters: # the people\n  R:\ncandidates: {} # the episodes\n", b.String())
+
+	_, err = Parse(b.Bytes())
+	require.NoError(t, err)
+}
+
+func TestPanelsOfTheFile(t *testing.T) {
+	t.Parallel()
+
+	f, err := Parse([]byte("panels: [[R2, R3]]\nrecruiters: {R1: , R2: , R3: }\ncandidates:\n  A: {meet: [R1, R2, R3]}\n"))
+	require.NoError(t, err)
+
+	p, _, err := f.Problem("", "")
+	require.NoError(t, err)
+	require.Equal(t, [][]int{{1, 2}}, p.Panels)
+
+	f, err = Parse([]byte("panels: [[R2, R9]]\nrecruiters: {R1: , R2: }\ncandidates: {}\n"))
+	require.NoError(t, err)
+
+	_, _, err = f.Problem("", "")
+	require.EqualError(t, err, `panels: "R9" is not a recruiter of the file`)
+}
+
+func TestWithoutAvailability(t *testing.T) {
+	t.Parallel()
+
+	for text, want := range map[string][]string{
+		"recruiters: {R1: {availability: 9h-12h}, R2: }\ncandidates:\n  A: {meet: [R1]}\n  B: {meet: [R2], availability: none}\n": {"R2", "A"},
+		"recruiters: {R1: , R2: }\ncandidates:\n  A: {meet: [R1]}\n":                                                              nil,
+		"recruiters: {R1: {availability: 9h-12h}}\ncandidates:\n  show: {meet: [R1], together: true}\n":                           nil,
+	} {
+		f, err := Parse([]byte(text))
+		require.NoError(t, err)
+		require.Equal(t, want, f.WithoutAvailability(), text)
+	}
+}

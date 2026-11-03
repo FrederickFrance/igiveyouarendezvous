@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=../../schema/problem.schema.json
+#
+# Pas seulement des entretiens : des parties de jeu de rôle. Chaque partie
+# est un « candidat » qui réunit tous ses joueurs à la fois
+# (together: true) ; la meneuse de jeu anime deux tables, donc les parties
+# ne se chevauchent jamais pour elle.
+
+from: 2026-11-21
+to: 2026-11-29
+weekdays: [fri, sat, sun]        # les soirs et les week-ends
+day: 14:00-23:00
+duration: 4h
+
+recruiters:                      # les joueurs
+  Morgane (meneuse de jeu):
+    availability:
+      2026-11-21: 14:00-23:00
+      2026-11-27: 19:00-23:00
+      2026-11-28: 14:00-23:00
+  Lou:
+    availability: {2026-11-21: 18:00-23:00, 2026-11-28: 14:00-19:00}
+  Max:
+  Noé:
+    availability: {2026-11-22: 14:00-23:00, 2026-11-28: 14:00-23:00}
+  Sacha:
+    availability: {2026-11-21: 14:00-18:00, 2026-11-27: 19:00-23:00}
+
+candidates:                      # les parties
+  le sortilège de Zandar:
+    meet: [Morgane (meneuse de jeu), Lou, Max, Noé]
+    together: true
+  la tour des brumes:
+    meet: [Morgane (meneuse de jeu), Max, Sacha]
+    together: true

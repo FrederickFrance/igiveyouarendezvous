@@ -45,11 +45,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
 	"runtime"
 	"slices"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/FrederickFrance/igiveyouarendezvous/config"
@@ -67,26 +65,19 @@ const (
 // no longer hold: the command exits with code 2.
 var errAlerts = errors.New("fixed appointments to look into")
 
-func main() {
-	// The first Ctrl+C (or SIGTERM) stops the computation, which still
-	// prints its best schedule; a second one kills the program.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-ctx.Done()
-		stop()
-	}()
-
-	if err := run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
-		switch {
-		case errors.Is(err, errAlerts): // reported with the schedule
-			os.Exit(2)
-		case !errors.Is(err, flag.ErrHelp):
-			fmt.Fprintln(os.Stderr, "error:", err)
-		}
-
-		os.Exit(1)
-	}
+// files reaches the files the command reads (-start) and writes (-out,
+// -rest): the disk, or the memory of the browser for the online demo
+// (demo.go).
+type files struct {
+	read  func(path string) ([]byte, error)
+	write func(path string, write func(io.Writer) error) error
+	// best, when set (online demo), receives every better schedule found:
+	// as printed, and as a plan file in JSON.
+	best func(text, plan string)
 }
+
+// disk is the file system of the computer.
+var disk = files{read: os.ReadFile, write: writeDiskFile}
 
 // options holds the command-line flags.
 type options struct {
@@ -98,6 +89,7 @@ type options struct {
 	workers                      int
 	progress, list, fixAll       bool
 	problem                      string // the problem file, or "" for stdin
+	files                        files
 }
 
 func parseFlags(args []string, stderr io.Writer) (*options, error) {
@@ -145,10 +137,17 @@ func parseFlags(args []string, stderr io.Writer) (*options, error) {
 
 // run is the command; canceling ctx stops the computation early.
 func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
+	return runOn(ctx, disk, args, stdin, stdout, stderr)
+}
+
+// runOn runs the command with the files of fsys.
+func runOn(ctx context.Context, fsys files, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	o, err := parseFlags(args, stderr)
 	if err != nil {
 		return err
 	}
+
+	o.files = fsys
 
 	if o.list {
 		for _, obj := range planning.AllObjectives() {
@@ -171,7 +170,12 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	limited, cancel := context.WithTimeout(ctx, o.timeout)
 	defer cancel()
 
-	s, err := planning.Search(limited, p, opts, searchOptions(o, start, stderr))
+	so := searchOptions(o, start, stderr)
+	if o.files.best != nil {
+		so.Progress = bestReporter(o, p, pe, so.Progress)
+	}
+
+	s, err := planning.Search(limited, p, opts, so)
 
 	switch {
 	case ctx.Err() != nil && err != nil:
@@ -189,7 +193,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	printSchedule(stdout, p, s, pe)
 
 	if o.outPath != "" {
-		if err := writeFile(o.outPath, func(w io.Writer) error {
+		if err := o.files.write(o.outPath, func(w io.Writer) error {
 			return config.WritePlan(w, p, s, o.from, o.to, config.FormatOf(o.outPath))
 		}); err != nil {
 			return err
@@ -202,7 +206,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 			return err
 		}
 
-		if err := writeFile(o.restPath, func(w io.Writer) error { return next.Write(w, config.FormatOf(o.restPath)) }); err != nil {
+		if err := o.files.write(o.restPath, func(w io.Writer) error { return next.Write(w, config.FormatOf(o.restPath)) }); err != nil {
 			return err
 		}
 	}
@@ -285,6 +289,15 @@ func loadProblem(o *options, stdin io.Reader, stderr io.Writer) (*config.File, *
 			strings.Join(slices.Compact([]string{o.from, o.to}), " to "))
 	}
 
+	if without := f.WithoutAvailability(); len(without) > 0 {
+		day := planning.Interval{Start: planning.DefaultDayStart, End: planning.DefaultDayEnd}.String() + ", by default"
+		if f.Day != nil {
+			day = f.Day.String()
+		}
+
+		fmt.Fprintf(stderr, "note: no availability for %s: available whenever the day allows (%s)\n", abbreviate(without, maxListed), day)
+	}
+
 	if o.objectives != "" {
 		if opts.Objectives, err = planning.ParseObjectives(o.objectives); err != nil {
 			return nil, nil, planning.Options{}, period{}, err
@@ -313,7 +326,7 @@ func loadStart(o *options, p *planning.Problem, opts planning.Options, pe period
 		return nil, nil, nil
 	}
 
-	data, err := os.ReadFile(o.startPath) //nolint:gosec,nolintlint // the user names the file to read (gosec flags it in some runs only)
+	data, err := o.files.read(o.startPath)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -385,9 +398,28 @@ func searchOptions(o *options, start *planning.Schedule, stderr io.Writer) plann
 	return so
 }
 
-// writeFile writes a file through a temporary one, so that an interrupted
-// write never leaves half a file (the -start file may be the -out one).
-func writeFile(path string, write func(io.Writer) error) error {
+// bestReporter returns a progress function that gives o.files.best every
+// better schedule, then calls next, if any.
+func bestReporter(o *options, p *planning.Problem, pe period, next func(planning.Progress)) func(planning.Progress) {
+	return func(pr planning.Progress) {
+		var text, plan strings.Builder
+
+		printSchedule(&text, p, pr.Schedule, pe)
+
+		if err := config.WritePlan(&plan, p, pr.Schedule, o.from, o.to, config.JSON); err == nil {
+			o.files.best(text.String(), plan.String())
+		}
+
+		if next != nil {
+			next(pr)
+		}
+	}
+}
+
+// writeDiskFile writes a file through a temporary one, so that an
+// interrupted write never leaves half a file (the -start file may be the
+// -out one).
+func writeDiskFile(path string, write func(io.Writer) error) error {
 	tmp := path + ".tmp"
 
 	f, err := os.Create(tmp) //nolint:gosec // the user names the file to write

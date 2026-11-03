@@ -37,10 +37,15 @@ Pas seulement des entretiens : les enregistrements d'une émission avec des
 invités difficiles à réunir, le programme d'un colloque, des parties de jeu
 de rôle… voir [Autres usages](#autres-usages).
 
+**[Essayer en ligne](https://frederickfrance.github.io/igiveyouarendezvous/)** : modifiez un exemple et planifiez-le, dans
+votre navigateur, sans rien installer. Tout se calcule sur votre ordinateur :
+ce que vous tapez n'est envoyé nulle part.
+
 ## Premier planning, pas à pas
 
 Sans rien connaître à la programmation ni à la ligne de commande : suivez ces
-étapes exactement, dans l'ordre.
+étapes exactement, dans l'ordre. (Pour simplement essayer, la [démo en
+ligne](https://frederickfrance.github.io/igiveyouarendezvous/) n'en demande aucune.)
 
 **1. Récupérer le programme.** Ouvrez la page [Releases](https://github.com/FrederickFrance/igiveyouarendezvous/releases/latest) et
 téléchargez le zip de votre ordinateur :
@@ -114,9 +119,12 @@ d'un coup, voyez `from` et `to` dans `example-full.yaml`.)
 vérifiez les espaces en début de ligne, les deux-points, et que les noms sont
 écrits comme sous `recruiters`. L'exemple complet et commenté,
 `example-full.yaml`, montre tout le reste : disponibilités par personne et
-par date, priorités, entretiens communs… Les autres fichiers
-`example-….yaml` planifient autre chose que des entretiens : une émission,
-un colloque, des parties de jeu de rôle.
+par date, priorités, entretiens communs… `example-panel.yaml` planifie une
+commission de recrutement, et les autres fichiers `example-….yaml` autre
+chose que des entretiens : une émission, un colloque, des parties de jeu de
+rôle. **Le dossier `exemples-fr` les contient tous en français**, avec des
+commentaires et des noms en français (les clés, elles, restent en anglais) :
+`exemples-fr/simple.yaml` est la version française de `problem.yaml`.
 
 ## Installation
 
@@ -243,6 +251,7 @@ Les clés sont en anglais, comme le reste du programme. `recruiters` et
 | `min-gap` | `0` | le temps minimal entre deux entretiens d'un candidat : une durée (`30m`, `2h`) ou des jours calendaires (`3d`) |
 | `max-gap` | `0` | le temps maximal entre deux entretiens d'un candidat : une durée, des jours calendaires (`1d` : le lendemain au plus tard) ou `unlimited` ; `0` et `0` : enchaînés |
 | `joint-groups` | aucun | groupes de recruteurs qui peuvent recevoir ensemble (voir plus bas) |
+| `panels` | aucun | groupes de recruteurs qui reçoivent toujours ensemble, comme un jury (voir plus bas) |
 | `max-joint-size` | `0` | nombre maximal de recruteurs dans un entretien commun (`0` : sans limite) |
 | `objectives` | voir plus bas | objectifs, le plus important d'abord |
 | `recruiters.<nom>.duration` | `duration` | durée des entretiens avec ce recruteur ; un entretien commun dure autant que sa plus longue partie |
@@ -272,8 +281,10 @@ candidates:
       2026-11-05: 09:00-12:00
 ```
 
-Une personne dont la disponibilité est donnée par date est absente les
-autres jours. Il faut alors une période, `from` et `to` dans le fichier ou
+Une personne sans disponibilité est disponible dès que `day` le permet.
+Quand d'autres en ont une, c'est peut-être un oubli : la commande les liste
+dans une note. Une personne dont la disponibilité est donnée par date est
+absente les autres jours. Il faut alors une période, `from` et `to` dans le fichier ou
 `-from` et `-to` : sans, la commande refuse de tourner, et liste les dates
 trouvées dans le fichier. Sans aucune date, un fichier sans période planifie
 une journée sans date, comme dans le tutoriel.
@@ -316,6 +327,14 @@ demande que tous ses recruteurs soient dans un même groupe : avec
 `[[R2, R3], [R3, R4]]`, 2+3 et 3+4 sont possibles, 2+4 non. Un recruteur sans
 groupe reçoit toujours seul ; sans groupes, tous les entretiens sont
 individuels.
+
+**Jurys.** Des recruteurs qui reçoivent toujours ensemble, comme un jury :
+`panels: [[Alice, Bob, Chloé]]`. Les membres d'un jury qu'un candidat doit
+rencontrer, il les rencontre en un seul entretien, sans personne d'autre, ou
+pas du tout : jamais l'un après l'autre. Un recruteur appartient à un jury au
+plus, et alors à aucun groupe commun ; `max-joint-size` ne s'applique pas aux
+jurys. Exemple complet : [une commission de
+recrutement](example/fr/panel.yaml).
 
 **La période suivante.** `-rest` réécrit le fichier problème, sans les
 candidats servis ; les autres gardent toutes leurs rencontres. La période
@@ -383,15 +402,15 @@ candidates:              # les émissions
 L'animatrice est de chaque émission : comme un « recruteur » ne fait qu'une
 chose à la fois, deux enregistrements ne se chevauchent jamais, pas plus que
 pour les invités communs à plusieurs émissions. Exemples complets : [les
-enregistrements d'une émission](example/show.yaml), [des parties de jeu de
-rôle](example/roleplay.yaml) dont la meneuse de jeu anime deux tables.
+enregistrements d'une émission](example/fr/show.yaml), [des parties de jeu de
+rôle](example/fr/roleplay.yaml) dont la meneuse de jeu anime deux tables.
 
 **Un programme : une chose après l'autre.** Pour un colloque dans une seule
 salle, le colloque est le candidat et les intervenants ses recruteurs : il
 n'est qu'à un endroit à la fois, donc les interventions s'enchaînent. La
 `duration` de chaque intervenant est la durée de son intervention, les rangs
 mettent l'ouverture en premier et la clôture en dernier, et leurs
-disponibilités fixent leurs jours ([exemple complet](example/colloquium.yaml)) :
+disponibilités fixent leurs jours ([exemple complet](example/fr/colloquium.yaml)) :
 
 ```yaml
 day: 09:00-12:00, 14:00-17:00   # le déjeuner comme un trou dans la journée : interventions avant et après
@@ -410,6 +429,29 @@ Quelques pièges :
   les interventions le matin : ne le mettez pas ;
 - tout ou rien : un intervenant impossible à placer laisse tout le colloque
   non planifié (l'affichage dit qui) ; une seule salle.
+
+**Un tournage sur plusieurs jours d'affilée.** Le tournage est un candidat ;
+chaque personne y figure une fois par jour (`Ada jour 1`, `Ada jour 2`…, avec
+ses disponibilités) ; les personnes d'un même jour forment un jury, pour que
+chaque journée réunisse toute son équipe ; les rangs donnent l'ordre des
+jours, et les écarts les font se suivre :
+
+```yaml
+min-gap: 1d
+max-gap: 1d
+panels:
+  - [Ada jour 1, Blaise jour 1]
+  - [Ada jour 2, Blaise jour 2]
+candidates:
+  le tournage:
+    duration: 6h
+    meet: {Ada jour 1: 1, Blaise jour 1: 1, Ada jour 2: 2, Blaise jour 2: 2}
+```
+
+Sans deux jours d'affilée avec toute l'équipe, le tournage n'est pas
+planifié. La limite : pour le programme, `Ada jour 1` n'est pas Ada, donc un
+conflit avec un autre enregistrement de la même personne, dans le même
+fichier, passe inaperçu.
 
 ## Objectifs
 
@@ -701,6 +743,15 @@ Les changements de chaque version sont dans le [journal des
 modifications](CHANGELOG.md) (en anglais) : avant de pousser un tag, ajoutez-y
 la section de la version ; la page de la version la reprend comme notes
 (`scripts/notes.sh`).
+
+La [démo en ligne](https://frederickfrance.github.io/igiveyouarendezvous/) est le programme compilé en WebAssembly
+(`cmd/igiveyouarendezvous/main_js.go`) derrière une page statique (`web/`),
+qui le fait tourner dans un worker : les fichiers qu'il lit et écrit restent
+en mémoire (`demo.go`). `scripts/web.sh` la construit dans `dist/web`
+(`python3 -m http.server -d dist/web` pour l'essayer), la CI lance les tests
+compilés en WebAssembly avec Node.js, et `.github/workflows/pages.yml` la
+publie sur GitHub Pages à chaque changement de `main`. Il faut une fois
+régler Pages sur « GitHub Actions », dans Settings > Pages.
 
 ## Dépendances
 

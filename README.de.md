@@ -25,6 +25,9 @@ ein Kolloquium in einem Saal ist ein „Bewerber“, dessen Vorträge aufeinande
 folgen. Siehe die Beispiele [Sendung](example/show.yaml),
 [Kolloquium](example/colloquium.yaml) und [Rollenspiel](example/roleplay.yaml).
 
+**[Online ausprobieren](https://frederickfrance.github.io/igiveyouarendezvous/)**: im Browser, ohne Installation; alles wird
+auf Ihrem Computer berechnet, nichts wird gesendet.
+
 ## Der erste Plan, Schritt für Schritt
 
 Ohne Programmier- oder Kommandozeilenkenntnisse: Folgen Sie genau diesen
