@@ -365,6 +365,19 @@ et pour le JSON, une clé :
 Un chemin relatif vers une copie locale du schéma marche aussi. La clé
 `$schema` est ignorée par la commande.
 
+### Avec un assistant IA
+
+Pour ne pas écrire le YAML soi-même : [une consigne](prompt/fr.md) à copier
+dans un assistant IA (Claude, ChatGPT, Mistral…), suivie de vos règles en
+français courant (« chaque candidat voit d'abord la RH 30 minutes, puis le
+manager… »). L'assistant écrit le fichier, commenté règle par règle, et dit
+ce qu'il a supposé ; le programme le vérifie, et une erreur, avec son numéro
+de ligne, se recolle dans l'assistant pour qu'il corrige.
+
+Ce que vous tapez part chez le fournisseur de l'assistant : donnez des noms
+de remplacement (`Candidat 1`, des initiales), et remettez les vrais noms
+dans le fichier ensuite. La démo et le programme, eux, n'envoient rien.
+
 ## Autres usages
 
 Le programme place des « candidats » qui doivent rencontrer des
@@ -653,18 +666,12 @@ et `Options.NotBefore` le premier jour des nouveaux entretiens.
 - **Réunions** : `Candidate.Together` (tout le monde à la fois, ou rien) et
   `Candidate.Duration` (à la place des durées des recruteurs).
 
-`planning.Solve(ctx, gomilp.New(), p, options)` fait de même avec le solveur
-exact, sur de petits problèmes d'une journée seulement (voir [le modèle
-exact](#le-modèle-exact)).
-
 | Paquet | Contenu |
 |---|---|
-| `planning` | le problème, les options, `Search`, `Solve`, `Check` (vérifie un planning indépendamment), `Evaluate`, `Clean` |
-| `mip` | modèle linéaire générique et interface `Solver`, pour brancher un autre solveur exact |
-| `mip/gomilp` | le solveur exact fourni |
+| `planning` | le problème, les options, `Search`, `Check` (vérifie un planning indépendamment), `Evaluate`, `Clean` |
 | `config` | lit le fichier problème (`Load`, `Parse`, `Problem(from, to)`), écrit celui de la période suivante (`Next`, `Write`) ; écrit et lit les fichiers plan (`WritePlan`, `ReadPlan`), en YAML ou en JSON |
 
-`planning` et `mip` ne dépendent que de la bibliothèque standard.
+`planning` ne dépend que de la bibliothèque standard.
 
 ## Qualité de la recherche locale
 
@@ -700,26 +707,16 @@ Les tests vérifient aussi, sur 60 petits problèmes aléatoires d'une journée
 (avec ou sans pauses, attente, priorités et urgence) et sur 80 petites
 périodes aléatoires de deux ou trois jours (écarts en temps ou en jours,
 ordres, jours fermés, disponibilités par jour), que la recherche trouve le
-même résultat qu'une énumération de tous les plannings possibles. Chaque planning rendu, par n'importe quel moteur, est
-revérifié par `planning.Check`.
+même résultat qu'une énumération de tous les plannings possibles. Chaque
+planning rendu est revérifié par `planning.Check`.
 
-## Le modèle exact
-
-`planning.Solve` écrit le problème comme un programme linéaire en nombres
-entiers : le temps est découpé en créneaux ; chaque variable binaire dit
-« cet entretien (un candidat et un groupe de recruteurs permis) commence à ce
-créneau ». Les objectifs sont optimisés l'un après l'autre, chacun étant figé
-avant le suivant.
-
-Il planifie une journée, avec des entretiens enchaînés ou une attente
-quelconque, sans ordre : au-delà, il rend `planning.ErrUnsupported`. Avec
-[go-milp](https://github.com/daniel-sullivan/go-milp) (Go pur), il prouve
-l'optimum de petits problèmes, quelques candidats : les tests s'en servent
-de référence. Sur des cas réels il ne sert à rien, d'où son absence
-de la commande : sur 60 à 100 candidats, il ne trouve aucun planning en
-plusieurs minutes, même avec la valeur du planning glouton comme borne, et
-la recherche locale suivie d'une réoptimisation exacte de morceaux du
-planning ne gagne aucune rencontre non plus.
+**Pourquoi pas de solveur exact.** Jusqu'à la v0.3, la bibliothèque proposait
+aussi un modèle exact, résolu par
+[go-milp](https://github.com/daniel-sullivan/go-milp) (Go pur). Il prouvait
+l'optimum pour quelques candidats, mais ne trouvait aucun planning en
+plusieurs minutes sur 60 à 100, même avec le planning glouton comme borne. Il
+a été retiré en v0.4.0, avec sa dépendance : les solveurs qui prouvent ces
+optimums, comme HiGHS, sont écrits en C ou en C++.
 
 ## Développement
 
@@ -730,7 +727,9 @@ golangci-lint run       # linter strict (.golangci.yml), version 2.15 ou plus po
 
 Les tests vérifient les exemples et les fichiers écrits par la commande face
 aux schémas JSON, et que les schémas connaissent les mêmes clés et objectifs
-que le code.
+que le code. Pour contribuer, signaler un problème ou une vulnérabilité : le
+[guide de contribution](CONTRIBUTING.md), en anglais (on peut écrire en
+français), et la [politique de sécurité](SECURITY.md).
 
 La CI GitHub (`.github/workflows/ci.yml`) lance les tests avec le détecteur
 de concurrence et la couverture, le linter et `osv-scanner` à chaque push et
@@ -758,7 +757,6 @@ régler Pages sur « GitHub Actions », dans Settings > Pages.
 | Module | Licence | Utilisé par |
 |---|---|---|
 | go.yaml.in/yaml/v3 | MIT et Apache-2.0 | `config` |
-| github.com/daniel-sullivan/go-milp | MIT | `mip/gomilp` |
 | github.com/stretchr/testify | MIT | tests seulement |
 | github.com/santhosh-tekuri/jsonschema/v6 | Apache-2.0 | tests seulement (les schémas) |
 

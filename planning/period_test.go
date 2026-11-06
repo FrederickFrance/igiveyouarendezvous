@@ -10,7 +10,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/FrederickFrance/igiveyouarendezvous/mip/gomilp"
 	"github.com/FrederickFrance/igiveyouarendezvous/planning"
 )
 
@@ -272,31 +271,6 @@ func TestInvalidPeriods(t *testing.T) {
 		_, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Iterations: 1})
 		require.EqualError(t, err, msg)
 	}
-}
-
-// The exact model plans one day, back to back or with any wait, in any
-// order: beyond, Solve says so, and Search plans.
-func TestTheExactModelIsOneDay(t *testing.T) {
-	t.Parallel()
-
-	p := table(t, "| | R1 | R2 |\n| A | X | X |\n")
-	solver := gomilp.New()
-
-	for _, o := range []planning.Options{{}, {MaxGap: planning.Gap{Duration: planning.NoLimit}}, {Days: 1}} {
-		_, err := planning.Solve(t.Context(), solver, p, o)
-		require.NoError(t, err, "%+v", o)
-	}
-
-	for _, o := range []planning.Options{
-		{Days: 2}, {MinGap: planning.Gap{Duration: time.Hour}, MaxGap: planning.Gap{Duration: planning.NoLimit}},
-		{MaxGap: planning.Gap{Duration: time.Hour}},
-	} {
-		_, err := planning.Solve(t.Context(), solver, p, o)
-		require.ErrorIs(t, err, planning.ErrUnsupported, "%+v", o)
-	}
-
-	_, err := planning.Solve(t.Context(), solver, twoMeetings(t), planning.Options{})
-	require.ErrorIs(t, err, planning.ErrUnsupported, "ranks")
 }
 
 // searchPeriod plans with the local search, and checks the schedule.

@@ -26,17 +26,15 @@ func recording(t *testing.T, r3 planning.Interval) *planning.Problem {
 func TestTogether(t *testing.T) {
 	t.Parallel()
 
-	forEachEngine(t, func(t *testing.T, e engine) {
-		s := solve(t, e, recording(t, planning.Interval{Start: clock(8, 0), End: clock(11, 0)}), planning.Options{})
-		require.Equal(t, []planning.Interview{{
-			Candidate: 0, Recruiters: []int{0, 1, 2}, Requests: []int{0, 1, 2}, Start: clock(10, 0), End: clock(11, 0),
-		}}, s.Interviews, "the only hour everybody is free")
+	s := solve(t, recording(t, planning.Interval{Start: clock(8, 0), End: clock(11, 0)}), planning.Options{})
+	require.Equal(t, []planning.Interview{{
+		Candidate: 0, Recruiters: []int{0, 1, 2}, Requests: []int{0, 1, 2}, Start: clock(10, 0), End: clock(11, 0),
+	}}, s.Interviews, "the only hour everybody is free")
 
-		// No hour for everybody: no meeting, rather than pieces of it.
-		s = solve(t, e, recording(t, planning.Interval{Start: clock(8, 0), End: clock(10, 0)}), planning.Options{MaxGap: planning.Gap{Duration: planning.NoLimit}})
-		require.Empty(t, s.Interviews)
-		require.Equal(t, []int{0, 1, 2}, s.Unscheduled)
-	})
+	// No hour for everybody: no meeting, rather than pieces of it.
+	s = solve(t, recording(t, planning.Interval{Start: clock(8, 0), End: clock(10, 0)}), planning.Options{MaxGap: planning.Gap{Duration: planning.NoLimit}})
+	require.Empty(t, s.Interviews)
+	require.Equal(t, []int{0, 1, 2}, s.Unscheduled)
 }
 
 func TestCheckTogether(t *testing.T) {

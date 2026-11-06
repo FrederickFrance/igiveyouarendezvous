@@ -2,10 +2,9 @@ package planning_test
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"math/rand/v2"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -14,10 +13,10 @@ import (
 	"github.com/FrederickFrance/igiveyouarendezvous/planning"
 )
 
-// TestAgainstBruteForce compares Solve and Search with an exhaustive search
-// on small random problems: every possible schedule is generated, Check
-// filters the valid ones and Evaluate ranks them. This tests the model, not
-// only the solvers, and checks that the local search finds these optima.
+// TestAgainstBruteForce compares Search with an exhaustive search on small
+// random problems: every possible schedule is generated, Check filters the
+// valid ones and Evaluate ranks them. This tests the rules, not only the
+// search, and checks that the search finds these optima.
 func TestAgainstBruteForce(t *testing.T) {
 	t.Parallel()
 
@@ -26,28 +25,19 @@ func TestAgainstBruteForce(t *testing.T) {
 	}
 
 	for seed := range uint64(60) {
-		forEachEngine(t, func(t *testing.T, e engine) {
+		t.Run(fmt.Sprint("seed ", seed), func(t *testing.T) {
+			t.Parallel()
+
 			rnd := rand.New(rand.NewPCG(seed, 7))
 			p, o := randomProblem(rnd)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute) // generous: the race detector is slow
-			s, err := e.plan(ctx, p, o)
+			s, err := search(ctx, p, o)
 
 			cancel()
 
-			if e.exact && errors.Is(err, planning.ErrUnsupported) {
-				t.Skip("beyond the exact model")
-			}
-
-			if e.exact && err != nil && strings.Contains(err.Error(), "numerically") {
-				// go-milp, a test oracle here, sometimes fails on its linear
-				// relaxations: such a seed tells nothing.
-				t.Skipf("seed %d: %v", seed, err)
-			}
-
 			require.NoError(t, err)
 			require.NoError(t, planning.Check(p, o, s))
-			require.True(t, !e.exact || s.Proven(), "optimum not proven: %+v", s.Scores)
 
 			got := make([]int, len(s.Scores))
 			for i, sc := range s.Scores {

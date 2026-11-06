@@ -2,7 +2,6 @@ package planning_test
 
 import (
 	"context"
-	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -10,8 +9,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/FrederickFrance/igiveyouarendezvous/mip"
-	"github.com/FrederickFrance/igiveyouarendezvous/mip/gomilp"
 	"github.com/FrederickFrance/igiveyouarendezvous/planning"
 )
 
@@ -23,41 +20,15 @@ const exampleTable = `
 | candidate D | X           | X           |             |             | X           |
 `
 
-// engine plans one day: Solve with a MIP solver, or Search.
-type engine struct {
-	name  string
-	exact bool
-	plan  func(ctx context.Context, p *planning.Problem, o planning.Options) (*planning.Schedule, error)
-}
-
 // searchIterations is enough for the small problems of the tests, and
 // keeps the search deterministic.
 const searchIterations = 3000
 
-func engines() []engine {
-	exact := func(solver mip.Solver) engine {
-		return engine{name: solver.Name(), exact: true, plan: func(ctx context.Context, p *planning.Problem, o planning.Options) (*planning.Schedule, error) {
-			return planning.Solve(ctx, solver, p, o)
-		}}
-	}
-
-	return append([]engine{exact(gomilp.New())}, engine{name: "search", plan: func(ctx context.Context, p *planning.Problem, o planning.Options) (*planning.Schedule, error) {
-		return planning.Search(ctx, p, o, planning.SearchOptions{Seed: 1, Iterations: searchIterations})
-	}})
-}
-
-// forEachEngine runs test with go-milp and the
-// local search. The expected values are optima: the search must find them
-// on these small problems.
-func forEachEngine(t *testing.T, test func(t *testing.T, e engine)) {
-	t.Helper()
-
-	for _, e := range engines() {
-		t.Run(e.name, func(t *testing.T) {
-			t.Parallel()
-			test(t, e)
-		})
-	}
+// search plans with the local search, deterministically. The expected values
+// of the tests are optima: the search must find them on these small
+// problems.
+func search(ctx context.Context, p *planning.Problem, o planning.Options) (*planning.Schedule, error) {
+	return planning.Search(ctx, p, o, planning.SearchOptions{Seed: 1, Iterations: searchIterations})
 }
 
 // together reads a table where every recruiter may interview with every other.
@@ -118,23 +89,15 @@ func table(t *testing.T, text string) *planning.Problem {
 	return p
 }
 
-func solve(t *testing.T, e engine, p *planning.Problem, o planning.Options) *planning.Schedule {
+func solve(t *testing.T, p *planning.Problem, o planning.Options) *planning.Schedule {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute) // generous: the race detector is slow
 	defer cancel()
 
-	s, err := e.plan(ctx, p, o)
-	if e.exact && errors.Is(err, planning.ErrUnsupported) {
-		t.Skip("beyond the exact model")
-	}
-
+	s, err := search(ctx, p, o)
 	require.NoError(t, err)
 	require.NoError(t, planning.Check(p, o, s))
-
-	if e.exact {
-		require.True(t, s.Proven(), "optimum not proven: %+v", s.Scores)
-	}
 
 	return s
 }
@@ -186,14 +149,12 @@ func clock(h, m int) time.Duration {
 func TestExample(t *testing.T) {
 	t.Parallel()
 
-	forEachEngine(t, func(t *testing.T, e engine) {
-		s := solve(t, e, together(t, exampleTable), planning.Options{})
+	s := solve(t, together(t, exampleTable), planning.Options{})
 
-		require.Equal(t, 4, score(t, s, planning.MaxCompleteCandidates))
-		require.Equal(t, 8, score(t, s, planning.MaxMeetings))
-		require.Equal(t, 4, score(t, s, planning.MinInterviews))
-		require.Empty(t, s.Unscheduled)
-	})
+	require.Equal(t, 4, score(t, s, planning.MaxCompleteCandidates))
+	require.Equal(t, 8, score(t, s, planning.MaxMeetings))
+	require.Equal(t, 4, score(t, s, planning.MinInterviews))
+	require.Empty(t, s.Unscheduled)
 }
 
 func TestJointGroups(t *testing.T) {
@@ -215,14 +176,12 @@ func TestJointGroups(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			forEachEngine(t, func(t *testing.T, e engine) {
-				p := table(t, "| | R1 | R2 | R3 |\n| A | X | X | X |\n")
-				p.JointGroups = tc.groups
+			p := table(t, "| | R1 | R2 | R3 |\n| A | X | X | X |\n")
+			p.JointGroups = tc.groups
 
-				s := solve(t, e, p, tc.options)
-				require.Len(t, s.Interviews, tc.interviews)
-				require.Equal(t, 1, score(t, s, planning.MaxCompleteCandidates))
-			})
+			s := solve(t, p, tc.options)
+			require.Len(t, s.Interviews, tc.interviews)
+			require.Equal(t, 1, score(t, s, planning.MaxCompleteCandidates))
 		})
 	}
 }
@@ -254,35 +213,31 @@ func TestInvalidJointGroups(t *testing.T) {
 func TestDurations(t *testing.T) {
 	t.Parallel()
 
-	forEachEngine(t, func(t *testing.T, e engine) {
-		p := together(t, "| | R1 | R2 |\n| A | X | X |\n| B | X | |\n")
-		p.Recruiters[0].Duration = 30 * time.Minute
+	p := together(t, "| | R1 | R2 |\n| A | X | X |\n| B | X | |\n")
+	p.Recruiters[0].Duration = 30 * time.Minute
 
-		s := solve(t, e, p, planning.Options{Duration: time.Hour})
-		require.Equal(t, 30*time.Minute, s.Step)
+	s := solve(t, p, planning.Options{Duration: time.Hour})
+	require.Equal(t, 30*time.Minute, s.Step)
 
-		a := interviewsOf(s, 0)
-		require.Len(t, a, 1, "A meets R1 and R2 together")
-		require.Equal(t, time.Hour, a[0].End-a[0].Start, "a joint interview lasts as long as its longest part")
+	a := interviewsOf(s, 0)
+	require.Len(t, a, 1, "A meets R1 and R2 together")
+	require.Equal(t, time.Hour, a[0].End-a[0].Start, "a joint interview lasts as long as its longest part")
 
-		b := interviewsOf(s, 1)
-		require.Len(t, b, 1)
-		require.Equal(t, 30*time.Minute, b[0].End-b[0].Start)
-	})
+	b := interviewsOf(s, 1)
+	require.Len(t, b, 1)
+	require.Equal(t, 30*time.Minute, b[0].End-b[0].Start)
 }
 
 func TestAvailability(t *testing.T) {
 	t.Parallel()
 
-	forEachEngine(t, func(t *testing.T, e engine) {
-		p := table(t, "| | R1 |\n| A | X |\n")
-		p.Recruiters[0].Availability = []planning.Interval{{Start: clock(10, 0), End: clock(12, 0)}}
-		p.Candidates[0].Availability = []planning.Interval{{Start: clock(8, 0), End: clock(11, 0)}}
+	p := table(t, "| | R1 |\n| A | X |\n")
+	p.Recruiters[0].Availability = []planning.Interval{{Start: clock(10, 0), End: clock(12, 0)}}
+	p.Candidates[0].Availability = []planning.Interval{{Start: clock(8, 0), End: clock(11, 0)}}
 
-		s := solve(t, e, p, planning.Options{})
-		require.Len(t, s.Interviews, 1)
-		require.Equal(t, clock(10, 0), s.Interviews[0].Start)
-	})
+	s := solve(t, p, planning.Options{})
+	require.Len(t, s.Interviews, 1)
+	require.Equal(t, clock(10, 0), s.Interviews[0].Start)
 }
 
 func TestChaining(t *testing.T) {
@@ -313,10 +268,8 @@ func TestChaining(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			forEachEngine(t, func(t *testing.T, e engine) {
-				s := solve(t, e, problem(t), tc.options)
-				require.Equal(t, tc.meetings, score(t, s, planning.MaxMeetings))
-			})
+			s := solve(t, problem(t), tc.options)
+			require.Equal(t, tc.meetings, score(t, s, planning.MaxMeetings))
 		})
 	}
 }
@@ -324,81 +277,71 @@ func TestChaining(t *testing.T) {
 func TestChainedInterviewsFollowEachOther(t *testing.T) {
 	t.Parallel()
 
-	forEachEngine(t, func(t *testing.T, e engine) {
-		p := table(t, "| | R1 | R2 | R3 |\n| A | 1 | 1 | 1 |\n| B | 1 | | |\n")
-		s := solve(t, e, p, planning.Options{})
+	p := table(t, "| | R1 | R2 | R3 |\n| A | 1 | 1 | 1 |\n| B | 1 | | |\n")
+	s := solve(t, p, planning.Options{})
 
-		a := interviewsOf(s, 0)
-		require.Len(t, a, 3)
+	a := interviewsOf(s, 0)
+	require.Len(t, a, 3)
 
-		for i := 1; i < len(a); i++ {
-			require.Equal(t, a[i-1].End, a[i].Start, "interviews of A must follow each other")
-		}
-	})
+	for i := 1; i < len(a); i++ {
+		require.Equal(t, a[i-1].End, a[i].Start, "interviews of A must follow each other")
+	}
 }
 
 func TestObjectiveOrder(t *testing.T) {
 	t.Parallel()
 
-	forEachEngine(t, func(t *testing.T, e engine) {
-		p := together(t, exampleTable)
+	p := together(t, exampleTable)
 
-		// Each of these objectives, put first, is best served by no interview.
-		for _, first := range []planning.Objective{planning.MinInterviews, planning.MinRecruiterSpan, planning.MinEndTimes} {
-			s := solve(t, e, p, planning.Options{Objectives: []planning.Objective{first, planning.MaxMeetings}})
-			require.Empty(t, s.Interviews, "%s first", first)
-		}
+	// Each of these objectives, put first, is best served by no interview.
+	for _, first := range []planning.Objective{planning.MinInterviews, planning.MinRecruiterSpan, planning.MinEndTimes} {
+		s := solve(t, p, planning.Options{Objectives: []planning.Objective{first, planning.MaxMeetings}})
+		require.Empty(t, s.Interviews, "%s first", first)
+	}
 
-		most := solve(t, e, p, planning.Options{Objectives: []planning.Objective{planning.MaxMeetings, planning.MinInterviews}})
-		require.Equal(t, 8, score(t, most, planning.MaxMeetings))
-		require.Equal(t, 4, score(t, most, planning.MinInterviews))
-	})
+	most := solve(t, p, planning.Options{Objectives: []planning.Objective{planning.MaxMeetings, planning.MinInterviews}})
+	require.Equal(t, 8, score(t, most, planning.MaxMeetings))
+	require.Equal(t, 4, score(t, most, planning.MinInterviews))
 }
 
 func TestRecruiterSpanAndEndTimes(t *testing.T) {
 	t.Parallel()
 
-	forEachEngine(t, func(t *testing.T, e engine) {
-		p := table(t, "| | R1 |\n| A | X |\n| B | X |\n")
+	p := table(t, "| | R1 |\n| A | X |\n| B | X |\n")
 
-		s := solve(t, e, p, planning.Options{
-			Objectives: []planning.Objective{planning.MaxMeetings, planning.MinRecruiterSpan, planning.MinEndTimes},
-		})
-		require.Equal(t, 120, score(t, s, planning.MinRecruiterSpan), "two interviews in a row")
-		require.Equal(t, int((clock(9, 0)+clock(10, 0))/time.Minute), score(t, s, planning.MinEndTimes), "at 8:00 and 9:00")
+	s := solve(t, p, planning.Options{
+		Objectives: []planning.Objective{planning.MaxMeetings, planning.MinRecruiterSpan, planning.MinEndTimes},
 	})
+	require.Equal(t, 120, score(t, s, planning.MinRecruiterSpan), "two interviews in a row")
+	require.Equal(t, int((clock(9, 0)+clock(10, 0))/time.Minute), score(t, s, planning.MinEndTimes), "at 8:00 and 9:00")
 }
 
 func TestCandidateWait(t *testing.T) {
 	t.Parallel()
 
-	forEachEngine(t, func(t *testing.T, e engine) {
-		p := table(t, "| | R1 | R2 |\n| A | 1 | 1 |\n")
-		p.Recruiters[1].Availability = []planning.Interval{{Start: clock(10, 0), End: clock(12, 0)}}
-		p.Recruiters[0].Availability = []planning.Interval{{Start: clock(8, 0), End: clock(9, 0)}}
+	p := table(t, "| | R1 | R2 |\n| A | 1 | 1 |\n")
+	p.Recruiters[1].Availability = []planning.Interval{{Start: clock(10, 0), End: clock(12, 0)}}
+	p.Recruiters[0].Availability = []planning.Interval{{Start: clock(8, 0), End: clock(9, 0)}}
 
-		s := solve(t, e, p, planning.Options{
-			MaxGap:     planning.Gap{Duration: planning.NoLimit},
-			Objectives: []planning.Objective{planning.MaxMeetings, planning.MinCandidateWait},
-		})
-		require.Equal(t, 2, score(t, s, planning.MaxMeetings))
-		require.Equal(t, 60, score(t, s, planning.MinCandidateWait), "R2 at 10:00, right after the earliest possible")
+	s := solve(t, p, planning.Options{
+		MaxGap:     planning.Gap{Duration: planning.NoLimit},
+		Objectives: []planning.Objective{planning.MaxMeetings, planning.MinCandidateWait},
 	})
+	require.Equal(t, 2, score(t, s, planning.MaxMeetings))
+	require.Equal(t, 60, score(t, s, planning.MinCandidateWait), "R2 at 10:00, right after the earliest possible")
 }
 
 func TestImpossible(t *testing.T) {
 	t.Parallel()
 
-	forEachEngine(t, func(t *testing.T, e engine) {
-		// A is only there in the morning, R2 only in the afternoon.
-		p := table(t, "| | R1 | R2 |\n| A | 1 | 1 |\n")
-		p.Candidates[0].Availability = []planning.Interval{{Start: clock(8, 0), End: clock(12, 0)}}
-		p.Recruiters[1].Availability = []planning.Interval{{Start: clock(14, 0), End: clock(17, 0)}}
+	// A is only there in the morning, R2 only in the afternoon.
+	p := table(t, "| | R1 | R2 |\n| A | 1 | 1 |\n")
+	p.Candidates[0].Availability = []planning.Interval{{Start: clock(8, 0), End: clock(12, 0)}}
+	p.Recruiters[1].Availability = []planning.Interval{{Start: clock(14, 0), End: clock(17, 0)}}
 
-		s := solve(t, e, p, planning.Options{})
-		require.Equal(t, []int{0, 1}, s.Unscheduled, "all the same day, or nothing")
-		require.Equal(t, []int{1}, s.Impossible)
-	})
+	s := solve(t, p, planning.Options{})
+	require.Equal(t, []int{0, 1}, s.Unscheduled, "all the same day, or nothing")
+	require.Equal(t, []int{1}, s.Impossible)
 }
 
 func TestBreaks(t *testing.T) {
@@ -430,10 +373,8 @@ func TestBreaks(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			forEachEngine(t, func(t *testing.T, e engine) {
-				s := solve(t, e, problem(t), tc.options)
-				require.Equal(t, tc.meetings, score(t, s, planning.MaxMeetings))
-			})
+			s := solve(t, problem(t), tc.options)
+			require.Equal(t, tc.meetings, score(t, s, planning.MaxMeetings))
 		})
 	}
 }
@@ -441,43 +382,39 @@ func TestBreaks(t *testing.T) {
 func TestNoInterviewDuringBreaks(t *testing.T) {
 	t.Parallel()
 
-	forEachEngine(t, func(t *testing.T, e engine) {
-		// Three half-hour slots outside the break, for three candidates.
-		p := table(t, "| | R1 |\n| A | X |\n| B | X |\n| C | X |\n")
-		breaks := []planning.Interval{{Start: clock(8, 30), End: clock(9, 0)}}
+	// Three half-hour slots outside the break, for three candidates.
+	p := table(t, "| | R1 |\n| A | X |\n| B | X |\n| C | X |\n")
+	breaks := []planning.Interval{{Start: clock(8, 30), End: clock(9, 0)}}
 
-		s := solve(t, e, p, planning.Options{
-			Day:      []planning.Interval{{Start: clock(8, 0), End: clock(10, 0)}},
-			Breaks:   breaks,
-			Duration: 30 * time.Minute,
-		})
-		require.Equal(t, 3, score(t, s, planning.MaxMeetings))
-
-		for _, iv := range s.Interviews {
-			require.False(t, iv.Start < breaks[0].End && breaks[0].Start < iv.End, "interview at %s", planning.Clock(iv.Start))
-		}
+	s := solve(t, p, planning.Options{
+		Day:      []planning.Interval{{Start: clock(8, 0), End: clock(10, 0)}},
+		Breaks:   breaks,
+		Duration: 30 * time.Minute,
 	})
+	require.Equal(t, 3, score(t, s, planning.MaxMeetings))
+
+	for _, iv := range s.Interviews {
+		require.False(t, iv.Start < breaks[0].End && breaks[0].Start < iv.End, "interview at %s", planning.Clock(iv.Start))
+	}
 }
 
 func TestRemaining(t *testing.T) {
 	t.Parallel()
 
-	forEachEngine(t, func(t *testing.T, e engine) {
-		// R1 has four one-hour slots and five candidates.
-		p := table(t, "| | R1 |\n| A | X |\n| B | X |\n| C | X |\n| D | X |\n| E | X |\n")
+	// R1 has four one-hour slots and five candidates.
+	p := table(t, "| | R1 |\n| A | X |\n| B | X |\n| C | X |\n| D | X |\n| E | X |\n")
 
-		day1 := solve(t, e, p, planning.Options{})
-		require.Equal(t, 4, score(t, day1, planning.MaxMeetings))
-		require.Len(t, day1.Unscheduled, 1)
-		require.Empty(t, day1.Impossible, "possible on another day")
+	day1 := solve(t, p, planning.Options{})
+	require.Equal(t, 4, score(t, day1, planning.MaxMeetings))
+	require.Len(t, day1.Unscheduled, 1)
+	require.Empty(t, day1.Impossible, "possible on another day")
 
-		next := day1.Remaining(p)
-		require.Len(t, next.Requests, 1)
-		require.Len(t, next.Candidates, len(p.Candidates))
+	next := day1.Remaining(p)
+	require.Len(t, next.Requests, 1)
+	require.Len(t, next.Candidates, len(p.Candidates))
 
-		day2 := solve(t, e, next, planning.Options{})
-		require.Empty(t, day2.Unscheduled)
-	})
+	day2 := solve(t, next, planning.Options{})
+	require.Empty(t, day2.Unscheduled)
 }
 
 func TestCheckRejectsOverlaps(t *testing.T) {
@@ -516,7 +453,7 @@ func TestInvalidOptions(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := planning.Solve(context.Background(), gomilp.New(), p, o)
+			_, err := planning.Search(context.Background(), p, o, planning.SearchOptions{Iterations: 1})
 			require.Error(t, err)
 		})
 	}
@@ -566,17 +503,15 @@ func TestRecruiterHalfDays(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			forEachEngine(t, func(t *testing.T, e engine) {
-				// R1 meets A, only free in the morning, and B.
-				p := table(t, "| | R1 |\n| A | X |\n| B | X |\n")
-				p.Candidates[0].Availability = []planning.Interval{{Start: clock(8, 0), End: clock(12, 0)}}
-				p.Candidates[1].Availability = tt.b
+			// R1 meets A, only free in the morning, and B.
+			p := table(t, "| | R1 |\n| A | X |\n| B | X |\n")
+			p.Candidates[0].Availability = []planning.Interval{{Start: clock(8, 0), End: clock(12, 0)}}
+			p.Candidates[1].Availability = tt.b
 
-				s := solve(t, e, p, planning.Options{Day: day, Breaks: tt.breaks, Objectives: objectives})
-				require.Equal(t, 2, score(t, s, planning.MaxCompleteCandidates))
-				require.Equal(t, tt.want, score(t, s, planning.MinRecruiterHalfDays))
-				require.Equal(t, 1, score(t, s, planning.MinRecruiters))
-			})
+			s := solve(t, p, planning.Options{Day: day, Breaks: tt.breaks, Objectives: objectives})
+			require.Equal(t, 2, score(t, s, planning.MaxCompleteCandidates))
+			require.Equal(t, tt.want, score(t, s, planning.MinRecruiterHalfDays))
+			require.Equal(t, 1, score(t, s, planning.MinRecruiters))
 		})
 	}
 }

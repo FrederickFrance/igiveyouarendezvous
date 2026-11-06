@@ -26,6 +26,11 @@ d'rôle](example/fr/roleplay.yaml).
 **[Essayer dins ch'navigateur](https://frederickfrance.github.io/igiveyouarendezvous/)**, sans rin installer : tout i s'calcule
 su vot' ordinateur, rin n'est invoyé.
 
+**Sans écrire ch'YAML :** [eune consigne pour un assistant IA](prompt/fr.md)
+i transforme tes règues, dites comme te les dirots à un collègue, in
+fichier problème. Mets des faux noms (`Candidat 1`) : cho qu'te tapes, i
+part chez ch'fournisseu d'l'assistant.
+
 ## Ch'premier planning, pas à pas
 
 Pas besoin d'ête informaticien : fais just' cho qu'i est marqué, dins l'ordre.

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Rather not write in public? Write on LinkedIn
+    url: https://www.linkedin.com/in/frederic-sauvage-rueangpanichpiban
+    about: Send a message, with the problem file attached.
+  - name: A security problem
+    url: https://github.com/FrederickFrance/igiveyouarendezvous/security/advisories/new
+    about: Report it privately, not in a public issue.
+  - name: Documentation
+    url: https://github.com/FrederickFrance/igiveyouarendezvous#readme
+    about: Every key of the problem file, with examples.

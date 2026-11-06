@@ -42,20 +42,15 @@
 // mobilised and their half-days, day by day, then the interviews and the
 // presence of the recruiters.
 //
-// # Engines
+// # Search and check
 //
 // [Search], a local search in pure Go, improves the schedule as long as it
 // runs (until a deadline, a number of moves or a patience) without proving
-// optimality, except for obvious bounds. It is the engine to use. It starts
-// from a greedy schedule: the highest priorities first, then the candidates
-// with the fewest requests, each at the first place found.
+// optimality, except for obvious bounds. It starts from a greedy schedule:
+// the highest priorities first, then the candidates with the fewest
+// requests, each at the first place found.
 //
-// [Solve] writes the problem as a mixed-integer program and hands it to a
-// [mip.Solver], such as mip/gomilp, which proves optimality on small
-// problems only. It plans one day, with interviews back to back or with any
-// wait, without ranks: beyond, it returns [ErrUnsupported].
-//
-// [Check] verifies any schedule independently of the engines, and [Evaluate]
+// [Check] verifies any schedule independently of the search, and [Evaluate]
 // scores it.
 //
 // # Following, stopping, resuming

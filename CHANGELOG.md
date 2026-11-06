@@ -7,6 +7,30 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
+## [0.4.0] - 2026-11-06 "Cinderella" 👠
+
+### Added
+
+- **A prompt for an AI assistant** (`prompt/en.md`, `prompt/fr.md`): the
+  rules described in plain words become a problem file, commented rule by
+  rule, with the assumptions listed after it; tested on recruitment, a
+  jury, interviews over two weeks and a podcast.
+- **Community files**: a contributing guide, a code of conduct, a security
+  policy, issue forms (a problem, an idea) and a pull request template.
+
+### Changed
+
+- The CI runs golangci-lint-action v9, on Node.js 24.
+
+### Removed
+
+- **The exact model of the library**: `planning.Solve`,
+  `planning.ErrUnsupported`, the packages `mip` and `mip/gomilp`, and the
+  dependency on go-milp. The command never used it; it only proved the
+  optimum of a few candidates, on one day, and found no schedule at all on
+  real cases. `planning.Search` remains, and the tests still compare it with
+  an exhaustive search on small problems.
+
 ## [0.3.0] - 2026-11-03
 
 ### Added

@@ -86,7 +86,7 @@ func sortInterviews(interviews []Interview) {
 	})
 }
 
-// Check verifies, independently of the solver, that the schedule satisfies
+// Check verifies, independently of the search, that the schedule satisfies
 // every rule of the problem and options.
 func Check(p *Problem, opts Options, s *Schedule) error {
 	o, err := opts.withDefaults()
