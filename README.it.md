@@ -28,6 +28,11 @@ susseguono. Vedete gli esempi [trasmissione](example/show.yaml),
 **[Provalo online](https://frederickfrance.github.io/igiveyouarendezvous/)**: nel browser, senza installare nulla; tutto viene
 calcolato sul vostro computer, niente viene inviato.
 
+**Senza scrivere YAML:** un [prompt per un assistente IA](prompt/en.md) (in
+inglese) trasforma le vostre regole, descritte a parole, in un file del
+problema. Usate nomi fittizi (`Candidato 1`) invece dei nomi veri: ciò che
+scrivete all'assistente va al suo fornitore.
+
 ## Il primo calendario, passo dopo passo
 
 Senza saper programmare né usare la riga di comando: seguite esattamente

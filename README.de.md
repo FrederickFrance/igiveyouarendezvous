@@ -28,6 +28,11 @@ folgen. Siehe die Beispiele [Sendung](example/show.yaml),
 **[Online ausprobieren](https://frederickfrance.github.io/igiveyouarendezvous/)**: im Browser, ohne Installation; alles wird
 auf Ihrem Computer berechnet, nichts wird gesendet.
 
+**Ohne YAML zu schreiben:** Eine [Anweisung für einen KI-Assistenten](prompt/en.md)
+(auf Englisch) macht aus Ihren Regeln, in normalen Worten beschrieben, eine
+Problemdatei. Verwenden Sie Platzhalter statt echter Namen (`Bewerber 1`):
+Was Sie dem Assistenten schreiben, geht an seinen Anbieter.
+
 ## Der erste Plan, Schritt für Schritt
 
 Ohne Programmier- oder Kommandozeilenkenntnisse: Folgen Sie genau diesen

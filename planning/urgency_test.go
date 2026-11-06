@@ -12,30 +12,28 @@ import (
 func TestUrgencyChoosesTheLastChance(t *testing.T) {
 	t.Parallel()
 
-	forEachEngine(t, func(t *testing.T, e engine) {
-		t.Helper()
+	t.Helper()
 
-		p := table(t, `
+	p := table(t, `
 | | R1 |
 | B | X |
 | A | X |
 `)
-		p.Candidates[1].DaysLeft = 1
-		p.Candidates[0].DaysLeft = 3
+	p.Candidates[1].DaysLeft = 1
+	p.Candidates[0].DaysLeft = 3
 
-		o := planning.Options{Objectives: []planning.Objective{planning.MaxPriorities, planning.MaxUrgency, planning.MaxMeetings}}
-		o.Day = []planning.Interval{{Start: clock(8, 0), End: clock(9, 0)}}
+	o := planning.Options{Objectives: []planning.Objective{planning.MaxPriorities, planning.MaxUrgency, planning.MaxMeetings}}
+	o.Day = []planning.Interval{{Start: clock(8, 0), End: clock(9, 0)}}
 
-		s := solve(t, e, p, o)
-		require.Len(t, s.Interviews, 1)
-		require.Equal(t, 1, s.Interviews[0].Candidate, "A")
-		require.Equal(t, []planning.Score{
-			{Objective: planning.MaxPriorities, Priority: 1, Value: 1, Proven: s.Scores[0].Proven},
-			{Objective: planning.MaxUrgency, DaysLeft: 1, Value: 1, Proven: s.Scores[1].Proven},
-			{Objective: planning.MaxUrgency, DaysLeft: 3, Value: 0, Proven: s.Scores[2].Proven},
-			{Objective: planning.MaxMeetings, Value: 1, Proven: s.Scores[3].Proven},
-		}, s.Scores)
-	})
+	s := solve(t, p, o)
+	require.Len(t, s.Interviews, 1)
+	require.Equal(t, 1, s.Interviews[0].Candidate, "A")
+	require.Equal(t, []planning.Score{
+		{Objective: planning.MaxPriorities, Priority: 1, Value: 1, Proven: s.Scores[0].Proven},
+		{Objective: planning.MaxUrgency, DaysLeft: 1, Value: 1, Proven: s.Scores[1].Proven},
+		{Objective: planning.MaxUrgency, DaysLeft: 3, Value: 0, Proven: s.Scores[2].Proven},
+		{Objective: planning.MaxMeetings, Value: 1, Proven: s.Scores[3].Proven},
+	}, s.Scores)
 }
 
 // Serving A, on their last day, would cost B and C: the number of candidates
@@ -43,23 +41,21 @@ func TestUrgencyChoosesTheLastChance(t *testing.T) {
 func TestUrgencyNeverCostsACandidate(t *testing.T) {
 	t.Parallel()
 
-	forEachEngine(t, func(t *testing.T, e engine) {
-		t.Helper()
+	t.Helper()
 
-		p := table(t, `
+	p := table(t, `
 | | R1 | R2 |
 | A | X | X |
 | B | X | |
 | C | | X |
 `)
-		p.Candidates[0].DaysLeft = 1
+	p.Candidates[0].DaysLeft = 1
 
-		o := planning.Options{Day: []planning.Interval{{Start: clock(8, 0), End: clock(9, 0)}}}
+	o := planning.Options{Day: []planning.Interval{{Start: clock(8, 0), End: clock(9, 0)}}}
 
-		s := solve(t, e, p, o)
-		require.Equal(t, 2, score(t, s, planning.MaxCompleteCandidates))
-		require.Equal(t, 0, score(t, s, planning.MaxUrgency), "A is left for another day")
-	})
+	s := solve(t, p, o)
+	require.Equal(t, 2, score(t, s, planning.MaxCompleteCandidates))
+	require.Equal(t, 0, score(t, s, planning.MaxUrgency), "A is left for another day")
 }
 
 func TestUrgencyLevels(t *testing.T) {

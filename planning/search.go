@@ -82,7 +82,8 @@ type Progress struct {
 // Search plans the period with a local search in pure Go: a greedy
 // construction, then "ruin and recreate" moves (remove some candidates,
 // insert them back in the best place) accepted with late acceptance hill
-// climbing. The objectives are compared lexicographically, as with Solve.
+// climbing. The objectives are compared lexicographically: the first one
+// decides, the next one only breaks ties, and so on.
 //
 // The schedule improves with time but its optimality is not proven, except
 // for objectives that reach an obvious bound (everybody served, for

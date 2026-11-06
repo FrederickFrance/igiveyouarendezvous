@@ -22,21 +22,19 @@ func jury(t *testing.T) *planning.Problem {
 func TestPanels(t *testing.T) {
 	t.Parallel()
 
-	forEachEngine(t, func(t *testing.T, e engine) {
-		s := solve(t, e, jury(t), planning.Options{MaxGap: planning.Gap{Duration: planning.NoLimit}})
-		require.Empty(t, s.Unscheduled)
+	s := solve(t, jury(t), planning.Options{MaxGap: planning.Gap{Duration: planning.NoLimit}})
+	require.Empty(t, s.Unscheduled)
 
-		for _, iv := range s.Interviews {
-			switch iv.Candidate {
-			case 0:
-				require.Contains(t, [][]int{{0, 1}, {2}}, iv.Recruiters, "R1 and R2 together, R3 apart")
-			case 1:
-				require.Equal(t, []int{0}, iv.Recruiters, "B needs only R1 of the panel")
-			}
+	for _, iv := range s.Interviews {
+		switch iv.Candidate {
+		case 0:
+			require.Contains(t, [][]int{{0, 1}, {2}}, iv.Recruiters, "R1 and R2 together, R3 apart")
+		case 1:
+			require.Equal(t, []int{0}, iv.Recruiters, "B needs only R1 of the panel")
 		}
+	}
 
-		require.Len(t, interviewsOf(s, 0), 2)
-	})
+	require.Len(t, interviewsOf(s, 0), 2)
 }
 
 func TestPanelsAreNeverSplit(t *testing.T) {

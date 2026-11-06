@@ -5,11 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/FrederickFrance/igiveyouarendezvous/mip/gomilp"
 	"github.com/FrederickFrance/igiveyouarendezvous/planning"
 )
 
-func ExampleSolve() {
+func ExampleSearch() {
 	p := &planning.Problem{
 		Recruiters: []planning.Recruiter{
 			{Name: "R1"},
@@ -18,23 +17,20 @@ func ExampleSolve() {
 		Candidates: []planning.Candidate{
 			{Name: "A"},
 			{Name: "B", Availability: []planning.Interval{{Start: 9 * time.Hour, End: 12 * time.Hour}}},
+			{Name: "C"},
 		},
 		Requests: []planning.Request{
 			{Candidate: 0, Recruiter: 0},
 			{Candidate: 0, Recruiter: 1},
 			{Candidate: 1, Recruiter: 0},
+			{Candidate: 2, Recruiter: 1},
 		},
 		JointGroups: [][]int{{0, 1}}, // A may meet R1 and R2 together
 	}
 
-	o := planning.Options{
-		Objectives: []planning.Objective{planning.MaxCompleteCandidates, planning.MinInterviews, planning.MinEndTimes},
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-
-	s, err := planning.Solve(ctx, gomilp.New(), p, o)
+	// A time limit is the usual stop; a number of moves keeps the example
+	// reproducible.
+	s, err := planning.Search(context.Background(), p, planning.Options{}, planning.SearchOptions{Seed: 1, Iterations: 1000})
 	if err != nil {
 		fmt.Println(err)
 
@@ -57,47 +53,16 @@ func ExampleSolve() {
 	fmt.Println("left for tomorrow:", len(s.Remaining(p).Requests))
 
 	// Output:
-	// 08:00-09:00 A [R1 R2]
 	// 09:00-10:00 B [R1]
-	// complete-candidates 2 true
-	// interviews 2 true
-	// earliest 1140 true
-	// left for tomorrow: 0
-}
-
-func ExampleSearch() {
-	p := &planning.Problem{
-		Recruiters: []planning.Recruiter{{Name: "R1"}, {Name: "R2"}},
-		Candidates: []planning.Candidate{{Name: "A"}, {Name: "B"}, {Name: "C"}},
-		Requests: []planning.Request{
-			{Candidate: 0, Recruiter: 0},
-			{Candidate: 0, Recruiter: 1},
-			{Candidate: 1, Recruiter: 1},
-			{Candidate: 2, Recruiter: 0},
-		},
-		JointGroups: [][]int{{0, 1}},
-	}
-
-	// A time limit is the usual stop; a number of moves keeps the example
-	// reproducible.
-	s, err := planning.Search(context.Background(), p, planning.Options{}, planning.SearchOptions{Seed: 1, Iterations: 1000})
-	if err != nil {
-		fmt.Println(err)
-
-		return
-	}
-
-	for _, sc := range s.Scores {
-		fmt.Println(sc.Objective, sc.Value, sc.Proven)
-	}
-
-	// Output:
+	// 09:30-10:00 C [R2]
+	// 10:00-11:00 A [R1 R2]
 	// priorities 3 true
 	// meetings 4 true
 	// recruiters 2 false
 	// recruiter-half-days 2 false
 	// interviews 3 false
-	// recruiter-span 240 false
+	// recruiter-span 210 false
+	// left for tomorrow: 0
 }
 
 // busyDay returns a day too short for everybody: R1 has five one-hour

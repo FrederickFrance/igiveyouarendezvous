@@ -11,6 +11,8 @@ nab: DaHjaj ghom Hoch. Qapla'!
 
 [DaH yIlo'!](https://frederickfrance.github.io/igiveyouarendezvous/)
 
+YAML yIghItlhQo'! [De'wI' val](prompt/en.md) yIlo'. pong ngeb yIlo' (`Candidate 1`).
+
 ## nab wa'DIch: mIw
 
 1. **yItlhap**: [Releases](https://github.com/FrederickFrance/igiveyouarendezvous/releases/latest) yIpoSmoH; zip yItlhap:

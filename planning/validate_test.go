@@ -7,7 +7,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/FrederickFrance/igiveyouarendezvous/mip/gomilp"
 	"github.com/FrederickFrance/igiveyouarendezvous/planning"
 )
 
@@ -102,29 +101,8 @@ func TestInvalidProblems(t *testing.T) {
 
 			_, err := planning.Search(context.Background(), p, planning.Options{}, planning.SearchOptions{Iterations: 1})
 			require.Error(t, err)
-
-			_, err = planning.Solve(context.Background(), gomilp.New(), p, planning.Options{})
-			require.Error(t, err)
 		})
 	}
-}
-
-func TestSolveErrors(t *testing.T) {
-	t.Parallel()
-
-	p := table(t, "| | R1 |\n| A | X |\n")
-
-	_, err := planning.Solve(context.Background(), nil, p, planning.Options{})
-	require.ErrorContains(t, err, "no solver")
-
-	_, err = planning.Solve(context.Background(), gomilp.New(), p, planning.Options{Step: 7 * time.Minute})
-	require.Error(t, err, "the step does not divide the duration")
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	_, err = planning.Solve(ctx, gomilp.New(), p, planning.Options{})
-	require.ErrorIs(t, err, context.Canceled, "nothing solved before the cancel")
 }
 
 func TestObjectiveNames(t *testing.T) {

@@ -349,6 +349,19 @@ and for JSON, a key:
 A relative path to a local copy of the schema works too. The `$schema` key is
 ignored by the command.
 
+### With an AI assistant
+
+To avoid writing the YAML yourself: [a prompt](prompt/en.md) to copy into an
+AI assistant (Claude, ChatGPT, Mistral…), followed by your rules in plain
+words ("every candidate first meets HR for 30 minutes, then the manager…").
+The assistant writes the file, commented rule by rule, and says what it
+assumed; the program checks it, and an error, with its line number, goes
+back to the assistant to correct.
+
+Whatever you type goes to the assistant's provider: give placeholders
+(`Candidate 1`, initials), and put the real names back in the file
+afterwards. The demo and the program send nothing anywhere.
+
 ## Other uses
 
 The program places "candidates" who must meet "recruiters", each in one
@@ -633,18 +646,12 @@ meetings, and `Options.NotBefore` the first day of new interviews.
 - **Meetings**: `Candidate.Together` (everybody at once, or not at all) and
   `Candidate.Duration` (in place of the recruiters' durations).
 
-`planning.Solve(ctx, gomilp.New(), p, options)` does the same with the exact
-solver, on small problems of one day only (see [the exact
-model](#the-exact-model)).
-
 | Package | Content |
 |---|---|
-| `planning` | the problem, the options, `Search`, `Solve`, `Check` (checks a schedule independently), `Evaluate`, `Clean` |
-| `mip` | generic linear model and `Solver` interface, to plug in another exact solver |
-| `mip/gomilp` | the exact solver provided |
+| `planning` | the problem, the options, `Search`, `Check` (checks a schedule independently), `Evaluate`, `Clean` |
 | `config` | reads the problem file (`Load`, `Parse`, `Problem(from, to)`), writes the one of the next period (`Next`, `Write`); writes and reads plan files (`WritePlan`, `ReadPlan`), in YAML or JSON |
 
-`planning` and `mip` depend on the standard library only.
+`planning` depends on the standard library only.
 
 ## Quality of the local search
 
@@ -678,25 +685,15 @@ The tests also check, on 60 small random problems of one day (with or
 without breaks, waiting, priorities and urgency) and on 80 small random
 periods of two or three days (gaps in time or in days, orders, closed days,
 availabilities by day), that the search finds the same result as an
-enumeration of every possible schedule.
-Every schedule returned, by any engine, is checked again by `planning.Check`.
+enumeration of every possible schedule. Every schedule returned is checked
+again by `planning.Check`.
 
-## The exact model
-
-`planning.Solve` writes the problem as a mixed-integer program: time is cut
-into slots; each binary variable says "this interview (a candidate and an
-allowed group of recruiters) starts at this slot". The objectives are
-optimised one after the other, each one being frozen before the next.
-
-It plans one day, with interviews back to back or with any wait, without
-order: beyond, it returns `planning.ErrUnsupported`. With
-[go-milp](https://github.com/daniel-sullivan/go-milp) (pure Go), it proves
-the optimum of small problems, a few candidates: the tests use it as a
-reference. On real cases it is no use, which is why the command does not
-offer it: on 60 to 100 candidates, it finds no schedule at all within
-minutes, even when given the value of the greedy schedule as a bound, and
-local search then exact re-optimisation of parts of the schedule wins no
-meeting either.
+**Why no exact solver.** Up to v0.3, the library also offered an exact model,
+solved by [go-milp](https://github.com/daniel-sullivan/go-milp) (pure Go). It
+proved the optimum of a few candidates, but found no schedule at all within
+minutes on 60 to 100, even given the greedy schedule as a bound. It was
+removed in v0.4.0, with its dependency: the solvers that prove these optima,
+such as HiGHS, are written in C or C++.
 
 ## Development
 
@@ -707,7 +704,8 @@ golangci-lint run       # strict linter (.golangci.yml), version 2.15 or later f
 
 The tests check the examples and the files the command writes against the
 JSON schemas, and that the schemas know the same keys and objectives as the
-code.
+code. To contribute, report a problem or a vulnerability: the
+[contributing guide](CONTRIBUTING.md) and the [security policy](SECURITY.md).
 
 The GitHub CI (`.github/workflows/ci.yml`) runs the tests with the race
 detector and the coverage, the linter and `osv-scanner` on every push and
@@ -734,7 +732,6 @@ publishes it on GitHub Pages whenever `main` changes. Pages must be set to
 | Module | License | Used by |
 |---|---|---|
 | go.yaml.in/yaml/v3 | MIT and Apache-2.0 | `config` |
-| github.com/daniel-sullivan/go-milp | MIT | `mip/gomilp` |
 | github.com/stretchr/testify | MIT | tests only |
 | github.com/santhosh-tekuri/jsonschema/v6 | Apache-2.0 | tests only (the schemas) |
 

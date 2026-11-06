@@ -332,17 +332,15 @@ func TestPriorities(t *testing.T) {
 	text := "| | R1 | R2 |\n| A | X | X |\n| B | X | |\n| C | | X |\n| D | X | |\n| E | | X |\n"
 	twoHours := []planning.Interval{{Start: clock(8, 0), End: clock(10, 0)}}
 
-	forEachEngine(t, func(t *testing.T, e engine) {
-		p := table(t, text)
-		p.Candidates[0].Priority = 2
+	p := table(t, text)
+	p.Candidates[0].Priority = 2
 
-		s := solve(t, e, p, planning.Options{Day: twoHours})
-		require.Equal(t, planning.Score{Objective: planning.MaxPriorities, Priority: 2, Value: 1, Proven: true}, s.Scores[0])
-		require.Equal(t, planning.Score{Objective: planning.MaxPriorities, Priority: 1, Value: 2, Proven: s.Scores[1].Proven}, s.Scores[1])
+	s := solve(t, p, planning.Options{Day: twoHours})
+	require.Equal(t, planning.Score{Objective: planning.MaxPriorities, Priority: 2, Value: 1, Proven: true}, s.Scores[0])
+	require.Equal(t, planning.Score{Objective: planning.MaxPriorities, Priority: 1, Value: 2, Proven: s.Scores[1].Proven}, s.Scores[1])
 
-		count := solve(t, e, p, planning.Options{Day: twoHours, Objectives: []planning.Objective{planning.MaxCompleteCandidates}})
-		require.Equal(t, 4, count.Scores[0].Value, "without priorities, more candidates")
-	})
+	count := solve(t, p, planning.Options{Day: twoHours, Objectives: []planning.Objective{planning.MaxCompleteCandidates}})
+	require.Equal(t, 4, count.Scores[0].Value, "without priorities, more candidates")
 }
 
 func TestGreedyStartsWithTheHighestPriority(t *testing.T) {
