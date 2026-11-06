@@ -7,7 +7,7 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
-## [0.4.0] "Cinderella" 👠
+## [0.4.0] - 2026-11-06 "Cinderella" 👠
 
 ### Added
 
