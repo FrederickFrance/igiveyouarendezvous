@@ -20,7 +20,8 @@ reporting are therefore, for example:
 
 ## Report a vulnerability
 
-Please do not open a public issue. Use instead
+Please do not open a public issue for a vulnerability: it would be known
+before it is fixed. Use instead
 [the private report of GitHub](https://github.com/FrederickFrance/igiveyouarendezvous/security/advisories/new)
 ("Report a vulnerability", in the Security tab). Without a GitHub account,
 write to the maintainer on
@@ -30,3 +31,7 @@ to agree on a way to send the details.
 This is a personal project, maintained on free time: every report is read
 and answered, as fast as possible, and a fix is published as a new release,
 crediting the reporter if they wish.
+
+Anything else, a bug, an idea, a rule the program cannot express, is
+welcome in a [public issue](https://github.com/FrederickFrance/igiveyouarendezvous/issues/new/choose):
+only a vulnerability needs the private report.

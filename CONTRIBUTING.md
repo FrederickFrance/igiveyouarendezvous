@@ -14,8 +14,10 @@ Thank you for your interest! You may write in English or in French.
 - A security problem: see the [security policy](SECURITY.md), not a public
   issue.
 
-For a large change, open an issue first, so that we agree on it before you
-spend time on the code.
+Do not hesitate: every idea is welcome, even a small one, even unfinished,
+and telling where you got stuck is as useful as a bug report. For a large
+change, open an issue first, so that we agree on it before you spend time
+on the code.
 
 ## Change the code
 
