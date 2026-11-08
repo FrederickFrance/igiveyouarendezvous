@@ -30,7 +30,7 @@ onmessage = async (event) => {
     args,
     inputs,
     (line) => postMessage({ type: "line", line }),
-    (text, plan) => postMessage({ type: "best", text, plan }),
+    (text, plan, table) => postMessage({ type: "best", text, plan, table }),
   );
 
   postMessage({ type: "done", result });

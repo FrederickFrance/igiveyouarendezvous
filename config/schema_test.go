@@ -53,7 +53,10 @@ func TestTheExamplesFollowTheSchema(t *testing.T) {
 	french, err := filepath.Glob(filepath.Join("..", "example", "fr", "*.yaml"))
 	require.NoError(t, err)
 
-	require.Len(t, french, 6, "every example has its French version, and the panel")
+	english, err := filepath.Glob(filepath.Join("..", "example", "*.yaml"))
+	require.NoError(t, err)
+
+	require.Len(t, french, len(english), "every example has its French version")
 
 	for _, name := range append(names, french...) {
 		data, err := os.ReadFile(name)
@@ -128,6 +131,9 @@ func TestTheSchemaRejectsWhatTheCodeRejects(t *testing.T) {
 		"recruiters: {R: }\ncandidates:\n  A: {meet: {R: 0}}",
 		"recruiters: {R: }\ncandidates:\n  A: {meet: {R: Y}}",
 		"recruiters: {R: }\ncandidates:\n  A: {meet: {R: 1.5}}",
+		"recruiters: {R: }\ncandidates:\n  A: {meet: {R: {rank: 0}}}",
+		"recruiters: {R: }\ncandidates:\n  A: {meet: {R: {duration: 30}}}",
+		"recruiters: {R: }\ncandidates:\n  A: {meet: {R: {length: 1h}}}",
 	} {
 		require.Error(t, problem.Validate(asJSON(t, []byte(text))), text)
 

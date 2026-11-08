@@ -180,6 +180,8 @@ igiveyouarendezvous -date 2026-11-23 semaine3.yaml             # un seul jour
 | `-rest suite.yaml` | écrit le fichier problème de la période suivante : le même, sans les candidats servis |
 | `-objectives a,b,c` | objectifs par priorité, à la place de ceux du fichier problème |
 | `-out plan.yaml` | écrit aussi le planning dans un fichier plan, pour reprendre avec `-start` |
+| `-csv planning.csv` | écrit aussi le planning en tableau, une ligne par entretien (date, début, fin, candidat, recruteurs, figé), pour Excel ou un publipostage des convocations |
+| `-csv-separator ";"` | le séparateur du tableau : `,` (par défaut), `;` (ce qu'attend Excel en français) ou `tab` |
 | `-start plan.yaml` | part de ce planning au lieu de partir de zéro (voir plus bas) |
 | `-fix-all` | avec `-start` : tous les candidats du fichier sont figés |
 | `-timeout 1m` | temps de calcul maximal |
@@ -199,8 +201,9 @@ figés ne tiennent plus (voir plus bas), et 1 en cas d'erreur.
 La commande affiche le planning par heure (avec les dates, sur plusieurs
 jours), l'agenda de chaque recruteur jour par jour, la valeur atteinte sur
 chaque objectif et les rencontres restantes. Elle signale aussi les
-rencontres **impossibles** : un candidat et un recruteur jamais libres
-ensemble assez longtemps. Elles restent dans le fichier problème de la
+rencontres **impossibles** : les personnes disponibles à aucun moment de la
+période, puis les candidats et recruteurs jamais libres ensemble assez
+longtemps. Elles restent dans le fichier problème de la
 période suivante et reviendront à chaque fois tant que les disponibilités ne
 changent pas.
 
@@ -256,10 +259,10 @@ Les clés sont en anglais, comme le reste du programme. `recruiters` et
 | `objectives` | voir plus bas | objectifs, le plus important d'abord |
 | `recruiters.<nom>.duration` | `duration` | durée des entretiens avec ce recruteur ; un entretien commun dure autant que sa plus longue partie |
 | `recruiters.<nom>.availability` | `day` | plages du recruteur (`none` : absent), chaque jour ou par date (voir plus bas) |
-| `candidates.<nom>.meet` | obligatoire | les recruteurs à rencontrer, dans n'importe quel ordre, ou avec leurs rangs (voir plus bas) |
+| `candidates.<nom>.meet` | obligatoire | les recruteurs à rencontrer, dans n'importe quel ordre, ou avec leurs rangs et les durées des rencontres (voir plus bas) |
 | `candidates.<nom>.availability` | `day` | plages du candidat, chaque jour ou par date |
 | `candidates.<nom>.priority` | `1` | plus c'est haut, plus c'est important (objectif `priorities`) |
-| `candidates.<nom>.duration` | celle des recruteurs | durée des entretiens de ce candidat, à la place de celles des recruteurs |
+| `candidates.<nom>.duration` | celle des recruteurs | durée des entretiens de ce candidat, à la place de celles des recruteurs (la durée d'une rencontre dans `meet` l'emporte) |
 | `candidates.<nom>.together` | `false` | `true` : une réunion, tous les recruteurs à la fois en un seul entretien, ou rien (voir [Autres usages](#autres-usages)) |
 
 Une clé inconnue (une faute de frappe), un recruteur inconnu ou un nom donné
@@ -282,8 +285,8 @@ candidates:
 ```
 
 Une personne sans disponibilité est disponible dès que `day` le permet.
-Quand d'autres en ont une, c'est peut-être un oubli : la commande les liste
-dans une note. Une personne dont la disponibilité est donnée par date est
+Quand la plupart des autres en ont une, c'est peut-être un oubli : la commande
+les liste dans une note. Une personne dont la disponibilité est donnée par date est
 absente les autres jours. Il faut alors une période, `from` et `to` dans le fichier ou
 `-from` et `-to` : sans, la commande refuse de tourner, et liste les dates
 trouvées dans le fichier. Sans aucune date, un fichier sans période planifie
@@ -319,6 +322,12 @@ suite ; `X` (ou `any`, ou rien) à n'importe quel moment. Avec
 avant le recruteur 3, et le recruteur 2 avant, entre ou après. Plusieurs
 recruteurs peuvent avoir le même rang, dans n'importe quel ordre entre eux ;
 un entretien commun ne mélange jamais deux rangs.
+
+**La durée d'une rencontre.** Une rencontre peut avoir sa propre durée, à la
+place du `duration` du candidat, ou sinon de celui du recruteur : `meet:
+{Alice: 15m, Bob: 6m}`, ou avec un rang, `{Alice: {rank: 1, duration: 15m}}`.
+Un nombre seul est un rang : une durée s'écrit avec son unité (`15m`,
+`1h30`). Un entretien commun dure autant que sa plus longue rencontre.
 
 **Groupes communs.** Un candidat qui doit rencontrer des recruteurs d'un même
 groupe **peut** les voir en un seul entretien commun, ou séparément. Un
@@ -480,6 +489,7 @@ fichier, passe inaperçu.
 | `recruiter-span` | minimise le temps de présence des recruteurs, du début de leur premier entretien à la fin du dernier, jour par jour |
 | `candidate-wait` | minimise l'attente des candidats entre deux entretiens d'une même journée (utile quand `max-gap` n'est pas `0`) |
 | `earliest` | place les entretiens le plus tôt possible dans la période |
+| `day-end` | finit chaque journée le plus tôt possible : réduit la fin du dernier entretien du jour, additionnée sur les jours avec entretiens |
 
 L'optimisation est **lexicographique** : un planning est meilleur qu'un autre
 s'il fait mieux sur le premier objectif, ou aussi bien sur le premier et

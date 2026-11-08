@@ -171,18 +171,32 @@ func TestMeets(t *testing.T) {
 
 	m, err = decodeYAML[Meets](t, "{R1: 1, R2: X, R3: 2, R4: any, R5: }")
 	require.NoError(t, err)
-	require.Equal(t, Meets{{"R1", 1}, {"R2", 0}, {"R3", 2}, {"R4", 0}, {"R5", 0}}, m)
+	require.Equal(t, Meets{
+		{Recruiter: "R1", Rank: 1}, {Recruiter: "R2"}, {Recruiter: "R3", Rank: 2}, {Recruiter: "R4"}, {Recruiter: "R5"},
+	}, m)
+
+	m, err = decodeYAML[Meets](t, "{R1: 15m, R2: 1h30, R3: {rank: 2, duration: 6m}, R4: {rank: X}, R5: {duration: 20m}}")
+	require.NoError(t, err)
+	require.Equal(t, Meets{
+		{Recruiter: "R1", Duration: 15 * time.Minute}, {Recruiter: "R2", Duration: 90 * time.Minute},
+		{Recruiter: "R3", Rank: 2, Duration: 6 * time.Minute}, {Recruiter: "R4"}, {Recruiter: "R5", Duration: 20 * time.Minute},
+	}, m)
 
 	m, err = decodeYAML[Meets](t, "[]")
 	require.NoError(t, err)
 	require.Empty(t, m)
 
 	for text, msg := range map[string]string{
-		"{R1: 0}":     "line 1: R1: a rank is expected, 1, 2... or X",
-		"{R1: first}": "a rank is expected",
-		"{R1: [1]}":   "a rank is expected",
-		"[[R1]]":      "a recruiter name is expected",
-		"R1":          "the recruiters to meet are expected",
+		"{R1: 0}":                "line 1: R1: a rank is expected, 1, 2... or X for any time, a duration such as 15m, or both",
+		"{R1: first}":            "a rank is expected",
+		"{R1: [1]}":              "a rank is expected",
+		"{R1: 0m}":               "a rank is expected",
+		"{R1: {rank: 0}}":        "a rank is expected",
+		"{R1: {duration: 30}}":   "a rank is expected",
+		"{R1: {duration: [1h]}}": "a rank is expected",
+		"{R1: {length: 1h}}":     `line 1: R1: unknown key "length" (known: duration, rank)`,
+		"[[R1]]":                 "a recruiter name is expected",
+		"R1":                     "the recruiters to meet are expected",
 	} {
 		_, err := decodeYAML[Meets](t, text)
 		require.ErrorContains(t, err, msg, text)

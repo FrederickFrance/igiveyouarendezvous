@@ -132,6 +132,10 @@ Einstellungen: siehe das [kommentierte Beispiel](example/problem.yaml) und
 das [JSON-Schema](schema/problem.schema.json). Strg+C beendet die Suche und
 gibt den besten bisher gefundenen Plan aus.
 
+`-csv plan.csv` schreibt den Plan zusätzlich als Tabelle, eine Zeile pro
+Gespräch, für Excel oder einen Serienbrief (`-csv-separator ";"` für ein
+deutsches Excel).
+
 Die vollständige Dokumentation gibt es auf [Englisch](README.md) und auf
 [Französisch](README.fr.md).
 

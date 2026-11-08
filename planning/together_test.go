@@ -103,3 +103,43 @@ func TestCandidateDuration(t *testing.T) {
 	_, err := planning.Search(t.Context(), p, planning.Options{}, planning.SearchOptions{Iterations: 1})
 	require.EqualError(t, err, "planning: candidate A: negative duration")
 }
+
+// The length of a meeting: its own, or else the candidate's, or else the
+// recruiter's; a joint interview lasts as long as its longest meeting.
+func TestMeetingDuration(t *testing.T) {
+	t.Parallel()
+
+	p := table(t, "| | R1 | R2 | R3 |\n| A | X | X | X |\n| B | X | | |\n")
+	p.Recruiters[2].Duration = 30 * time.Minute
+	p.Candidates[1].Duration = 20 * time.Minute
+	p.Requests[0].Duration = 15 * time.Minute // A with R1
+	p.Requests[3].Duration = 6 * time.Minute  // B with R1, over B's 20 minutes
+
+	s := searchPeriod(t, p, planning.Options{})
+	require.Len(t, s.Interviews, 4)
+
+	length := map[[2]int]time.Duration{}
+	for _, iv := range s.Interviews {
+		length[[2]int{iv.Candidate, iv.Recruiters[0]}] = iv.End - iv.Start
+	}
+
+	require.Equal(t, map[[2]int]time.Duration{
+		{0, 0}: 15 * time.Minute, {0, 1}: time.Hour, {0, 2}: 30 * time.Minute, {1, 0}: 6 * time.Minute,
+	}, length)
+
+	p.JointGroups = [][]int{{0, 2}}
+	o := planning.Options{MaxGap: planning.Gap{Duration: planning.NoLimit}}
+	joint := &planning.Schedule{Interviews: []planning.Interview{
+		{Candidate: 0, Recruiters: []int{0, 2}, Requests: []int{0, 2}, Start: clock(8, 0), End: clock(8, 15)},
+	}}
+	require.ErrorContains(t, planning.Check(p, o, joint), "instead of 30m0s", "the longest meeting, R3's 30 minutes")
+
+	p.Requests[0].Duration = -time.Minute
+	_, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Iterations: 1})
+	require.EqualError(t, err, "planning: A meets R1: negative duration")
+
+	p.Requests[0].Duration = 15 * time.Minute
+	p.Candidates[0].Together = true
+	_, err = planning.Search(t.Context(), p, o, planning.SearchOptions{Iterations: 1})
+	require.EqualError(t, err, "planning: A meets everybody together: no meeting durations, give the candidate's")
+}

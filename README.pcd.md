@@ -118,6 +118,8 @@ Ch'fichier problème (YAML ou JSON) i dit qui qu'i doit vir qui, et quand
 ch'est qu'ches gins is sont libes : [vlà un exempe](example/problem.yaml).
 Ctrl+C : i s'arrête, pis i t'donne ch'meilleur planning qu'il a trouvé.
 
+`-csv planning.csv -csv-separator ";"` : ch'planning in tableau, pour Excel.
+
 Tout ch'mode d'emploi, i est in [inglais](README.md) pis in
 [français](README.fr.md).
 

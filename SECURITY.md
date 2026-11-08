@@ -14,8 +14,9 @@ reporting are therefore, for example:
 
 - a problem or plan file that makes the program crash, hang or use memory
   without bound, or write somewhere other than the files it was given;
-- a file whose content runs code in the page of the demo (names are
-  displayed there);
+- a file, or a link of the demo (it holds a whole problem), whose content
+  runs code in the page of the demo (names are displayed there);
+- a schedule table (`-csv`) that a spreadsheet runs as a formula;
 - a vulnerable dependency that the weekly `osv-scanner` run has not caught.
 
 ## Report a vulnerability

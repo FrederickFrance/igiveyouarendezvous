@@ -201,18 +201,23 @@ func (g Gap) String() string {
 	}
 }
 
-// Meet is a recruiter a candidate must meet, with the rank of the meeting
-// (see planning.Request.Rank).
+// Meet is a recruiter a candidate must meet, with the rank and the length
+// of the meeting (see planning.Request).
 type Meet struct {
 	Recruiter string
 	Rank      int
+	Duration  time.Duration
 }
 
 // Meets lists the recruiters to meet: a list, in any order, or a mapping of
-// the recruiters to their ranks, 1, 2..., or X for any time:
+// the recruiters to their ranks, 1, 2..., or X for any time, to the length
+// of the meeting, or to both:
 //
 //	meet: [recruiter 1, recruiter 2]
 //	meet: {recruiter 1: 1, recruiter 2: X, recruiter 3: 2}
+//	meet: {recruiter 1: 15m, recruiter 2: {rank: 1, duration: 1h}}
+//
+// A bare number is a rank: a duration needs its unit.
 type Meets []Meet
 
 // UnmarshalYAML implements yaml.Unmarshaler.
@@ -230,18 +235,9 @@ func (m *Meets) UnmarshalYAML(n *yaml.Node) error {
 		}
 	case yaml.MappingNode:
 		for i := 0; i+1 < len(n.Content); i += 2 {
-			key, value := n.Content[i], n.Content[i+1]
-			meet := Meet{Recruiter: key.Value}
-
-			switch v := strings.TrimSpace(value.Value); {
-			case value.ShortTag() == "!!null", strings.EqualFold(v, "x"), strings.EqualFold(v, "any"):
-			default:
-				rank, err := strconv.Atoi(v)
-				if err != nil || rank < 1 || value.Kind != yaml.ScalarNode {
-					return fmt.Errorf("line %d: %s: a rank is expected, 1, 2... or X for any time", value.Line, key.Value)
-				}
-
-				meet.Rank = rank
+			meet, err := readMeet(n.Content[i], n.Content[i+1])
+			if err != nil {
+				return err
 			}
 
 			out = append(out, meet)
@@ -253,6 +249,91 @@ func (m *Meets) UnmarshalYAML(n *yaml.Node) error {
 	*m = out
 
 	return nil
+}
+
+// readMeet reads one recruiter of a mapping of meet: its value is a rank, a
+// duration, or both in a mapping {rank: 1, duration: 15m}.
+func readMeet(key, value *yaml.Node) (Meet, error) {
+	meet := Meet{Recruiter: key.Value}
+	wrong := fmt.Errorf("line %d: %s: a rank is expected, 1, 2... or X for any time, a duration such as 15m, or both, {rank: 1, duration: 15m}", value.Line, key.Value)
+
+	if value.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(value.Content); i += 2 {
+			k, v := value.Content[i], value.Content[i+1]
+
+			var err error
+
+			switch k.Value {
+			case "rank":
+				meet.Rank, err = readRank(v)
+			case "duration":
+				meet.Duration, err = readMeetDuration(v)
+			default:
+				return meet, fmt.Errorf("line %d: %s: unknown key %q (known: duration, rank)", k.Line, key.Value, k.Value)
+			}
+
+			if err != nil {
+				return meet, wrong
+			}
+		}
+
+		return meet, nil
+	}
+
+	if value.Kind != yaml.ScalarNode {
+		return meet, wrong
+	}
+
+	if rank, err := readRank(value); err == nil {
+		meet.Rank = rank
+
+		return meet, nil
+	}
+
+	d, err := readMeetDuration(value)
+	if err != nil {
+		return meet, wrong
+	}
+
+	meet.Duration = d
+
+	return meet, nil
+}
+
+// readRank reads a rank of meet: 1, 2..., or X, any or nothing for any
+// time (0).
+func readRank(n *yaml.Node) (int, error) {
+	v := strings.TrimSpace(n.Value)
+
+	switch {
+	case n.Kind != yaml.ScalarNode:
+		return 0, errors.New("a rank is expected")
+	case n.ShortTag() == "!!null", strings.EqualFold(v, "x"), strings.EqualFold(v, "any"):
+		return 0, nil
+	}
+
+	rank, err := strconv.Atoi(v)
+	if err != nil || rank < 1 {
+		return 0, errors.New("a rank is expected")
+	}
+
+	return rank, nil
+}
+
+// readMeetDuration reads the length of a meeting, which needs its unit: a
+// bare number is a rank.
+func readMeetDuration(n *yaml.Node) (time.Duration, error) {
+	v := strings.TrimSpace(n.Value)
+	if _, err := strconv.Atoi(v); err == nil || n.Kind != yaml.ScalarNode {
+		return 0, errors.New("a duration with its unit is expected")
+	}
+
+	d, err := ParseDuration(v)
+	if err != nil || d <= 0 {
+		return 0, errors.New("a positive duration is expected")
+	}
+
+	return d, nil
 }
 
 // weekdayNames are the names of the days of the week, as written in the

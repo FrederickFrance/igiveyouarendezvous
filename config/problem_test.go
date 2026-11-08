@@ -242,19 +242,20 @@ func TestProblemFileErrors(t *testing.T) {
 		"recruiters: {R: }": `"candidates" is missing`,
 		"candidates: {}":    `"recruiters" is missing`,
 		"[1]":               "keys are expected",
-		"recruiters: {}\ncandidates: {}\nbreak: 12h-13h":                    `line 3: unknown key "break" in the top level`,
-		"recruiters:\n  R:\n    durations: 1h\ncandidates: {}":              `line 3: unknown key "durations" in recruiters > R`,
-		"recruiters: {R: }\ncandidates:\n  A:\n    meets: [R]":              `line 4: unknown key "meets" in candidates > A`,
-		"recruiters: {R: }\ncandidates:\n  A: {}":                           `A: line 3: "meet" is missing`,
-		"recruiters: {R: }\ncandidates:\n  A:\n    meet:":                   `A: line 4: "meet" is missing`,
-		"recruiters: {R: }\ncandidates:\n  A: {meet: [R], priority: 0}":     "the priority is 1 or more",
-		"recruiters: [R]\ncandidates: {}":                                   "line 1: names are expected",
-		"recruiters:\n  R:\n  ' R ':\ncandidates: {}":                       `line 3: "R" is already given line 2`,
-		"recruiters:\n  '': {}\ncandidates: {}":                             "line 2: an empty name",
-		"recruiters:\n  R: {duration: soon}\ncandidates: {}":                "R: line 2: invalid duration",
-		"recruiters: {}\ncandidates: {}\nday: 25h-26h":                      "invalid time",
-		"recruiters:\n  R: {availability: 9h-12h, 14h-16h}\ncandidates: {}": `unknown key "14h-16h" in recruiters > R (known: availability, duration); between braces, write the time spans between quotes`,
-		"{\"recruiters\": {}, \"candidates\": {}, \"x\": 1}":                `unknown key "x"`,
+		"recruiters: {}\ncandidates: {}\nbreak: 12h-13h":                        `line 3: unknown key "break" in the top level`,
+		"recruiters:\n  R:\n    durations: 1h\ncandidates: {}":                  `line 3: unknown key "durations" in recruiters > R`,
+		"recruiters: {R: }\ncandidates:\n  A:\n    meets: [R]":                  `line 4: unknown key "meets" in candidates > A`,
+		"recruiters: {R: }\ncandidates:\n  A: {}":                               `A: line 3: "meet" is missing`,
+		"recruiters: {R: }\ncandidates:\n  A:\n    meet:":                       `A: line 4: "meet" is missing`,
+		"recruiters: {R: }\ncandidates:\n  A: {meet: [R], priority: 0}":         "the priority is 1 or more",
+		"recruiters: {R: }\ncandidates:\n  A: {meet: {R: 15m}, together: true}": "line 3: together, everybody meets at once: no durations in meet",
+		"recruiters: [R]\ncandidates: {}":                                       "line 1: names are expected",
+		"recruiters:\n  R:\n  ' R ':\ncandidates: {}":                           `line 3: "R" is already given line 2`,
+		"recruiters:\n  '': {}\ncandidates: {}":                                 "line 2: an empty name",
+		"recruiters:\n  R: {duration: soon}\ncandidates: {}":                    "R: line 2: invalid duration",
+		"recruiters: {}\ncandidates: {}\nday: 25h-26h":                          "invalid time",
+		"recruiters:\n  R: {availability: 9h-12h, 14h-16h}\ncandidates: {}":     `unknown key "14h-16h" in recruiters > R (known: availability, duration); between braces, write the time spans between quotes`,
+		"{\"recruiters\": {}, \"candidates\": {}, \"x\": 1}":                    `unknown key "x"`,
 	} {
 		_, err := Parse([]byte(text))
 		require.ErrorContains(t, err, msg, text)
@@ -446,9 +447,10 @@ func TestWithoutAvailability(t *testing.T) {
 	t.Parallel()
 
 	for text, want := range map[string][]string{
-		"recruiters: {R1: {availability: 9h-12h}, R2: }\ncandidates:\n  A: {meet: [R1]}\n  B: {meet: [R2], availability: none}\n": {"R2", "A"},
-		"recruiters: {R1: , R2: }\ncandidates:\n  A: {meet: [R1]}\n":                                                              nil,
-		"recruiters: {R1: {availability: 9h-12h}}\ncandidates:\n  show: {meet: [R1], together: true}\n":                           nil,
+		"recruiters: {R1: {availability: 9h-12h}, R2: {availability: 14h-16h}}\ncandidates:\n  A: {meet: [R1]}\n  B: {meet: [R2], availability: none}\n": {"A"},
+		"recruiters: {R1: {availability: 9h-12h}, R2: }\ncandidates:\n  A: {meet: [R1]}\n  B: {meet: [R2], availability: none}\n":                        nil,
+		"recruiters: {R1: , R2: }\ncandidates:\n  A: {meet: [R1]}\n":                                                                                     nil,
+		"recruiters: {R1: {availability: 9h-12h}}\ncandidates:\n  show: {meet: [R1], together: true}\n":                                                  nil,
 	} {
 		f, err := Parse([]byte(text))
 		require.NoError(t, err)

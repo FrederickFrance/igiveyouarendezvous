@@ -52,7 +52,9 @@ has defaults):
   with `none`, would make them absent for the whole period.
 - `candidates.<name>.meet`: the recruiters to meet, as a list in any order,
   `[Ann, Bob]`, or with ranks to set an order, `{Ann: 1, Bob: 2, Carl: X}`:
-  rank 1 first, then rank 2…, `X` any time.
+  rank 1 first, then rank 2…, `X` any time. A meeting may have its own
+  length, `{Ann: 15m}`, or both, `{Ann: {rank: 1, duration: 15m}}`; a bare
+  number is a rank, so a length always has its unit.
 - `candidates.<name>.priority`: `1` by default; the higher, the more
   important when not everybody fits.
 - `joint-groups`: lists of recruiters who MAY interview a candidate together,
@@ -65,6 +67,11 @@ has defaults):
   recruiters of `meet` at once (a show, a workshop session); no ranks then.
   Other uses map onto the same words: guests are "recruiters", episodes or
   sessions are "candidates".
+- `objectives`: what matters, the most important first. Keep the default
+  unless I say otherwise; "finish the day as early as possible" is
+  `day-end`, "as little waiting as possible between two meetings" is
+  `candidate-wait`, for instance `[complete-candidates, day-end,
+  candidate-wait]`.
 
 How to write it:
 

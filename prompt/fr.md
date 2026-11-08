@@ -54,7 +54,9 @@ a des valeurs par défaut) :
 - `candidates.<nom>.meet` : les recruteurs à rencontrer, en liste dans
   n'importe quel ordre, `[Anne, Bruno]`, ou avec des rangs pour imposer un
   ordre, `{Anne: 1, Bruno: 2, Carl: X}` : le rang 1 d'abord, puis le
-  rang 2…, `X` n'importe quand.
+  rang 2…, `X` n'importe quand. Une rencontre peut avoir sa propre durée,
+  `{Anne: 15m}`, ou les deux, `{Anne: {rank: 1, duration: 15m}}` ; un
+  nombre seul est un rang, donc une durée a toujours son unité.
 - `candidates.<nom>.priority` : `1` par défaut ; plus il est grand, plus le
   candidat compte quand tout le monde ne tient pas.
 - `joint-groups` : des listes de recruteurs qui PEUVENT recevoir un candidat
@@ -68,6 +70,11 @@ a des valeurs par défaut) :
   recruteurs de `meet` à la fois (une émission, une séance d'atelier) ; pas
   de rangs alors. D'autres usages reprennent les mêmes mots : les invités
   sont des « recruteurs », les épisodes ou séances des « candidats ».
+- `objectives` : ce qui compte, le plus important d'abord. Garde la valeur
+  par défaut sauf si je dis autre chose ; « finir la journée le plus tôt
+  possible » est `day-end`, « attendre le moins possible entre deux
+  rencontres » est `candidate-wait`, par exemple `[complete-candidates,
+  day-end, candidate-wait]`.
 
 Comment l'écrire :
 

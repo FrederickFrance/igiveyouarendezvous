@@ -56,6 +56,8 @@ igiveyouarendezvous -rest "wa'leS.yaml" example/problem.yaml
 
 Ctrl+C: yImev!
 
+`-csv`: Excel.
+
 De' Hoch: [DIvI' Hol](README.md), [Français](README.fr.md).
 
 ## chut

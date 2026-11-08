@@ -7,6 +7,36 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
+## [0.5.0] - 2026-11-08 "White Rabbit" 🐇
+
+### Added
+
+- **The length of a meeting**, in `meet`: `{Alice: 15m}`, or with a rank,
+  `{Alice: {rank: 1, duration: 15m}}`; it wins over the candidate's
+  `duration` and the recruiter's (`planning.Request.Duration`).
+- **The objective `day-end`**: each day finishes as early as possible (the
+  end of its last interview); shown as a time of day.
+- **The schedule as a table**: `-csv schedule.csv` writes one row per
+  interview (date, start, end, candidate, recruiters, fixed), for Excel or a
+  mail merge of the invitations; `-csv-separator ";"` for Excel in French.
+  The online demo offers it, with the separator of its language.
+- **The link of a case**, in the online demo: "Copy the link of my case"
+  puts the problem, compressed, after the `#` of the address, which the
+  browser never sends to the server; the link opens the demo with the
+  problem. With it, a section "A problem, an idea?": the link, the file,
+  a message on LinkedIn or an issue on GitHub.
+
+### Changed
+
+- **The impossible meetings, explained**: the people available at no time
+  of the period are named once (`Impossible, available at no time of the
+  period: Ines`), rather than a meeting with each of their candidates; the
+  others are grouped by candidate (`Impossible, never free together long
+  enough: C (Lea)`). The library gives them in `Schedule.Absent`.
+- The note about people without availability lists them only when most
+  of the others have one: when few people have one, the day is the rule,
+  on purpose.
+
 ## [0.4.1] - 2026-11-08 "Cinderella" 👠
 
 ### Changed

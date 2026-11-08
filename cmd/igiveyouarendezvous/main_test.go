@@ -135,11 +135,31 @@ func TestRunErrors(t *testing.T) {
 	nowhere := filepath.Join(t.TempDir(), "no", "such", "dir", "plan.json")
 	require.Error(t, run(t.Context(), []string{"-patience", "10ms", "-out", nowhere}, in(), &out, &out))
 	require.Error(t, run(t.Context(), []string{"-patience", "10ms", "-rest", nowhere}, in(), &out, &out))
+	require.Error(t, run(t.Context(), []string{"-patience", "10ms", "-csv", nowhere}, in(), &out, &out))
+	require.ErrorContains(t, run(t.Context(), []string{"-csv-separator", "|"}, in(), &out, &out), `-csv-separator: invalid separator "|"`)
 	require.ErrorIs(t, run(t.Context(), []string{"-start", nowhere}, in(), &out, &out), os.ErrNotExist)
 	require.Error(t, run(t.Context(), []string{"-date", "tomorrow"}, in(), &out, &out))
 
 	bad := file(t, t.TempDir(), "plan.yaml", "candidates:\n  A: {interviews: []}\n")
 	require.ErrorContains(t, run(t.Context(), []string{"-start", bad}, in(), &out, &out), bad+`: line 2: A: "fixed" is missing`)
+}
+
+// -csv writes the schedule as a table, for a spreadsheet.
+func TestRunCSV(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	table := filepath.Join(dir, "schedule.csv")
+
+	var out bytes.Buffer
+	require.NoError(t, run(t.Context(), []string{"-patience", "100ms", "-date", "2026-11-09", "-csv", table, "-csv-separator", ";"},
+		strings.NewReader("day: 09:00-11:00\nrecruiters: {R1: , R2: }\ncandidates:\n  A: {meet: {R1: 1, R2: 2}}\n"), &out, &out))
+
+	data, err := os.ReadFile(table)
+	require.NoError(t, err)
+
+	lines := strings.Split(strings.TrimSuffix(strings.TrimPrefix(string(data), "\ufeff"), "\n"), "\n")
+	require.Equal(t, []string{"date;start;end;candidate;recruiters;fixed", "2026-11-09;09:00;10:00;A;R1;no", "2026-11-09;10:00;11:00;A;R2;no"}, lines)
 }
 
 func TestRunInterrupted(t *testing.T) {
@@ -543,7 +563,31 @@ candidates:
 	var out bytes.Buffer
 	require.NoError(t, run(t.Context(), []string{"-patience", "100ms"}, strings.NewReader(problem), &out, &out))
 	require.Contains(t, out.String(), "To plan later: episode (host, guest, other guest)")
-	require.Contains(t, out.String(), "Impossible with these availabilities")
+	require.Contains(t, out.String(), "Impossible, never free together long enough: episode (host, guest, other guest)\n")
+}
+
+// Somebody available on no day of the period: one line names them, rather
+// than a meeting with each of their candidates.
+func TestRunNamesThePeopleAbsentAllThePeriod(t *testing.T) {
+	t.Parallel()
+
+	const problem = `from: 2026-12-07
+to: 2026-12-11
+recruiters:
+  Ines: {availability: {2026-12-09: none, 2026-12-16: 09:00-12:00}}
+  Hugo:
+  Lea: {availability: 08:00-09:00}
+candidates:
+  A: {meet: [Ines, Hugo]}
+  B: {meet: [Ines]}
+  C: {meet: [Hugo, Lea], availability: 10:00-12:00}
+  D: {meet: [Hugo]}
+`
+
+	var out bytes.Buffer
+	require.NoError(t, run(t.Context(), []string{"-patience", "100ms"}, strings.NewReader(problem), &out, &out))
+	require.Contains(t, out.String(), "\nImpossible, available at no time of the period: Ines\n"+
+		"Impossible, never free together long enough: C (Lea)\n")
 }
 
 // A shoot over two days in a row (README, other uses): each day gathers its
@@ -593,8 +637,14 @@ func TestRunNotesPeopleWithoutAvailability(t *testing.T) {
 
 	var out, errs bytes.Buffer
 	require.NoError(t, run(t.Context(), []string{"-patience", "100ms"},
-		strings.NewReader("day: 09:00-17:00\nrecruiters:\n  R1: {availability: 09:00-12:00}\n  R2:\ncandidates:\n  A: {meet: [R1, R2]}\n"), &out, &errs))
-	require.Contains(t, errs.String(), "note: no availability for R2, A: available whenever the day allows (09:00-17:00)\n")
+		strings.NewReader("day: 09:00-17:00\nrecruiters:\n  R1: {availability: 09:00-12:00}\n  R2: {availability: 14:00-17:00}\ncandidates:\n  A: {meet: [R1, R2]}\n"), &out, &errs))
+	require.Contains(t, errs.String(), "note: no availability for A: available whenever the day allows (09:00-17:00)\n")
+
+	// As many without as with one: the day is the rule, on purpose.
+	errs.Reset()
+	require.NoError(t, run(t.Context(), []string{"-patience", "100ms"},
+		strings.NewReader("recruiters:\n  R1: {availability: 09:00-12:00}\n  R2:\ncandidates:\n  A: {meet: [R1, R2]}\n"), &out, &errs))
+	require.NotContains(t, errs.String(), "no availability")
 
 	// Nobody has one: the day is everybody's, on purpose.
 	errs.Reset()

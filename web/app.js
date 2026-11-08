@@ -51,14 +51,29 @@ const texts = {
     oneDay: "The day",
     allPlanned: "All meetings are planned.",
     planLater: "To plan later:",
-    impossible: "Impossible with these availabilities (never free together long enough):",
+    absent: "Impossible, available at no time of the period:",
+    impossible: "Impossible, never free together long enough:",
     empty: "No interview could be planned.",
     textSummary: "Text output of the program",
     downloadsLabel: "Download:",
     dlSchedule: "the schedule (text)",
+    dlTable: "the table (CSV, for a spreadsheet)",
     dlPlan: "the plan (JSON)",
     dlRest: "the problem left for later (YAML)",
     dlProblem: "the problem (YAML)",
+    contactTitle: "A problem, an idea?",
+    contactHelp:
+      "Copy the link of your case, or download its file, and send it to me: by a message on LinkedIn, or in an issue on GitHub if you have an account. The link and the file hold the whole problem: use made-up names, an issue is public.",
+    copyLink: "Copy the link of my case",
+    downloadProblem: "Download my file",
+    writeLinkedIn: "Write to me on LinkedIn",
+    openIssue: "Open an issue on GitHub",
+    linkCopied: "The link is copied: paste it in your message. It opens this page with your problem.",
+    linkShown: "Copy this link: it opens this page with your problem.",
+    linkLong: "The link is long: some messages cut it. Send the file as well.",
+    linkFailed: "This browser cannot make the link: download the file instead.",
+    linkLoaded: "The problem comes from the link you opened.",
+    linkBroken: "The link is damaged or incomplete: the problem could not be read.",
     limitsTitle: "What this demo does not do",
     limitCores: "It searches on one processor core, for at most 5 minutes. The program uses every core, for as long as you want, and does better on large problems.",
     limitFiles: "It reads and writes no file on your computer: plans and results are imported and downloaded. Only your draft is kept, in this browser.",
@@ -105,14 +120,29 @@ const texts = {
     oneDay: "La journée",
     allPlanned: "Toutes les rencontres sont planifiées.",
     planLater: "À planifier plus tard :",
-    impossible: "Impossible avec ces disponibilités (jamais libres ensemble assez longtemps) :",
+    absent: "Impossible, disponible à aucun moment de la période :",
+    impossible: "Impossible, jamais libres ensemble assez longtemps :",
     empty: "Aucun entretien n'a pu être planifié.",
     textSummary: "Sortie texte du programme",
     downloadsLabel: "Télécharger :",
     dlSchedule: "le planning (texte)",
+    dlTable: "le tableau (CSV, pour un tableur)",
     dlPlan: "le plan (JSON)",
     dlRest: "le problème restant (YAML)",
     dlProblem: "le problème (YAML)",
+    contactTitle: "Un souci ? Une idée ?",
+    contactHelp:
+      "Copiez le lien de votre cas, ou téléchargez son fichier, et envoyez-le-moi : par un message sur LinkedIn, ou dans une issue sur GitHub si vous avez un compte. Le lien et le fichier contiennent tout le problème : utilisez des noms inventés, une issue est publique.",
+    copyLink: "Copier le lien de mon cas",
+    downloadProblem: "Télécharger mon fichier",
+    writeLinkedIn: "M'écrire sur LinkedIn",
+    openIssue: "Ouvrir une issue sur GitHub",
+    linkCopied: "Le lien est copié : collez-le dans votre message. Il ouvre cette page avec votre problème.",
+    linkShown: "Copiez ce lien : il ouvre cette page avec votre problème.",
+    linkLong: "Le lien est long : certaines messageries le coupent. Envoyez aussi le fichier.",
+    linkFailed: "Ce navigateur ne sait pas fabriquer le lien : téléchargez plutôt le fichier.",
+    linkLoaded: "Le problème vient du lien que vous avez ouvert.",
+    linkBroken: "Le lien est abîmé ou incomplet : le problème n'a pas pu être lu.",
     limitsTitle: "Ce que la démo ne fait pas",
     limitCores: "Elle cherche sur un seul cœur du processeur, 5 minutes au plus. Le programme utilise tous les cœurs, aussi longtemps que vous voulez, et fait mieux sur les gros problèmes.",
     limitFiles: "Elle ne lit ni n'écrit aucun fichier de votre ordinateur : les plans et les résultats s'importent et se téléchargent. Seul votre brouillon est gardé, dans ce navigateur.",
@@ -159,7 +189,7 @@ let startedAt = 0;
 let ticker = 0;
 let status = { key: "loading", args: [] };
 let progressText = "";
-let best = null; // {text, plan}: the best schedule so far, while searching
+let best = null; // {text, plan, table, rest}: the best schedule so far, while searching
 let lastPlan = ""; // the plan of the last schedule, for "take the last schedule"
 let currentExample = store.get("igy.example") || examples[0].file;
 let loadedExample = ""; // the example as loaded, to follow the language while untouched
@@ -181,7 +211,7 @@ function applyTexts() {
   updateButtons();
   if (best) {
     renderBoard(best.plan);
-    renderDownloads(best.text, best.plan, best.rest);
+    renderDownloads(best);
   }
 }
 
@@ -296,8 +326,8 @@ function onMessage(event) {
       onLine(message.line);
       break;
     case "best":
-      best = { text: message.text, plan: message.plan };
-      showSchedule(message.text, message.plan, "");
+      best = { text: message.text, plan: message.plan, table: message.table, rest: "" };
+      showSchedule(best);
       break;
     case "done":
       finish(message.result);
@@ -334,7 +364,10 @@ function plan() {
 
   const limit = Number($("time-limit").value);
   const patience = Math.min(30, Math.max(5, Math.round(limit / 6)));
-  const args = ["-timeout", `${limit}s`, "-patience", `${patience}s`, "-progress", "-out", "plan.json", "-rest", "rest.yaml"];
+  // The table separates its columns as a spreadsheet of the language expects:
+  // Excel in French reads semicolons.
+  const args = ["-timeout", `${limit}s`, "-patience", `${patience}s`, "-progress", "-out", "plan.json", "-rest", "rest.yaml",
+    "-csv", "schedule.csv", "-csv-separator", lang === "fr" ? ";" : ","];
 
   if ($("from").value) {
     args.push("-from", $("from").value);
@@ -382,8 +415,8 @@ function finish(result) {
 
   const files = result.files || {};
   lastPlan = files["plan.json"] || "";
-  best = { text: result.output, plan: lastPlan, rest: files["rest.yaml"] || "" };
-  showSchedule(result.output, lastPlan, best.rest);
+  best = { text: result.output, plan: lastPlan, table: files["schedule.csv"] || "", rest: files["rest.yaml"] || "" };
+  showSchedule(best);
 
   if (result.alerts) {
     addNote(t("alerts"));
@@ -479,8 +512,9 @@ function addNote(text) {
   $("notes").hidden = false;
 }
 
-function showSchedule(text, planText, rest) {
-  renderBoard(planText);
+function showSchedule(result) {
+  const { text, plan } = result;
+  renderBoard(plan);
 
   // The conclusion of the program, in the language of the page.
   const summary = text
@@ -492,8 +526,13 @@ function showSchedule(text, planText, rest) {
       if (line.startsWith("To plan later:")) {
         return `${t("planLater")}${line.slice("To plan later:".length)}`;
       }
-      if (line.startsWith("Impossible with these availabilities (never free together long enough):")) {
-        return `${t("impossible")}${line.slice("Impossible with these availabilities (never free together long enough):".length)}`;
+      for (const [key, prefix] of [
+        ["absent", "Impossible, available at no time of the period:"],
+        ["impossible", "Impossible, never free together long enough:"],
+      ]) {
+        if (line.startsWith(prefix)) {
+          return `${t(key)}${line.slice(prefix.length)}`;
+        }
       }
       return "";
     })
@@ -505,7 +544,7 @@ function showSchedule(text, planText, rest) {
   $("output").textContent = text;
   $("output-box").hidden = false;
 
-  renderDownloads(text, planText, rest);
+  renderDownloads(result);
 }
 
 // ---------- the board: one row per person, a strip per interview
@@ -635,7 +674,7 @@ function renderDay(key, interviews, candidates) {
 
 // ---------- downloads
 
-function renderDownloads(text, planText, rest) {
+function renderDownloads({ text, plan, table, rest }) {
   for (const url of downloadURLs) {
     URL.revokeObjectURL(url);
   }
@@ -650,7 +689,8 @@ function renderDownloads(text, planText, rest) {
 
   const files = [
     ["dlSchedule", "schedule.txt", text, "text/plain"],
-    ["dlPlan", "plan.json", planText, "application/json"],
+    ["dlTable", "schedule.csv", table, "text/csv"],
+    ["dlPlan", "plan.json", plan, "application/json"],
     ["dlRest", "rest.yaml", rest, "text/yaml"],
     ["dlProblem", "problem.yaml", $("problem").value, "text/yaml"],
   ];
@@ -687,9 +727,134 @@ async function importPlan(input) {
   input.value = "";
 }
 
+// ---------- the link of a case: the problem, compressed, after the #, which
+// the browser never sends to the server
+
+const linkVersion = "v1.";
+const maxLinkData = 200_000; // characters after the #
+const maxCaseSize = 2_000_000; // bytes, once inflated
+
+function toBase64URL(bytes) {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+}
+
+function fromBase64URL(text) {
+  const binary = atob(text.replaceAll("-", "+").replaceAll("_", "/"));
+  return Uint8Array.from(binary, (c) => c.charCodeAt(0));
+}
+
+async function encodeCase() {
+  const data = JSON.stringify({ problem: $("problem").value, from: $("from").value, to: $("to").value });
+  const stream = new Blob([data]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+  return linkVersion + toBase64URL(new Uint8Array(await new Response(stream).arrayBuffer()));
+}
+
+// decodeCase reads a case, refusing what would inflate beyond maxCaseSize.
+async function decodeCase(text) {
+  if (!text.startsWith(linkVersion) || text.length > maxLinkData) {
+    throw new Error("not a case");
+  }
+  const reader = new Blob([fromBase64URL(text.slice(linkVersion.length))])
+    .stream()
+    .pipeThrough(new DecompressionStream("deflate-raw"))
+    .getReader();
+  const chunks = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    size += value.length;
+    if (size > maxCaseSize) {
+      await reader.cancel();
+      throw new Error("too large");
+    }
+    chunks.push(value);
+  }
+  const data = JSON.parse(await new Blob(chunks).text());
+  if (typeof data.problem !== "string") {
+    throw new Error("no problem");
+  }
+  const date = (value) => (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : "");
+  return { problem: data.problem, from: date(data.from), to: date(data.to) };
+}
+
+function showContactStatus(key) {
+  $("contact-status").textContent = t(key);
+  $("contact-status").hidden = false;
+}
+
+async function copyCaseLink() {
+  let url;
+  try {
+    url = `${location.origin}${location.pathname}#${await encodeCase()}`;
+  } catch {
+    showContactStatus("linkFailed");
+    return;
+  }
+
+  const field = $("case-link");
+  field.value = url;
+  field.hidden = false;
+
+  let copied = false;
+  try {
+    await navigator.clipboard.writeText(url);
+    copied = true;
+  } catch {
+    field.select(); // the clipboard is refused: the link is there to copy
+  }
+  showContactStatus(copied ? "linkCopied" : "linkShown");
+  if (url.length > 8000) {
+    $("contact-status").textContent += ` ${t("linkLong")}`;
+  }
+}
+
+function downloadProblem() {
+  const url = URL.createObjectURL(new Blob([$("problem").value], { type: "text/yaml;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "problem.yaml";
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// loadCaseFromLink puts the case of the link in the editor, then removes it
+// from the address, so that a reload keeps the edits; false without a
+// readable case.
+async function loadCaseFromLink() {
+  const hash = location.hash.slice(1);
+  if (!hash.startsWith(linkVersion)) {
+    return false;
+  }
+  history.replaceState(null, "", `${location.pathname}${location.search}`);
+
+  try {
+    const found = await decodeCase(hash);
+    $("problem").value = found.problem;
+    $("from").value = found.from;
+    $("to").value = found.to;
+    loadedExample = "";
+    currentExample = "";
+    store.set("igy.problem", found.problem);
+    store.set("igy.example", "");
+    renderExamples();
+    addNote(t("linkLoaded"));
+    return true;
+  } catch {
+    addNote(t("linkBroken")); // the draft, or an example, instead
+    return false;
+  }
+}
+
 // ---------- start
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   for (const button of document.querySelectorAll("[data-lang]")) {
     button.addEventListener("click", () => setLanguage(button.dataset.lang));
   }
@@ -714,14 +879,20 @@ document.addEventListener("DOMContentLoaded", () => {
     $("not-before").value = "";
   });
   $("import-plan").addEventListener("change", (event) => importPlan(event.target));
+  $("copy-link").addEventListener("click", copyCaseLink);
+  $("download-problem").addEventListener("click", downloadProblem);
 
   applyTexts();
   startWorker();
+
+  if (await loadCaseFromLink()) {
+    return;
+  }
 
   const draft = store.get("igy.problem");
   if (draft) {
     editor.value = draft;
   } else {
-    loadExample(currentExample);
+    loadExample(currentExample || examples[0].file);
   }
 });

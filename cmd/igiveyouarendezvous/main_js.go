@@ -18,7 +18,8 @@ import (
 // inputs an object of the files it may read, by name (a -start plan),
 // progress a function called with each line printed on the standard error
 // output (notes, progress), and best a function called with every better
-// schedule found, as printed and as a JSON plan. The result has the printed
+// schedule found, as printed, as a JSON plan and, with -csv, as a table. The
+// result has the printed
 // schedule (output), the files written (files, by name), and error or alerts
 // when there are some.
 func main() {
@@ -48,7 +49,7 @@ func plan(_ js.Value, a []js.Value) any {
 
 			stderr := &lineWriter{line: func(line string) { progress.Invoke(line) }}
 			output, written, err := runInMemory(context.Background(), args, problem, inputs, stderr,
-				func(text, plan string) { best.Invoke(text, plan) })
+				func(text, plan, table string) { best.Invoke(text, plan, table) })
 			stderr.Flush()
 
 			produced := map[string]any{}

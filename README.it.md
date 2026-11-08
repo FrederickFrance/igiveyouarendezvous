@@ -131,6 +131,10 @@ l'[esempio commentato](example/problem.yaml) e lo
 [schema JSON](schema/problem.schema.json). Ctrl+C ferma la ricerca e stampa
 il miglior calendario trovato finora.
 
+`-csv calendario.csv` scrive anche il calendario come tabella, una riga per
+colloquio, per Excel o una stampa unione (`-csv-separator ";"` per un Excel
+in italiano).
+
 La documentazione completa è in [inglese](README.md) e in
 [francese](README.fr.md).
 
