@@ -80,7 +80,6 @@ type instance struct {
 	p          *Problem
 	o          Options
 	g          grid
-	length     []int    // interview length per recruiter, in slots
 	availC     [][]bool // [candidate][slot]
 	availR     [][]bool // [recruiter][slot]
 	day        []int    // [slot]: its day
@@ -147,6 +146,12 @@ func newInstance(p *Problem, opts Options) (*instance, error) {
 		values = append(values, b.Start, b.End)
 	}
 
+	for _, r := range p.Requests {
+		if r.Duration > 0 {
+			values = append(values, r.Duration)
+		}
+	}
+
 	step, err := chooseStep(o.Step, values)
 	if err != nil {
 		return nil, err
@@ -190,11 +195,9 @@ func newInstance(p *Problem, opts Options) (*instance, error) {
 
 	in.sessions = current + 1
 
-	in.length = make([]int, len(p.Recruiters))
 	in.availR = make([][]bool, len(p.Recruiters))
 
 	for h := range p.Recruiters {
-		in.length[h] = int(p.duration(h, o) / step)
 		in.availR[h] = in.g.mask(recAvail[h])
 		removeBreaks(in.availR[h], pause)
 	}

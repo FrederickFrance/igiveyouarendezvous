@@ -139,6 +139,8 @@ func (c *Candidate) UnmarshalYAML(n *yaml.Node) error {
 		return fmt.Errorf("line %d: the priority is 1 or more", n.Line)
 	case raw.Together && slices.ContainsFunc(*raw.Meet, func(m Meet) bool { return m.Rank > 0 }):
 		return fmt.Errorf("line %d: together, everybody meets at once: no ranks in meet", n.Line)
+	case raw.Together && slices.ContainsFunc(*raw.Meet, func(m Meet) bool { return m.Duration > 0 }):
+		return fmt.Errorf("line %d: together, everybody meets at once: no durations in meet, give the candidate's duration", n.Line)
 	}
 
 	*c = Candidate{Meet: *raw.Meet, Availability: raw.Availability, Duration: raw.Duration, Together: raw.Together}
@@ -474,7 +476,7 @@ func (f *File) Problem(from, to string) (*planning.Problem, planning.Options, er
 			}
 
 			met[h] = true
-			p.Requests = append(p.Requests, planning.Request{Candidate: c, Recruiter: h, Rank: m.Rank})
+			p.Requests = append(p.Requests, planning.Request{Candidate: c, Recruiter: h, Rank: m.Rank, Duration: m.Duration})
 		}
 	}
 
@@ -490,18 +492,19 @@ func (f *File) Problem(from, to string) (*planning.Problem, planning.Options, er
 }
 
 // WithoutAvailability lists the people, recruiters then candidates, who
-// have no availability when others have one: they are available whenever
-// the day (key day) allows, which may be an oversight. It is nil when
-// nobody, or everybody, has an availability. A meeting (together: true) is
-// not a person: it is left out.
+// have no availability when most of the others have one: they are
+// available whenever the day (key day) allows, which may then be an
+// oversight. It is nil when they are as many as those with one, or more: the
+// day is then the rule, on purpose. A meeting (together: true) is not a
+// person: it is left out.
 func (f *File) WithoutAvailability() []string {
 	var without []string
 
-	given := false
+	given := 0
 
 	for _, e := range f.Recruiters {
 		if e.Value.Availability.IsSet() {
-			given = true
+			given++
 		} else {
 			without = append(without, e.Name)
 		}
@@ -510,13 +513,13 @@ func (f *File) WithoutAvailability() []string {
 	for _, e := range f.Candidates {
 		switch {
 		case e.Value.Availability.IsSet():
-			given = true
+			given++
 		case !e.Value.Together:
 			without = append(without, e.Name)
 		}
 	}
 
-	if !given {
+	if len(without) >= given {
 		return nil
 	}
 

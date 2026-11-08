@@ -193,18 +193,84 @@ func printSchedule(w io.Writer, p *planning.Problem, s *planning.Schedule, pe pe
 
 	fmt.Fprintf(w, "\nTo plan later: %s\n", strings.Join(parts, ", "))
 
+	printImpossible(w, p, s)
+}
+
+// printImpossible reports the meetings that the availabilities forbid: the
+// people available at no time of the period, then the candidates and
+// recruiters never free together long enough, by candidate.
+func printImpossible(w io.Writer, p *planning.Problem, s *planning.Schedule) {
 	if len(s.Impossible) == 0 {
 		return
 	}
 
-	impossible := make([]string, len(s.Impossible))
-	for i, r := range s.Impossible {
-		req := p.Requests[r]
-		impossible[i] = p.Candidates[req.Candidate].Name + " with " + p.Recruiters[req.Recruiter].Name
+	fmt.Fprintln(w)
+
+	absentR := map[int]bool{}
+	absentC := map[int]bool{}
+
+	if len(s.Absent.Recruiters)+len(s.Absent.Candidates) > 0 {
+		var names []string
+
+		for _, h := range s.Absent.Recruiters {
+			absentR[h] = true
+			names = append(names, p.Recruiters[h].Name)
+		}
+
+		for _, c := range s.Absent.Candidates {
+			absentC[c] = true
+			names = append(names, p.Candidates[c].Name)
+		}
+
+		fmt.Fprintf(w, "Impossible, available at no time of the period: %s\n", strings.Join(names, ", "))
 	}
 
-	fmt.Fprintf(w, "\nImpossible with these availabilities (never free together long enough): %s\n",
-		strings.Join(impossible, ", "))
+	never := map[int][]string{}
+
+	var order []int
+
+	for _, r := range s.Impossible {
+		req := p.Requests[r]
+		if absentR[req.Recruiter] || absentC[req.Candidate] || withAbsent(p, req, absentR) {
+			continue // explained above
+		}
+
+		if _, ok := never[req.Candidate]; !ok {
+			order = append(order, req.Candidate)
+		}
+
+		never[req.Candidate] = append(never[req.Candidate], p.Recruiters[req.Recruiter].Name)
+	}
+
+	if len(order) == 0 {
+		return
+	}
+
+	parts := make([]string, len(order))
+	for i, c := range order {
+		parts[i] = fmt.Sprintf("%s (%s)", p.Candidates[c].Name, strings.Join(never[c], ", "))
+	}
+
+	fmt.Fprintf(w, "Impossible, never free together long enough: %s\n", strings.Join(parts, ", "))
+}
+
+// withAbsent tells whether meeting req is impossible because it is held
+// with an absent recruiter: in a meeting of everybody at once (together),
+// or in a panel.
+func withAbsent(p *planning.Problem, req planning.Request, absent map[int]bool) bool {
+	for _, q := range p.Requests {
+		if q.Candidate != req.Candidate || !absent[q.Recruiter] {
+			continue
+		}
+
+		if p.Candidates[req.Candidate].Together || slices.ContainsFunc(p.Panels, func(panel []int) bool {
+			return slices.Contains(panel, q.Recruiter) && slices.Contains(panel, req.Recruiter)
+		}) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // label names a score: the objective, and the level for priorities and
@@ -248,6 +314,20 @@ func scoreText(p *planning.Problem, s *planning.Schedule, pe period, sc planning
 		}
 
 		return "average end " + planning.Clock(time.Duration(sc.Value/len(s.Interviews))*time.Minute)
+	case planning.MinDayEnds: // the end of each day, as a time of day, summed
+		days := map[int]bool{}
+		for _, iv := range s.Interviews {
+			days[int(iv.Start/planning.DayLength)] = true
+		}
+
+		switch len(days) {
+		case 0:
+			return strconv.Itoa(sc.Value)
+		case 1:
+			return "ends at " + planning.Clock(time.Duration(sc.Value)*time.Minute)
+		default:
+			return fmt.Sprintf("average end %s, over %d days", planning.Clock(time.Duration(sc.Value/len(days))*time.Minute), len(days))
+		}
 	default: // MinInterviews: a count
 	}
 
@@ -272,8 +352,11 @@ func progressText(scores []planning.Score) string {
 
 	for i, sc := range scores {
 		value := strconv.Itoa(sc.Value)
-		if sc.Objective == planning.MinRecruiterSpan || sc.Objective == planning.MinCandidateWait {
+		switch {
+		case sc.Objective == planning.MinRecruiterSpan || sc.Objective == planning.MinCandidateWait:
 			value = hours(sc.Value)
+		case sc.Objective == planning.MinDayEnds && sc.Value < int(planning.DayLength/time.Minute): // one day
+			value = planning.Clock(time.Duration(sc.Value) * time.Minute)
 		}
 
 		parts[i] = label(sc) + " " + value

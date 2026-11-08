@@ -159,7 +159,8 @@
           "interviews",
           "recruiter-span",
           "candidate-wait",
-          "earliest"
+          "earliest",
+          "day-end"
         ]
       }
     },
@@ -200,7 +201,7 @@
         "additionalProperties": false,
         "properties": {
           "meet": {
-            "description": "The recruiters to meet: a list, in any order, or the recruiters with their ranks: 1 first, then 2..., X any time.",
+            "description": "The recruiters to meet: a list, in any order, or the recruiters with their ranks (1 first, then 2..., X any time), the length of the meeting (15m, 1h30: a bare number is a rank), or both: {rank: 1, duration: 15m}.",
             "oneOf": [
               {
                 "type": "array",
@@ -226,6 +227,35 @@
                     },
                     {
                       "type": "null"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^\\s*(?:\\d+h\\d+|(?:\\d+(?:\\.\\d+)?(?:h|m|s))+)\\s*$"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "rank": {
+                          "oneOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 1
+                            },
+                            {
+                              "type": "string",
+                              "pattern": "^\\s*(?:[Xx]|[Aa][Nn][Yy])\\s*$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "duration": {
+                          "type": "string",
+                          "pattern": "^\\s*(?:\\d+h\\d+|(?:\\d+(?:\\.\\d+)?(?:h|m|s))+)\\s*$"
+                        }
+                      }
                     }
                   ]
                 }

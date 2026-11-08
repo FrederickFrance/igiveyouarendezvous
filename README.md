@@ -171,6 +171,8 @@ igiveyouarendezvous -date 2026-11-23 week3.yaml               # one day
 | `-rest next.yaml` | write the problem file of the next period: the same, without the candidates served |
 | `-objectives a,b,c` | objectives by priority, overriding the problem file |
 | `-out plan.yaml` | also write the schedule to a plan file, to resume from it with `-start` |
+| `-csv schedule.csv` | also write the schedule as a table, one row per interview (date, start, end, candidate, recruiters, fixed), for Excel or a mail merge of the invitations |
+| `-csv-separator ";"` | the separator of the table: `,` (default), `;` (what Excel expects in French) or `tab` |
 | `-start plan.yaml` | start from this schedule instead of from scratch (see below) |
 | `-fix-all` | with `-start`: every candidate of the file is fixed |
 | `-timeout 1m` | maximum computing time |
@@ -189,8 +191,9 @@ longer hold (see below), and 1 on an error.
 
 The command prints the schedule by time (with the dates, over several days),
 the agenda of each recruiter day by day, the value reached on each objective
-and the meetings left. It also reports the **impossible** meetings: a
-candidate and a recruiter never free together long enough. They stay in the
+and the meetings left. It also reports the **impossible** meetings: the
+people available at no time of the period, then the candidates and
+recruiters never free together long enough. They stay in the
 problem file of the next period and will come back every time until the
 availabilities change.
 
@@ -245,10 +248,10 @@ candidates:
 | `objectives` | see below | objectives, the most important first |
 | `recruiters.<name>.duration` | `duration` | length of the interviews with this recruiter; a joint interview lasts as long as its longest part |
 | `recruiters.<name>.availability` | `day` | time spans of the recruiter (`none`: absent), every day or by date (see below) |
-| `candidates.<name>.meet` | mandatory | the recruiters to meet, in any order, or with their ranks (see below) |
+| `candidates.<name>.meet` | mandatory | the recruiters to meet, in any order, or with their ranks and the lengths of the meetings (see below) |
 | `candidates.<name>.availability` | `day` | time spans of the candidate, every day or by date |
 | `candidates.<name>.priority` | `1` | the higher, the more important (objective `priorities`) |
-| `candidates.<name>.duration` | the recruiters' | length of the interviews of this candidate, in place of the recruiters' ones |
+| `candidates.<name>.duration` | the recruiters' | length of the interviews of this candidate, in place of the recruiters' ones (the length of a meeting in `meet` still wins) |
 | `candidates.<name>.together` | `false` | `true`: a meeting, all the recruiters at once in one interview, or not at all (see [Other uses](#other-uses)) |
 
 An unknown key (a typo), an unknown recruiter or a name given twice is an
@@ -271,7 +274,8 @@ candidates:
 ```
 
 A person without availability is available whenever `day` allows. When
-others have one, it may be an oversight: the command lists them in a note.
+most of the others have one, it may be an oversight: the command lists them
+in a note.
 A person whose availability is given by date is absent on the other dates.
 A period is then needed, `from` and `to` in the file or `-from` and `-to`:
 without one, the command refuses to run, and lists the dates found in the
@@ -307,6 +311,12 @@ at any time. With `{recruiter 1: 1, recruiter 2: X, recruiter 3: 2}`,
 recruiter 1 comes before recruiter 3, and recruiter 2 before, between or
 after them. Several recruiters may have the same rank, in any order between
 them; a joint interview never mixes two ranks.
+
+**The length of a meeting.** A meeting may have its own length, in place of
+the candidate's `duration`, or else the recruiter's: `meet: {Alice: 15m,
+Bob: 6m}`, or with a rank, `{Alice: {rank: 1, duration: 15m}}`. A bare
+number is a rank: a length needs its unit (`15m`, `1h30`). A joint
+interview lasts as long as its longest meeting.
 
 **Joint groups.** A candidate who must meet recruiters of a same group
 **may** meet them in one joint interview, or in separate ones. A recruiter
@@ -462,6 +472,7 @@ recording of the same person, in the same file, goes unseen.
 | `recruiter-span` | minimise the time recruiters spend from the start of their first interview to the end of their last, day by day |
 | `candidate-wait` | minimise the time candidates wait between two interviews of a day (useful when `max-gap` is not `0`) |
 | `earliest` | hold the interviews as early as possible in the period |
+| `day-end` | finish each day as early as possible: minimise the end of the last interview of the day, summed over the days with interviews |
 
 The optimisation is **lexicographic**: a schedule is better than another if
 it does better on the first objective, or as well on the first and better on

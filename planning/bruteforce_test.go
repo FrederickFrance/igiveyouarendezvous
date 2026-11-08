@@ -106,7 +106,12 @@ func randomProblem(rnd *rand.Rand) (*planning.Problem, planning.Options) {
 		p.Candidates = append(p.Candidates, cand)
 
 		for _, h := range rnd.Perm(3)[:1+rnd.IntN(2)] {
-			p.Requests = append(p.Requests, planning.Request{Candidate: c, Recruiter: h})
+			r := planning.Request{Candidate: c, Recruiter: h}
+			if !cand.Together && rnd.IntN(4) == 0 {
+				r.Duration = 30 * time.Minute // a meeting of its own length
+			}
+
+			p.Requests = append(p.Requests, r)
 		}
 	}
 
@@ -162,14 +167,20 @@ func bestSchedule(t *testing.T, p *planning.Problem, o planning.Options) ([]int,
 		}
 	}
 
+	// The length of a meeting: its own, or the candidate's, or the
+	// recruiter's; of an interview: its longest meeting.
 	length := func(iv planning.Interview) time.Duration {
-		if d := p.Candidates[iv.Candidate].Duration; d > 0 {
-			return d
-		}
-
 		d := time.Duration(0)
-		for _, h := range iv.Recruiters {
-			d = max(d, p.Recruiters[h].Duration)
+
+		for _, r := range iv.Requests {
+			switch req := p.Requests[r]; {
+			case req.Duration > 0:
+				d = max(d, req.Duration)
+			case p.Candidates[iv.Candidate].Duration > 0:
+				d = max(d, p.Candidates[iv.Candidate].Duration)
+			default:
+				d = max(d, p.Recruiters[req.Recruiter].Duration)
+			}
 		}
 
 		return d

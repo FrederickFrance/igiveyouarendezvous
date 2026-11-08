@@ -44,8 +44,13 @@ type Schedule struct {
 	Interviews  []Interview // sorted by start, then candidate
 	Unscheduled []int       // requests not held, to plan another time
 	Impossible  []int       // unscheduled requests that no day with the same availabilities can hold
-	Scores      []Score     // one per objective (MaxPriorities, MaxUrgency: per level), in priority order
-	Step        time.Duration
+	// Absent lists the people, as indexes of their requests' recruiters and
+	// candidates, who are available at no time of the period (on the open
+	// days, within the hours of the day, outside the breaks): their
+	// requests are all impossible.
+	Absent struct{ Recruiters, Candidates []int }
+	Scores []Score // one per objective (MaxPriorities, MaxUrgency: per level), in priority order
+	Step   time.Duration
 }
 
 // Proven tells whether every score is proven optimal.
@@ -454,6 +459,19 @@ func evaluate(p *Problem, o Options, s *Schedule, cr criterion, held []bool) int
 		total := time.Duration(0)
 		for _, iv := range s.Interviews {
 			total += iv.End
+		}
+
+		return int(total / time.Minute)
+	case MinDayEnds:
+		last := map[int]time.Duration{} // by day, as a time of day
+		for _, iv := range s.Interviews {
+			d := dayOf(iv.Start)
+			last[d] = max(last[d], iv.End-time.Duration(d)*DayLength)
+		}
+
+		total := time.Duration(0)
+		for _, end := range last {
+			total += end
 		}
 
 		return int(total / time.Minute)

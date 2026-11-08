@@ -21,19 +21,22 @@ func TestRunInMemory(t *testing.T) {
 	var lines []string
 
 	progress := &lineWriter{line: func(line string) { lines = append(lines, line) }}
-	var bests []string
+	var bests, tables []string
 
-	output, written, err := runInMemory(t.Context(), []string{"-patience", "200ms", "-progress", "-out", "plan.json", "-rest", "rest.yaml"},
-		string(problem), nil, progress, func(text, plan string) {
+	output, written, err := runInMemory(t.Context(),
+		[]string{"-patience", "200ms", "-progress", "-out", "plan.json", "-rest", "rest.yaml", "-csv", "schedule.csv", "-csv-separator", ";"},
+		string(problem), nil, progress, func(text, plan, table string) {
 			require.Contains(t, text, "planned with the local search")
 			require.True(t, json.Valid([]byte(plan)), plan)
-			bests = append(bests, plan)
+			bests, tables = append(bests, plan), append(tables, table)
 		})
 	require.NoError(t, err)
 	progress.Flush()
 
 	require.NotEmpty(t, bests, "every better schedule, as it is found")
 	require.JSONEq(t, written["plan.json"], bests[len(bests)-1], "the last one is the result")
+	require.Equal(t, written["schedule.csv"], tables[len(tables)-1], "the table too")
+	require.True(t, strings.HasPrefix(written["schedule.csv"], "\ufeffdate;start;end;candidate;recruiters;fixed\n"))
 
 	require.Contains(t, output, "All meetings are planned.")
 	require.NotEmpty(t, lines, "the progress, line by line")

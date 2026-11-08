@@ -13,9 +13,10 @@ import (
 // demo does in the browser, which has no files: the files the command reads
 // (a -start plan) come from inputs, by name, and those it writes (-out,
 // -rest) are returned, by name, with what it prints. best, if not nil,
-// receives every better schedule found, as printed and as a JSON plan.
+// receives every better schedule found, as printed, as a JSON plan and, with
+// -csv, as a table.
 func runInMemory(ctx context.Context, args []string, problem string, inputs map[string]string, stderr io.Writer,
-	best func(text, plan string),
+	best func(text, plan, table string),
 ) (string, map[string]string, error) {
 	outputs := memory{}
 

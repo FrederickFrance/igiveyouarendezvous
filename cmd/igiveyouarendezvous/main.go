@@ -73,7 +73,7 @@ type files struct {
 	write func(path string, write func(io.Writer) error) error
 	// best, when set (online demo), receives every better schedule found:
 	// as printed, and as a plan file in JSON.
-	best func(text, plan string)
+	best func(text, plan, table string)
 }
 
 // disk is the file system of the computer.
@@ -84,6 +84,8 @@ type options struct {
 	from, to, date, notBefore    string
 	objectives                   string
 	restPath, outPath, startPath string
+	csvPath                      string
+	csvSeparator                 rune
 	timeout, patience            time.Duration
 	seed                         uint64
 	workers                      int
@@ -110,6 +112,9 @@ func parseFlags(args []string, stderr io.Writer) (*options, error) {
 	fs.StringVar(&o.restPath, "rest", "", "write the problem file of what is left, without the candidates served, to this file (.yaml or .json)")
 	fs.StringVar(&o.outPath, "out", "", "write the schedule to this plan file (.yaml or .json), to resume from with -start")
 	fs.StringVar(&o.startPath, "start", "", "resume from the schedule of this plan file (written by -out)")
+	fs.StringVar(&o.csvPath, "csv", "", "write the schedule as a table to this file, one row per interview, for a spreadsheet")
+
+	separator := fs.String("csv-separator", ",", `with -csv: the separator of the columns, "," or ";" (Excel in French, among others) or "tab"`)
 	fs.BoolVar(&o.fixAll, "fix-all", false, "with -start: keep every appointment of the file as it is (once they are announced)")
 	fs.BoolVar(&o.list, "list-objectives", false, "list the objectives")
 
@@ -120,6 +125,11 @@ func parseFlags(args []string, stderr io.Writer) (*options, error) {
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err
+	}
+
+	var err error
+	if o.csvSeparator, err = config.ParseSeparator(*separator); err != nil {
+		return nil, fmt.Errorf("-csv-separator: %w", err)
 	}
 
 	switch fs.NArg() {
@@ -195,6 +205,14 @@ func runOn(ctx context.Context, fsys files, args []string, stdin io.Reader, stdo
 	if o.outPath != "" {
 		if err := o.files.write(o.outPath, func(w io.Writer) error {
 			return config.WritePlan(w, p, s, o.from, o.to, config.FormatOf(o.outPath))
+		}); err != nil {
+			return err
+		}
+	}
+
+	if o.csvPath != "" {
+		if err := o.files.write(o.csvPath, func(w io.Writer) error {
+			return config.WriteCSV(w, p, s, o.from, o.csvSeparator)
 		}); err != nil {
 			return err
 		}
@@ -402,12 +420,16 @@ func searchOptions(o *options, start *planning.Schedule, stderr io.Writer) plann
 // better schedule, then calls next, if any.
 func bestReporter(o *options, p *planning.Problem, pe period, next func(planning.Progress)) func(planning.Progress) {
 	return func(pr planning.Progress) {
-		var text, plan strings.Builder
+		var text, plan, table strings.Builder
 
 		printSchedule(&text, p, pr.Schedule, pe)
 
+		if o.csvPath != "" { // the table too, when asked
+			_ = config.WriteCSV(&table, p, pr.Schedule, o.from, o.csvSeparator) // to a builder: never fails
+		}
+
 		if err := config.WritePlan(&plan, p, pr.Schedule, o.from, o.to, config.JSON); err == nil {
-			o.files.best(text.String(), plan.String())
+			o.files.best(text.String(), plan.String(), table.String())
 		}
 
 		if next != nil {

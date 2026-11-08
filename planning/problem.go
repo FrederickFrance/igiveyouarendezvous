@@ -101,7 +101,8 @@ type Candidate struct {
 	// on which the candidate and their recruiters are available).
 	DaysLeft int
 	// Duration is the length of the interviews of the candidate, in place
-	// of those of their recruiters; zero means the recruiters' ones.
+	// of those of their recruiters; zero means the recruiters' ones. The
+	// Duration of a Request still wins over it.
 	Duration time.Duration
 	// Together makes the candidate meet all their recruiters in one single
 	// interview, whatever the joint groups and Options.MaxJointSize, or not
@@ -120,6 +121,10 @@ type Request struct {
 	// the same rank come in any order, and may be joint. Zero means any
 	// time: before, between or after the ranked ones.
 	Rank int
+	// Duration is the length of this meeting, in place of the candidate's
+	// and the recruiter's; zero means the candidate's Duration, or else the
+	// recruiter's. A joint interview lasts as long as its longest meeting.
+	Duration time.Duration
 }
 
 // Problem is what has to be planned.
@@ -443,6 +448,13 @@ func (p *Problem) check(o Options) error {
 			return fmt.Errorf("planning: %s meets everybody together: no ranks", p.Candidates[r.Candidate].Name)
 		}
 
+		switch {
+		case r.Duration < 0:
+			return fmt.Errorf("planning: %s meets %s: negative duration", p.Candidates[r.Candidate].Name, p.Recruiters[r.Recruiter].Name)
+		case r.Duration > 0 && p.Candidates[r.Candidate].Together:
+			return fmt.Errorf("planning: %s meets everybody together: no meeting durations, give the candidate's", p.Candidates[r.Candidate].Name)
+		}
+
 		key := pair{r.Candidate, r.Recruiter}
 		if seen[key] {
 			return fmt.Errorf("planning: %s must meet %s twice", p.Candidates[r.Candidate].Name, p.Recruiters[r.Recruiter].Name)
@@ -543,16 +555,28 @@ func (p *Problem) jointAllowed(recruiters []int) bool {
 
 // length returns the length of an interview of candidate c with recruiters.
 func (p *Problem) length(c int, recruiters []int, o Options) time.Duration {
+	var length time.Duration
+	for _, h := range recruiters {
+		length = max(length, p.meetingDuration(c, h, o))
+	}
+
+	return length
+}
+
+// meetingDuration returns the length of the meeting of candidate c with
+// recruiter h: the meeting's own, the candidate's, or the recruiter's.
+func (p *Problem) meetingDuration(c, h int, o Options) time.Duration {
+	for _, r := range p.Requests {
+		if r.Candidate == c && r.Recruiter == h && r.Duration > 0 {
+			return r.Duration
+		}
+	}
+
 	if d := p.Candidates[c].Duration; d > 0 {
 		return d
 	}
 
-	var length time.Duration
-	for _, h := range recruiters {
-		length = max(length, p.duration(h, o))
-	}
-
-	return length
+	return p.duration(h, o)
 }
 
 // joint tells whether candidate c may meet recruiters in one interview, as

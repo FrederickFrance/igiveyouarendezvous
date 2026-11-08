@@ -51,6 +51,10 @@ const (
 	// days left; candidates without days left (no limit known) do not count.
 	// After MaxPriorities, it never costs a candidate: it chooses which ones.
 	MaxUrgency
+	// MinDayEnds minimises the end of the last interview of each day, as a
+	// time of day in minutes, summed over the days with interviews: the
+	// days finish as early as possible.
+	MinDayEnds
 )
 
 var objectiveNames = map[Objective][2]string{
@@ -64,13 +68,14 @@ var objectiveNames = map[Objective][2]string{
 	MaxPriorities:         {"priorities", "maximise the complete candidates, priority level by priority level, the highest first"},
 	MinRecruiterHalfDays:  {"recruiter-half-days", "minimise the half-days (morning, afternoon) in which recruiters have an interview"},
 	MaxUrgency:            {"urgency", "maximise the complete candidates with the fewest days left, the fewest first"},
+	MinDayEnds:            {"day-end", "minimise the end of the last interview of each day"},
 }
 
 // AllObjectives lists every objective.
 func AllObjectives() []Objective {
 	return []Objective{
 		MaxPriorities, MaxUrgency, MaxCompleteCandidates, MaxMeetings, MinRecruiters, MinRecruiterHalfDays,
-		MinInterviews, MinRecruiterSpan, MinCandidateWait, MinEndTimes,
+		MinInterviews, MinRecruiterSpan, MinCandidateWait, MinEndTimes, MinDayEnds,
 	}
 }
 

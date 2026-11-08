@@ -116,6 +116,8 @@ igiveyouarendezvous -from 2026-11-16 -to 2026-11-20 -rest week3.yaml week2.yaml
 และ [JSON schema](schema/problem.schema.json) กด Ctrl+C
 เพื่อหยุดการค้นหาและแสดงตารางที่ดีที่สุดที่พบจนถึงตอนนั้น
 
+`-csv schedule.csv` จะเขียนตารางเป็นไฟล์ตาราง หนึ่งแถวต่อการสัมภาษณ์หนึ่งครั้ง สำหรับ Excel
+
 เอกสารฉบับเต็มมีเป็น[ภาษาอังกฤษ](README.md)และ[ภาษาฝรั่งเศส](README.fr.md)
 
 ## สัญญาอนุญาต

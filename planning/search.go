@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"math/bits"
 	"math/rand/v2"
@@ -198,6 +199,7 @@ type searcher struct {
 	spanAt int // index of MinRecruiterSpan in crit, or -1
 	usedAt int // index of MinRecruiters in crit, or -1
 	halfAt int // index of MinRecruiterHalfDays in crit, or -1
+	endAt  int // index of MinDayEnds in crit, or -1
 	// completeFirst: complete candidates rank before meetings.
 	completeFirst bool
 	completeAt    int // index of the first criterion counting complete candidates, or -1
@@ -232,6 +234,9 @@ type searcher struct {
 	last      []int     // [unit]: last busy slot
 	span      []int     // [unit]: last + 1 - first
 	half      [][2]bool // [unit]: busy in the morning, in the afternoon
+	// dayEnd[d]: the end of the last interview of day d, as a time of day
+	// in minutes; 0 without interviews.
+	dayEnd []int
 
 	plans   [][]placed
 	contrib [][]int // score contribution of each candidate
@@ -260,6 +265,7 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 		spanAt:    indexOf(in.crit, MinRecruiterSpan),
 		usedAt:    indexOf(in.crit, MinRecruiters),
 		halfAt:    indexOf(in.crit, MinRecruiterHalfDays),
+		endAt:     indexOf(in.crit, MinDayEnds),
 		pinned:    make([]bool, nC),
 		optionsOf: make([][]int, nC),
 		holding:   make([][][]int, nC),
@@ -276,6 +282,7 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 		last:      make([]int, nU),
 		span:      make([]int, nU),
 		half:      make([][2]bool, nU),
+		dayEnd:    make([]int, in.o.days()),
 		plans:     make([][]placed, nC),
 		contrib:   make([][]int, nC),
 		total:     make([]int, len(in.crit)),
@@ -1353,6 +1360,7 @@ type node struct {
 	wait      int // slots between the interviews of a same day
 	endSum    int // sum of the end times, in minutes
 	spanDelta int // increase of the recruiters' presence
+	endDelta  int // increase of the ends of the days, in minutes
 	usedDelta int // recruiters' days that had no interview
 	halfDelta int // recruiters' half-days that had no interview
 }
@@ -1365,6 +1373,12 @@ func (s *searcher) unit(h, t int) int {
 // endMinutes returns the end of length slots from slot t, in minutes.
 func (s *searcher) endMinutes(t, length int) int {
 	return s.in.minute[t] + length*int(s.in.g.step/time.Minute)
+}
+
+// clockEnd returns the end of length slots from slot t, as a time of day in
+// minutes.
+func (s *searcher) clockEnd(t, length int) int {
+	return s.endMinutes(t, length) - s.in.day[t]*int(DayLength/time.Minute)
 }
 
 // then returns n followed by option o at slot t.
@@ -1437,6 +1451,8 @@ func (s *searcher) bestPlacement(c int) []placed {
 	add := func(n node, o, t int) node {
 		opt := &s.in.options[o]
 		offset := t - s.in.day[t]*s.perDay
+
+		n.endDelta += s.endIncrease(n, t, opt.length)
 
 		for _, h := range opt.recruiters {
 			u := s.unit(h, t)
@@ -1593,6 +1609,8 @@ func (s *searcher) vector(dst []int, c int, n node) {
 			dst[i] = n.blocks
 		case MinRecruiterSpan:
 			dst[i] = n.spanDelta
+		case MinDayEnds:
+			dst[i] = n.endDelta
 		case MinCandidateWait:
 			dst[i] = n.wait
 		case MinEndTimes:
@@ -1603,6 +1621,23 @@ func (s *searcher) vector(dst []int, c int, n node) {
 			dst[i] = n.halfDelta
 		}
 	}
+}
+
+// endIncrease is the growth of the ends of the days, in minutes, if node n
+// is followed by an interview of length slots at slot t.
+func (s *searcher) endIncrease(n node, t, length int) int {
+	if s.endAt < 0 {
+		return 0
+	}
+
+	// The day ends later only if this interview ends after it, and after the
+	// previous one of the node on the same day, already counted.
+	dayEnd, increase := s.dayEnd[s.in.day[t]], 0
+	if n.blocks > 0 && s.in.day[n.start] == s.in.day[t] {
+		increase -= max(0, s.clockEnd(n.start, n.end-n.start)-dayEnd)
+	}
+
+	return increase + max(0, s.clockEnd(t, length)-dayEnd)
 }
 
 // spanIncrease is the growth of the presence of unit u if busy in [t, end).
@@ -1698,6 +1733,17 @@ func (s *searcher) refresh(u int) {
 		!s.busy[h].free(day, day+s.halves[0]),
 		!s.busy[h].free(day+s.halves[1], day+s.perDay),
 	}
+
+	if s.endAt >= 0 { // the end of the day, over all the recruiters
+		d, end := u%s.days, 0
+		for k := range s.busy {
+			if v := k*s.days + d; s.first[v] >= 0 {
+				end = max(end, s.clockEnd(s.last[v], 1))
+			}
+		}
+
+		s.dayEnd[d] = end
+	}
 }
 
 // mark sets or clears the busy slots of a plan and returns the units.
@@ -1734,9 +1780,9 @@ func (s *searcher) contribution(dst []int, c int, plan []placed) {
 
 	s.vector(dst, c, n)
 
-	for _, i := range []int{s.spanAt, s.usedAt, s.halfAt} {
+	for _, i := range []int{s.spanAt, s.usedAt, s.halfAt, s.endAt} {
 		if i >= 0 {
-			dst[i] = 0 // counted per recruiter, by score
+			dst[i] = 0 // counted per recruiter or per day, by score
 		}
 	}
 }
@@ -1756,6 +1802,12 @@ func (s *searcher) score() []int {
 
 		if s.halfAt >= 0 {
 			score[s.halfAt] += count(s.half[u][:])
+		}
+	}
+
+	if s.endAt >= 0 {
+		for _, end := range s.dayEnd {
+			score[s.endAt] += end
 		}
 	}
 
@@ -1828,7 +1880,29 @@ func (s *searcher) schedule() *Schedule {
 		}
 	}
 
+	s.absent(sched)
+
 	return sched
+}
+
+// absent sets sched.Absent: the people with requests who are available at
+// no time of the period.
+func (s *searcher) absent(sched *Schedule) {
+	in := s.in
+	recruiters, candidates := map[int]bool{}, map[int]bool{}
+
+	for _, req := range in.p.Requests {
+		if !slices.Contains(in.availR[req.Recruiter], true) {
+			recruiters[req.Recruiter] = true
+		}
+
+		if !slices.Contains(in.availC[req.Candidate], true) && !s.pinned[req.Candidate] {
+			candidates[req.Candidate] = true
+		}
+	}
+
+	sched.Absent.Recruiters = slices.Sorted(maps.Keys(recruiters))
+	sched.Absent.Candidates = slices.Sorted(maps.Keys(candidates))
 }
 
 // compare orders scores lexicographically.
