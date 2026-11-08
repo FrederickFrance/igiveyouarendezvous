@@ -28,10 +28,11 @@ jobs:
       - name: Release with the zips
         env:
           GH_TOKEN: ${{ github.token }}
-        run: | # the notes: the section of the version in CHANGELOG.md, or generated ones
+        run: | # the title and the notes come from the section of the version in CHANGELOG.md
+          title=$(sh scripts/title.sh "$GITHUB_REF_NAME") # v0.4.0 Cinderella 👠
           sh scripts/notes.sh "$GITHUB_REF_NAME" > notes.md
           if [ -s notes.md ]; then
-            gh release create "$GITHUB_REF_NAME" dist/*.zip --title "$GITHUB_REF_NAME" --notes-file notes.md
+            gh release create "$GITHUB_REF_NAME" dist/*.zip --title "$title" --notes-file notes.md
           else
-            gh release create "$GITHUB_REF_NAME" dist/*.zip --title "$GITHUB_REF_NAME" --generate-notes
+            gh release create "$GITHUB_REF_NAME" dist/*.zip --title "$title" --generate-notes
           fi

@@ -716,7 +716,9 @@ the tutorial (`.github/workflows/release.yml`, `scripts/package.sh`).
 
 The changes of each version are in the [changelog](CHANGELOG.md): before
 pushing a tag, add the section of the version there; the release takes it as
-its notes (`scripts/notes.sh`).
+its notes (`scripts/notes.sh`), and its title from the heading, with the name
+of the version after the date: `## [0.4.1] - 2026-11-08 "Cinderella" 👠`
+gives `v0.4.1 Cinderella 👠` (`scripts/title.sh`).
 
 The [online demo](https://frederickfrance.github.io/igiveyouarendezvous/) is the program compiled to WebAssembly
 (`cmd/igiveyouarendezvous/main_js.go`) behind a static page (`web/`), which

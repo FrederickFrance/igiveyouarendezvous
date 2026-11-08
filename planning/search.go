@@ -224,11 +224,14 @@ type searcher struct {
 
 	// The presence of the recruiters is kept by unit: a recruiter on a day,
 	// unit h*days + d (see unit).
-	busy  []bitset  // [recruiter]: busy slots
-	first []int     // [unit]: first busy slot, -1 when free all day
-	last  []int     // [unit]: last busy slot
-	span  []int     // [unit]: last + 1 - first
-	half  [][2]bool // [unit]: busy in the morning, in the afternoon
+	busy []bitset // [recruiter]: busy slots
+	// fixedBusy: the busy slots of the fixed interviews, which even eject
+	// respects; nil without them.
+	fixedBusy []bitset
+	first     []int     // [unit]: first busy slot, -1 when free all day
+	last      []int     // [unit]: last busy slot
+	span      []int     // [unit]: last + 1 - first
+	half      [][2]bool // [unit]: busy in the morning, in the afternoon
 
 	plans   [][]placed
 	contrib [][]int // score contribution of each candidate
@@ -857,6 +860,14 @@ func (s *searcher) apply(pr *prepared) {
 
 		for _, h := range iv.Recruiters {
 			if from < to {
+				if s.fixedBusy == nil {
+					s.fixedBusy = make([]bitset, len(s.busy))
+					for k := range s.fixedBusy {
+						s.fixedBusy[k] = newBitset(g.slots)
+					}
+				}
+
+				s.fixedBusy[h].set(from, to, true)
 				s.busy[h].set(from, to, true)
 				s.refresh(s.unit(h, from))
 			}
@@ -1603,15 +1614,21 @@ func (s *searcher) spanIncrease(u, t, end int) int {
 	return max(s.last[u]+1, end) - min(s.first[u], t) - s.span[u]
 }
 
-// free tells whether the recruiters of option o are free from slot t.
+// free tells whether the recruiters of option o are free from slot t; with
+// ignoreBusy, free of the fixed interviews only.
 func (s *searcher) free(o, t int) bool {
+	busy := s.busy
 	if s.ignoreBusy {
-		return true
+		if s.fixedBusy == nil {
+			return true
+		}
+
+		busy = s.fixedBusy
 	}
 
 	opt := &s.in.options[o]
 	for _, h := range opt.recruiters {
-		if !s.busy[h].free(t, t+opt.length) {
+		if !busy[h].free(t, t+opt.length) {
 			return false
 		}
 	}

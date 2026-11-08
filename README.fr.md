@@ -741,7 +741,9 @@ l'emploi du tutoriel (`.github/workflows/release.yml`, `scripts/package.sh`).
 Les changements de chaque version sont dans le [journal des
 modifications](CHANGELOG.md) (en anglais) : avant de pousser un tag, ajoutez-y
 la section de la version ; la page de la version la reprend comme notes
-(`scripts/notes.sh`).
+(`scripts/notes.sh`), et son titre vient de l'en-tête, avec le nom de la
+version après la date : `## [0.4.1] - 2026-11-08 "Cinderella" 👠` donne
+`v0.4.1 Cinderella 👠` (`scripts/title.sh`).
 
 La [démo en ligne](https://frederickfrance.github.io/igiveyouarendezvous/) est le programme compilé en WebAssembly
 (`cmd/igiveyouarendezvous/main_js.go`) derrière une page statique (`web/`),

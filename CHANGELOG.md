@@ -7,6 +7,22 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
+## [0.4.1] - 2026-11-08 "Cinderella" 👠
+
+### Changed
+
+- The title of a release gives the name of the version, from its section
+  of the changelog: `v0.4.1 Cinderella 👠` (`scripts/title.sh`).
+- The CI skips the changes of documentation only (Markdown, the prompts,
+  the licences, the issue forms), and a new commit on a pull request
+  cancels the run of the previous one.
+
+### Fixed
+
+- From a start plan with fixed interviews, the search could move a
+  candidate onto a fixed interview, and then stopped with "the search built
+  an invalid schedule".
+
 ## [0.4.0] - 2026-11-06 "Cinderella" 👠
 
 ### Added
