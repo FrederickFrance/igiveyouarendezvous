@@ -7,6 +7,14 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
+## [0.5.1] - 2026-11-09 "Dan Hibiki" 🌸
+
+### Changed
+
+- Dependencies: `go.yaml.in/yaml/v3` 3.0.6, and the actions `checkout` v7
+  and `setup-go` v7.
+- The changelog links every version to its changes.
+
 ## [0.5.0] - 2026-11-08 "White Rabbit" 🐇
 
 ### Added
@@ -163,6 +171,11 @@ lexicographic objectives, fixed appointments resumed with `-start`, the
 problem file of the next day with `-rest`, and ready-to-use zips for a
 beginner's tutorial.
 
+[0.5.1]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.4.1...v0.5.0
+[0.4.1]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/FrederickFrance/igiveyouarendezvous/releases/tag/v0.1.0
