@@ -13,6 +13,7 @@ on:
       - "LICENSE"
       - "WTFPL.txt"
       - ".github/ISSUE_TEMPLATE/**"
+      - "lol/**"
   pull_request:
     paths-ignore:
       - "**.md"
@@ -20,6 +21,7 @@ on:
       - "LICENSE"
       - "WTFPL.txt"
       - ".github/ISSUE_TEMPLATE/**"
+      - "lol/**"
   schedule:
     - cron: "17 5 * * 1"
   workflow_dispatch: # "Run workflow" button
@@ -36,8 +38,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod # the Go of the build is the one of go.mod
       - run: go build ./...
@@ -50,8 +52,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - uses: golangci/golangci-lint-action@v9
@@ -61,8 +63,8 @@ jobs:
   security:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: osv-scanner (runs govulncheck on Go code)
@@ -75,8 +77,8 @@ jobs:
   wasm:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: Tests compiled to WebAssembly, run by Node.js
