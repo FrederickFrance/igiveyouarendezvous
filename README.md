@@ -5,8 +5,20 @@
 
 **English** · [Français](README.fr.md) · [Deutsch](README.de.md) · [Italiano](README.it.md) · [ไทย](README.th.md) · [tlhIngan Hol](README.tlh.md) · [Ch'ti](README.pcd.md)
 
-Interview scheduling between candidates and recruiters, in Go, as a command
-or as a library.
+**You have everybody's availabilities; igiveyouarendezvous makes the
+schedule.** Who meets whom, and when, for fifty candidates and five
+recruiters over a week as well as for one day: as many candidates as possible
+meet all their recruiters, and the schedule comes back as a table for a mail
+merge, or as a plan to resume from. A poll such as Doodle or Framadate
+collects the availabilities; this program makes the schedule that comes
+after.
+
+**[Try it online](https://frederickfrance.github.io/igiveyouarendezvous/)**: edit an example and plan it, in your browser,
+without installing anything. Everything is computed on your computer: what
+you type is sent nowhere. New here? The [user guide](GUIDE.md) takes you
+through it, task by task.
+
+A command and a Go library, free (0BSD or WTFPL).
 
 Each candidate must meet some recruiters. The rules:
 
@@ -35,10 +47,6 @@ the problem file of the next period.
 Not only interviews: the recordings of a show with guests who are hard to
 gather, the programme of a colloquium, role-playing games… see [Other
 uses](#other-uses).
-
-**[Try it online](https://frederickfrance.github.io/igiveyouarendezvous/)**: edit an example and plan it, in your browser,
-without installing anything. Everything is computed on your computer: what
-you type is sent nowhere.
 
 ## Your first schedule, step by step
 

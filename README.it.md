@@ -136,7 +136,8 @@ colloquio, per Excel o una stampa unione (`-csv-separator ";"` per un Excel
 in italiano).
 
 La documentazione completa è in [inglese](README.md) e in
-[francese](README.fr.md).
+[francese](README.fr.md), come la guida passo per passo
+([inglese](GUIDE.md), [francese](GUIDE.fr.md)).
 
 ## Licenza
 

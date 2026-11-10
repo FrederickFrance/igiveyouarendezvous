@@ -7,6 +7,23 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
+## [0.7.0] - 2026-11-10 "Mary Poppins" ☂️
+
+### Added
+
+- **A user guide**, task by task, for people who do not program
+  (`GUIDE.md`, `GUIDE.fr.md`): try an example, describe a case with an AI
+  assistant or from an example, read the result, send the appointments,
+  plan again when something changes, the common traps, ask for help. The
+  READMEs and the online demo link to it.
+
+### Changed
+
+- The READMEs and the online demo start with what the program does for its
+  users: "You have everybody's availabilities; igiveyouarendezvous makes the
+  schedule."
+- The CI skips the changes of `docs/` too, the images of the guide.
+
 ## [0.6.0] - 2026-11-10 "Phileas Fogg" 🚂
 
 ### Added
@@ -189,6 +206,7 @@ lexicographic objectives, fixed appointments resumed with `-start`, the
 problem file of the next day with `-rest`, and ready-to-use zips for a
 beginner's tutorial.
 
+[0.7.0]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.4.1...v0.5.0
