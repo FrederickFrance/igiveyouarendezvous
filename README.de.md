@@ -137,7 +137,8 @@ Gespräch, für Excel oder einen Serienbrief (`-csv-separator ";"` für ein
 deutsches Excel).
 
 Die vollständige Dokumentation gibt es auf [Englisch](README.md) und auf
-[Französisch](README.fr.md).
+[Französisch](README.fr.md), eine Anleitung Schritt für Schritt ebenso
+([Englisch](GUIDE.md), [Französisch](GUIDE.fr.md)).
 
 ## Lizenz
 

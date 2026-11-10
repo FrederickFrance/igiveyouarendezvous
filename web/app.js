@@ -16,9 +16,10 @@ const examples = [
 
 const texts = {
   en: {
-    tagline: "Plan interviews, recordings or a colloquium, right here in your browser.",
+    tagline: "You have everybody's availabilities: this makes the schedule, right here in your browser. Interviews, recordings, a colloquium, a tour…",
     privacy: "The planner runs on this computer: nothing you type is sent anywhere.",
     source: "Source code",
+    guide: "User guide",
     problemHeading: "Your problem",
     examplesLabel: "Examples",
     editorLabel: "Problem file",
@@ -85,9 +86,10 @@ const texts = {
     importFailed: "This file could not be read.",
   },
   fr: {
-    tagline: "Planifier des entretiens, des enregistrements ou un colloque, ici, dans votre navigateur.",
+    tagline: "Vous avez les disponibilités de chacun : ceci fait le planning, ici, dans votre navigateur. Entretiens, enregistrements, colloque, tournée…",
     privacy: "Le calcul se fait sur cet ordinateur : rien de ce que vous tapez n'est envoyé.",
     source: "Code source",
+    guide: "Mode d'emploi",
     problemHeading: "Votre problème",
     examplesLabel: "Exemples",
     editorLabel: "Fichier problème",
@@ -201,6 +203,7 @@ let downloadURLs = [];
 
 function applyTexts() {
   document.documentElement.lang = lang;
+  $("guide").href = `https://github.com/FrederickFrance/igiveyouarendezvous/blob/main/${lang === "fr" ? "GUIDE.fr.md" : "GUIDE.md"}`;
   for (const element of document.querySelectorAll("[data-i18n]")) {
     element.textContent = t(element.dataset.i18n);
   }

@@ -5,8 +5,20 @@
 
 [English](README.md) · **Français** · [Deutsch](README.de.md) · [Italiano](README.it.md) · [ไทย](README.th.md) · [tlhIngan Hol](README.tlh.md) · [Ch'ti](README.pcd.md)
 
-Planification d'entretiens entre candidats et recruteurs, en Go, en ligne de
-commande ou comme bibliothèque.
+**Vous avez les disponibilités de chacun ; igiveyouarendezvous fait le
+planning.** Qui rencontre qui, et quand, pour cinquante candidats et cinq
+recruteurs sur une semaine comme pour une journée : le plus de candidats
+possible voient tous leurs recruteurs, et le planning revient en tableau pour
+un publipostage, ou en plan pour reprendre plus tard. Un sondage comme Doodle
+ou Framadate recueille les disponibilités ; ce programme fait le planning qui
+vient après.
+
+**[Essayer en ligne](https://frederickfrance.github.io/igiveyouarendezvous/)** : modifiez un exemple et planifiez-le, dans
+votre navigateur, sans rien installer. Tout se calcule sur votre ordinateur :
+ce que vous tapez n'est envoyé nulle part. Première fois ? Le [mode
+d'emploi](GUIDE.fr.md) vous guide, tâche par tâche.
+
+Une commande et une bibliothèque Go, libres (0BSD ou WTFPL).
 
 Chaque candidat doit rencontrer certains recruteurs. Les règles :
 
@@ -36,10 +48,6 @@ tiennent pas sont écrits dans le fichier problème de la période suivante.
 Pas seulement des entretiens : les enregistrements d'une émission avec des
 invités difficiles à réunir, le programme d'un colloque, des parties de jeu
 de rôle… voir [Autres usages](#autres-usages).
-
-**[Essayer en ligne](https://frederickfrance.github.io/igiveyouarendezvous/)** : modifiez un exemple et planifiez-le, dans
-votre navigateur, sans rien installer. Tout se calcule sur votre ordinateur :
-ce que vous tapez n'est envoyé nulle part.
 
 ## Premier planning, pas à pas
 
