@@ -134,6 +134,12 @@ func TestTheSchemaRejectsWhatTheCodeRejects(t *testing.T) {
 		"recruiters: {R: }\ncandidates:\n  A: {meet: {R: {rank: 0}}}",
 		"recruiters: {R: }\ncandidates:\n  A: {meet: {R: {duration: 30}}}",
 		"recruiters: {R: }\ncandidates:\n  A: {meet: {R: {length: 1h}}}",
+		"recruiters: {}\ncandidates: {}\ntravel: {default: soon}",
+		"recruiters: {}\ncandidates: {}\ntravel: {speed: 80}",
+		"recruiters: {}\ncandidates: {}\ntravel: {journeys: [[Paris, Lyon]]}",
+		"recruiters: {}\ncandidates: {}\ntravel: {journeys: [[Paris, Lyon, 2]]}",
+		"recruiters: {}\ncandidates: {}\ntravel: {journeys: [[Paris, Lyon, 2h, 3h]]}",
+		"recruiters: {}\ncandidates: {}\ntravel: {journeys: [Paris, Lyon, 2h]}",
 	} {
 		require.Error(t, problem.Validate(asJSON(t, []byte(text))), text)
 
@@ -198,6 +204,7 @@ func TestTheSchemaKnowsTheSameKeys(t *testing.T) {
 		keys(props(problem, "properties", "recruiters", "additionalProperties")))
 	require.Equal(t, shapeKeys(problemKeys["candidates"]["*"]),
 		keys(props(problem, "properties", "candidates", "additionalProperties")))
+	require.Equal(t, shapeKeys(problemKeys["travel"]), keys(props(problem, "properties", "travel")))
 
 	var objectives []string
 	for _, obj := range planning.AllObjectives() {

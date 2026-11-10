@@ -115,6 +115,10 @@
         }
       ]
     },
+    "recruiter-min-gap": {
+      "description": "The gap of every recruiter without a min-gap of their own: the shortest time between two of their interviews, nights included (10m, 30m). By default, none.",
+      "$ref": "#/$defs/duration"
+    },
     "joint-groups": {
       "description": "Groups of recruiters who may interview a candidate together (allowed, not required).",
       "type": "array",
@@ -183,6 +187,10 @@
           },
           "availability": {
             "$ref": "#/$defs/availability"
+          },
+          "min-gap": {
+            "description": "The shortest time between two interviews of the recruiter, from the end of one to the start of the next, nights included: to write notes, to pack the gear (30m, 1h); the journeys between places come on top (see travel). 0 means none. In place of recruiter-min-gap.",
+            "$ref": "#/$defs/duration"
           }
         }
       }
@@ -275,8 +283,47 @@
             "type": "boolean",
             "description": "A meeting: all the recruiters at once, in one interview, whatever the joint groups, or not at all (false by default). No ranks in meet then."
           },
+          "place": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Where the candidate is met, such as the city of a shoot: a recruiter needs the journey (see travel) between two interviews at different places. None by default: no journey to or from them, such as a call."
+          },
           "availability": {
             "$ref": "#/$defs/availability"
+          }
+        }
+      }
+    },
+    "travel": {
+      "description": "The journeys between the places of the candidates, upper estimates: a recruiter needs the journey, on top of their min-gap, between two interviews at different places, nights included. A journey through other places counts when shorter.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "$ref": "#/$defs/duration",
+          "description": "The journey between two places that journeys does not list. Without it, every two places of the candidates must be listed."
+        },
+        "journeys": {
+          "description": "The time between two places, both ways: [Paris, Lyon, 2h].",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "string",
+                "pattern": "^\\s*(?:\\d+h\\d+|(?:\\d+(?:\\.\\d+)?(?:h|m|s))+)\\s*$"
+              }
+            ],
+            "items": false,
+            "minItems": 3
           }
         }
       }

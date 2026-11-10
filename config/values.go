@@ -518,3 +518,86 @@ func ParseClock(s string) (time.Duration, error) {
 
 	return time.Duration(hours)*time.Hour + time.Duration(minutes)*time.Minute, nil
 }
+
+// Travel is the key travel: the journeys between the places of the
+// candidates (see planning.Travel).
+type Travel struct {
+	// Default is the journey between two places that Journeys does not
+	// list; nil means none: every pair of places of the candidates is then
+	// listed.
+	Default *Duration `yaml:"default"`
+	// Journeys are the times between pairs of places, both ways.
+	Journeys []Journey `yaml:"journeys"`
+}
+
+// UnmarshalYAML implements yaml.Unmarshaler.
+func (t *Travel) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind != yaml.MappingNode {
+		return fmt.Errorf("line %d: travel has a default and journeys, such as [Paris, Lyon, 2h]", n.Line)
+	}
+
+	var raw struct {
+		Default  *Duration `yaml:"default"`
+		Journeys []Journey `yaml:"journeys"`
+	}
+
+	if err := n.Decode(&raw); err != nil {
+		return err
+	}
+
+	for i, j := range raw.Journeys {
+		for _, k := range raw.Journeys[:i] {
+			if j.From == k.From && j.To == k.To || j.From == k.To && j.To == k.From {
+				return fmt.Errorf("line %d: %s to %s is already given line %d", j.Line, j.From, j.To, k.Line)
+			}
+		}
+	}
+
+	*t = Travel(raw)
+
+	return nil
+}
+
+// Journey is an element of travel.journeys: [Paris, Lyon, 2h].
+type Journey struct {
+	From, To string // normalised (see NormalizeName)
+	Duration time.Duration
+	Line     int // in the file, 0 when unknown
+}
+
+// UnmarshalYAML implements yaml.Unmarshaler.
+func (j *Journey) UnmarshalYAML(n *yaml.Node) error {
+	bad := fmt.Errorf("line %d: a journey is [from, to, time], such as [Paris, Lyon, 2h]", n.Line)
+
+	if n.Kind != yaml.SequenceNode || len(n.Content) != 3 {
+		return bad
+	}
+
+	for _, item := range n.Content {
+		if item.Kind != yaml.ScalarNode {
+			return bad
+		}
+	}
+
+	from, to, length := NormalizeName(n.Content[0].Value), NormalizeName(n.Content[1].Value), strings.TrimSpace(n.Content[2].Value)
+
+	switch {
+	case from == "" || to == "":
+		return fmt.Errorf("line %d: a journey without a place", n.Line)
+	case from == to:
+		return fmt.Errorf("line %d: a journey from %s to itself", n.Line, from)
+	}
+
+	if _, err := strconv.Atoi(length); err == nil {
+		return fmt.Errorf("line %d: %s to %s: the time of a journey has its unit, such as 2h or 90m", n.Line, from, to)
+	}
+
+	d, err := ParseDuration(length)
+	if err != nil {
+		return fmt.Errorf("line %d: %s to %s: %w", n.Line, from, to, err)
+	}
+
+	*j = Journey{From: from, To: to, Duration: d, Line: n.Line}
+
+	return nil
+}

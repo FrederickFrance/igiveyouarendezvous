@@ -11,6 +11,7 @@ const examples = [
   { file: "show.yaml", en: "Recordings of a show", fr: "Les enregistrements d'une émission" },
   { file: "colloquium.yaml", en: "A colloquium", fr: "Un colloque" },
   { file: "roleplay.yaml", en: "Role-playing games", fr: "Des parties de jeu de rôle" },
+  { file: "tour.yaml", en: "A tour of shoots in five cities", fr: "Une tournée de tournages dans cinq villes" },
 ];
 
 const texts = {

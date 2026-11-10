@@ -55,6 +55,15 @@ has defaults):
   rank 1 first, then rank 2…, `X` any time. A meeting may have its own
   length, `{Ann: 15m}`, or both, `{Ann: {rank: 1, duration: 15m}}`; a bare
   number is a rank, so a length always has its unit.
+- `recruiters.<name>.min-gap`: the shortest time between two interviews of
+  this recruiter, nights included (`30m` to write notes); `recruiter-min-gap`:
+  the same for every recruiter without one.
+- `candidates.<name>.place`: where the candidate is met, such as the city
+  of a shoot; the recruiters travel between places. `travel`: the journeys,
+  `default` for any pair not listed, and `journeys`, a list of
+  `[Paris, Lyon, 2h30]`, both ways. Give upper estimates, door to door, with
+  a comment on what each rests on (`# train 2h + 30 min to the station`);
+  without `default`, list every two places.
 - `candidates.<name>.priority`: `1` by default; the higher, the more
   important when not everybody fits.
 - `joint-groups`: lists of recruiters who MAY interview a candidate together,

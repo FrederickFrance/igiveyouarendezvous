@@ -22,7 +22,7 @@ cp "$(cd "$root" && go env GOROOT)/lib/wasm/wasm_exec.js" "$out/"
 
 # The examples, in English and in French; their schema comment points into
 # the repository.
-for example in problem simple panel show colloquium roleplay; do
+for example in problem simple panel show colloquium roleplay tour; do
 	for lang in . fr; do
 		sed 's#\$schema=\(\.\./\)*schema/#$schema=https://raw.githubusercontent.com/FrederickFrance/igiveyouarendezvous/main/schema/#' \
 			"$root/example/$lang/$example.yaml" > "$out/examples/$lang/$example.yaml"

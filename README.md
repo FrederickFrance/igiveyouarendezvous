@@ -248,11 +248,15 @@ candidates:
 | `objectives` | see below | objectives, the most important first |
 | `recruiters.<name>.duration` | `duration` | length of the interviews with this recruiter; a joint interview lasts as long as its longest part |
 | `recruiters.<name>.availability` | `day` | time spans of the recruiter (`none`: absent), every day or by date (see below) |
+| `recruiters.<name>.min-gap` | `recruiter-min-gap` | the shortest time between two interviews of this recruiter, from the end of one to the start of the next, nights included: to write notes (`30m`), to rest (`12h`); the journeys come on top (see `travel`); `0`: none |
+| `recruiter-min-gap` | `0` | the `min-gap` of every recruiter without one of their own, such as `10m` of break for everybody |
 | `candidates.<name>.meet` | mandatory | the recruiters to meet, in any order, or with their ranks and the lengths of the meetings (see below) |
 | `candidates.<name>.availability` | `day` | time spans of the candidate, every day or by date |
 | `candidates.<name>.priority` | `1` | the higher, the more important (objective `priorities`) |
 | `candidates.<name>.duration` | the recruiters' | length of the interviews of this candidate, in place of the recruiters' ones (the length of a meeting in `meet` still wins) |
 | `candidates.<name>.together` | `false` | `true`: a meeting, all the recruiters at once in one interview, or not at all (see [Other uses](#other-uses)) |
+| `candidates.<name>.place` | none | where the candidate is met, such as the city of a shoot; none: no journey to or from them, such as a call (see below) |
+| `travel` | none | the journeys between the places: `default`, and `journeys`, such as `[Paris, Lyon, 2h]` (see below) |
 
 An unknown key (a typo), an unknown recruiter or a name given twice is an
 error, with its line number. Inside braces, `{availability: "09:00-12:00,
@@ -331,6 +335,34 @@ must meet, the candidate meets in one interview, with nobody else, or not at
 all: never one after the other. A recruiter belongs to one panel at most,
 and then to no joint group; `max-joint-size` does not apply to panels. Full
 example: [a selection panel](example/panel.yaml).
+
+**Places and journeys.** A candidate may have a `place`, such as the city
+of a shoot; the recruiters travel from one to the next. Between two
+interviews of a recruiter at different places, they need the journey, plus
+their `min-gap`, nights included. The journeys are upper estimates that you
+give, door to door: the program computes no route.
+
+```yaml
+travel:
+  default: 5h                 # any journey not listed
+  journeys:
+    - [Paris, Lyon, 2h30]     # both ways
+    - [Lyon, Marseille, 2h]
+candidates:
+  episode 1:
+    meet: [Host, Guest 1]
+    together: true
+    place: Lyon
+```
+
+A journey through other places counts when it is shorter: Paris to
+Marseille takes at most 2h30 plus 2h here. Without `default`, every two
+places of the candidates must be listed; with it, the command notes a place
+that no journey names, which may be a typo. A candidate without place takes
+no journey, but a recruiter still travels from Paris to Lyon around them.
+On the time grid, the journeys are rounded up to 5 minutes: `2h07` counts
+as `2h10`, rather than making a grid of one minute. Full example: [a
+tour](example/tour.yaml).
 
 **The next period.** `-rest` writes the problem file again, with the
 candidates served removed; the others keep all their meetings. The period
@@ -457,6 +489,11 @@ candidates:
 Without two days in a row with the whole team, the shoot is not planned.
 The limit: for the program, `Ada day 1` is not Ada, so a clash with another
 recording of the same person, in the same file, goes unseen.
+
+**Shoots in several cities.** Each shoot is a candidate with `together:
+true` and a `place`, its guests the recruiters; the host, a recruiter too,
+travels between the cities with the journeys of `travel`, and packs the gear
+with a `min-gap` of an hour: [the example of a tour](example/tour.yaml).
 
 ## Objectives
 

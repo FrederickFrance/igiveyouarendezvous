@@ -75,19 +75,24 @@ type File struct {
 	// nil means Monday to Friday.
 	Weekdays []Weekday `yaml:"weekdays"`
 	// Closed are dates without interviews, such as holidays.
-	Closed       []Date           `yaml:"closed"`
-	Day          Intervals        `yaml:"day"`
-	Breaks       Intervals        `yaml:"breaks"`
-	Duration     Duration         `yaml:"duration"`
-	Step         Duration         `yaml:"step"`
-	MinGap       Gap              `yaml:"min-gap"`
-	MaxGap       Gap              `yaml:"max-gap"`
-	JointGroups  [][]string       `yaml:"joint-groups"`
-	Panels       [][]string       `yaml:"panels"`
-	MaxJointSize int              `yaml:"max-joint-size"`
-	Objectives   []string         `yaml:"objectives"`
-	Recruiters   Named[Recruiter] `yaml:"recruiters"`
-	Candidates   Named[Candidate] `yaml:"candidates"`
+	Closed   []Date    `yaml:"closed"`
+	Day      Intervals `yaml:"day"`
+	Breaks   Intervals `yaml:"breaks"`
+	Duration Duration  `yaml:"duration"`
+	Step     Duration  `yaml:"step"`
+	MinGap   Gap       `yaml:"min-gap"`
+	MaxGap   Gap       `yaml:"max-gap"`
+	// RecruiterMinGap is the gap of every recruiter without one of their
+	// own (see Recruiter.MinGap).
+	RecruiterMinGap Duration         `yaml:"recruiter-min-gap"`
+	JointGroups     [][]string       `yaml:"joint-groups"`
+	Panels          [][]string       `yaml:"panels"`
+	MaxJointSize    int              `yaml:"max-joint-size"`
+	Objectives      []string         `yaml:"objectives"`
+	Recruiters      Named[Recruiter] `yaml:"recruiters"`
+	Candidates      Named[Candidate] `yaml:"candidates"`
+	// Travel gives the journeys between the places of the candidates.
+	Travel Travel `yaml:"travel"`
 	// Schema is the JSON schema of the file, for editors; it is ignored.
 	Schema string `yaml:"$schema"`
 
@@ -100,6 +105,10 @@ type Recruiter struct {
 	// file.
 	Duration     Duration     `yaml:"duration"`
 	Availability Availability `yaml:"availability"`
+	// MinGap is the shortest time between two of their interviews, nights
+	// included (see planning.Recruiter.MinGap); nil means the gap of the
+	// file, recruiter-min-gap.
+	MinGap *Duration `yaml:"min-gap"`
 }
 
 // Candidate is a candidate of the problem file.
@@ -116,6 +125,9 @@ type Candidate struct {
 	// Together makes a meeting: the candidate meets all their recruiters in
 	// one single interview, whatever the joint groups, or not at all.
 	Together bool
+	// Place is where the candidate is met, such as the city of a shoot
+	// (see Travel); normalised (see NormalizeName).
+	Place string
 }
 
 // UnmarshalYAML implements yaml.Unmarshaler.
@@ -126,6 +138,7 @@ func (c *Candidate) UnmarshalYAML(n *yaml.Node) error {
 		Availability Availability `yaml:"availability"`
 		Duration     Duration     `yaml:"duration"`
 		Together     bool         `yaml:"together"`
+		Place        string       `yaml:"place"`
 	}
 
 	if err := n.Decode(&raw); err != nil {
@@ -143,7 +156,7 @@ func (c *Candidate) UnmarshalYAML(n *yaml.Node) error {
 		return fmt.Errorf("line %d: together, everybody meets at once: no durations in meet, give the candidate's duration", n.Line)
 	}
 
-	*c = Candidate{Meet: *raw.Meet, Availability: raw.Availability, Duration: raw.Duration, Together: raw.Together}
+	*c = Candidate{Meet: *raw.Meet, Availability: raw.Availability, Duration: raw.Duration, Together: raw.Together, Place: NormalizeName(raw.Place)}
 	if raw.Priority != nil {
 		c.Priority = *raw.Priority
 	}
@@ -204,9 +217,10 @@ func (nm *Named[T]) UnmarshalYAML(n *yaml.Node) error {
 var problemKeys = shape{
 	"$schema": nil, "from": nil, "to": nil, "not-before": nil, "weekdays": nil, "closed": nil,
 	"day": nil, "breaks": nil, "duration": nil, "step": nil, "min-gap": nil, "max-gap": nil,
-	"joint-groups": nil, "panels": nil, "max-joint-size": nil, "objectives": nil,
-	"recruiters": {"*": {"duration": nil, "availability": nil}},
-	"candidates": {"*": {"meet": nil, "priority": nil, "availability": nil, "duration": nil, "together": nil}},
+	"recruiter-min-gap": nil, "joint-groups": nil, "panels": nil, "max-joint-size": nil, "objectives": nil,
+	"recruiters": {"*": {"duration": nil, "availability": nil, "min-gap": nil}},
+	"candidates": {"*": {"meet": nil, "priority": nil, "availability": nil, "duration": nil, "together": nil, "place": nil}},
+	"travel":     {"default": nil, "journeys": nil},
 }
 
 // Load reads a problem file.
@@ -437,7 +451,11 @@ func (f *File) Problem(from, to string) (*planning.Problem, planning.Options, er
 			return nil, o, fmt.Errorf("line %d: recruiter %s: %w", e.Line, e.Name, err)
 		}
 
-		r := planning.Recruiter{Name: e.Name, Duration: time.Duration(e.Value.Duration)}
+		r := planning.Recruiter{Name: e.Name, Duration: time.Duration(e.Value.Duration), MinGap: time.Duration(f.RecruiterMinGap)}
+		if e.Value.MinGap != nil {
+			r.MinGap = time.Duration(*e.Value.MinGap)
+		}
+
 		if set {
 			r.Availability = spans
 		}
@@ -452,7 +470,10 @@ func (f *File) Problem(from, to string) (*planning.Problem, planning.Options, er
 			return nil, o, fmt.Errorf("line %d: candidate %s: %w", e.Line, e.Name, err)
 		}
 
-		cand := planning.Candidate{Name: e.Name, Priority: e.Value.Priority, Duration: time.Duration(e.Value.Duration), Together: e.Value.Together}
+		cand := planning.Candidate{
+			Name: e.Name, Priority: e.Value.Priority, Duration: time.Duration(e.Value.Duration),
+			Together: e.Value.Together, Place: e.Value.Place,
+		}
 		if first != "" {
 			cand.DaysLeft = f.daysLeft(e.Value, first)
 		}
@@ -488,7 +509,71 @@ func (f *File) Problem(from, to string) (*planning.Problem, planning.Options, er
 		return nil, o, err
 	}
 
+	if p.Travel, err = f.travel(p); err != nil {
+		return nil, o, err
+	}
+
 	return p, o, nil
+}
+
+// travel converts the key travel, and checks that every two places of the
+// candidates have a journey, listed or the default.
+func (f *File) travel(p *planning.Problem) (planning.Travel, error) {
+	var t planning.Travel
+
+	for _, j := range f.Travel.Journeys {
+		t.Journeys = append(t.Journeys, planning.Journey{From: j.From, To: j.To, Duration: j.Duration})
+	}
+
+	if f.Travel.Default != nil {
+		t.Default = time.Duration(*f.Travel.Default)
+
+		return t, nil
+	}
+
+	var places []string
+
+	for _, c := range p.Candidates {
+		if c.Place != "" && !slices.Contains(places, c.Place) {
+			places = append(places, c.Place)
+		}
+	}
+
+	for i, a := range places {
+		for _, b := range places[:i] {
+			listed := slices.ContainsFunc(f.Travel.Journeys, func(j Journey) bool {
+				return j.From == a && j.To == b || j.From == b && j.To == a
+			})
+
+			if !listed {
+				return t, fmt.Errorf("travel: no journey between %s and %s: list it, such as [%s, %s, 2h], or give a default", b, a, b, a)
+			}
+		}
+	}
+
+	return t, nil
+}
+
+// PlacesWithoutJourney lists the places of the candidates that no journey
+// of travel names, when it lists some and has a default: the default then
+// applies to them, which may hide a typo.
+func (f *File) PlacesWithoutJourney() []string {
+	if len(f.Travel.Journeys) == 0 || f.Travel.Default == nil {
+		return nil
+	}
+
+	var out []string
+
+	for _, e := range f.Candidates {
+		place := e.Value.Place
+		named := slices.ContainsFunc(f.Travel.Journeys, func(j Journey) bool { return j.From == place || j.To == place })
+
+		if place != "" && !named && !slices.Contains(out, place) {
+			out = append(out, place)
+		}
+	}
+
+	return out
 }
 
 // WithoutAvailability lists the people, recruiters then candidates, who

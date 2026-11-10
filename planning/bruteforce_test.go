@@ -84,6 +84,9 @@ func randomProblem(rnd *rand.Rand) (*planning.Problem, planning.Options) {
 	for h := range 3 {
 		r := planning.Recruiter{Name: string(rune('P' + h)), Duration: []time.Duration{30 * time.Minute, time.Hour}[rnd.IntN(2)]}
 		if rnd.IntN(3) == 0 {
+			r.MinGap = 30 * time.Minute // a break after each of their interviews
+		}
+		if rnd.IntN(3) == 0 {
 			r.Availability = []planning.Interval{windows[rnd.IntN(len(windows))]}
 		}
 
@@ -142,6 +145,14 @@ func randomProblem(rnd *rand.Rand) (*planning.Problem, planning.Options) {
 
 	if rnd.IntN(3) == 0 {
 		o.Breaks = []planning.Interval{{Start: clock(9, 30), End: clock(10, 0)}}
+	}
+
+	if rnd.IntN(3) == 0 { // places, and the recruiters travel between them
+		for c := range p.Candidates {
+			p.Candidates[c].Place = []string{"", "Lyon", "Paris", "Nice"}[rnd.IntN(4)]
+		}
+
+		p.Travel = planning.Travel{Default: time.Hour, Journeys: []planning.Journey{{From: "Lyon", To: "Paris", Duration: 30 * time.Minute}}}
 	}
 
 	return p, o

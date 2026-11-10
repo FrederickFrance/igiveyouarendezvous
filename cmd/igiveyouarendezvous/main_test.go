@@ -652,3 +652,20 @@ func TestRunNotesPeopleWithoutAvailability(t *testing.T) {
 		strings.NewReader("recruiters:\n  R1:\ncandidates:\n  A: {meet: [R1]}\n"), &out, &errs))
 	require.NotContains(t, errs.String(), "no availability")
 }
+
+// The schedule shows the places, and a note names a place that no journey
+// names.
+func TestRunShowsThePlaces(t *testing.T) {
+	t.Parallel()
+
+	const tour = "day: 08:00-20:00\nduration: 2h\nrecruiters: {Host: }\ncandidates:\n" +
+		"  S1: {meet: [Host], place: Paris}\n  S2: {meet: [Host], place: Lyonn}\n" +
+		"travel:\n  default: 3h\n  journeys: [[Paris, Lyon, 2h]]\n"
+
+	var out, errs bytes.Buffer
+	require.NoError(t, run(t.Context(), []string{"-patience", "100ms", "-objectives", "meetings,earliest"}, strings.NewReader(tour), &out, &errs))
+	require.Contains(t, out.String(), "Time          Candidate   Place   Recruiters")
+	require.Contains(t, errs.String(), "note: no journey names Lyonn: the default, 3h, applies (a typo?)\n")
+	require.Regexp(t, `08:00-10:00 +S\d +\w+ +Host`, out.String())
+	require.Regexp(t, `13:00-15:00 +S\d +\w+ +Host`, out.String(), "3 hours between the two")
+}

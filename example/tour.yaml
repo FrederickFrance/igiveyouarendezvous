@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=../schema/problem.schema.json
+#
+# A tour: five episodes shot in five cities, each with a local guest. The
+# host and the camera operator travel from one shoot to the next; each
+# episode is a "candidate" met by everybody at once (together: true), at
+# its place. Between two shoots in different cities, the team needs the
+# journey, plus an hour to pack the gear (min-gap). The journeys are upper
+# estimates, door to door: the program computes no route.
+
+from: 2026-11-16
+to: 2026-11-20
+day: 08:00-20:00
+duration: 3h            # a shoot
+recruiter-min-gap: 1h   # to pack and unpack the gear
+objectives: [complete-candidates, recruiters, day-end]   # every episode, then the fewest days
+
+travel:
+  default: 5h           # any journey not listed below
+  journeys:
+    - [Paris, Lille, 1h30]
+    - [Paris, Lyon, 2h30]
+    - [Paris, Bordeaux, 2h30]
+    - [Lyon, Marseille, 2h]
+
+recruiters:             # the people: the team, and the guests
+  Host:
+  Camera:
+  Guest Lille:
+    availability:
+      2026-11-16: 14:00-20:00
+      2026-11-17: 08:00-12:00
+  Guest Paris:
+  Guest Lyon:
+    availability:
+      2026-11-18: 08:00-20:00
+      2026-11-19: 08:00-20:00
+  Guest Marseille:
+    availability:
+      2026-11-19: 08:00-20:00
+  Guest Bordeaux:
+    availability:
+      2026-11-16: 08:00-13:00
+      2026-11-20: 08:00-20:00
+
+candidates:             # the episodes, each at its place
+  the archives of Lille:
+    meet: [Host, Camera, Guest Lille]
+    together: true
+    place: Lille
+  the Paris catacombs:
+    meet: [Host, Camera, Guest Paris]
+    together: true
+    place: Paris
+  the silk workers of Lyon:
+    meet: [Host, Camera, Guest Lyon]
+    together: true
+    place: Lyon
+  the old port of Marseille:
+    meet: [Host, Camera, Guest Marseille]
+    together: true
+    place: Marseille
+  the wine cellars of Bordeaux:
+    meet: [Host, Camera, Guest Bordeaux]
+    together: true
+    place: Bordeaux

@@ -35,7 +35,7 @@ for target in windows:windows:amd64 mac-apple:darwin:arm64 mac-intel:darwin:amd6
 
 	cp "$root/example/simple.yaml" "$dir/problem.yaml"
 	cp "$root/example/problem.yaml" "$dir/example-full.yaml"
-	for other in panel show colloquium roleplay; do # a panel, and the other uses
+	for other in panel show colloquium roleplay tour; do # a panel, and the other uses
 		cp "$root/example/$other.yaml" "$dir/example-$other.yaml"
 	done
 	mkdir "$dir/exemples-fr"

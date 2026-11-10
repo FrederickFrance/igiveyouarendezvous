@@ -254,7 +254,7 @@ func TestProblemFileErrors(t *testing.T) {
 		"recruiters:\n  '': {}\ncandidates: {}":                                 "line 2: an empty name",
 		"recruiters:\n  R: {duration: soon}\ncandidates: {}":                    "R: line 2: invalid duration",
 		"recruiters: {}\ncandidates: {}\nday: 25h-26h":                          "invalid time",
-		"recruiters:\n  R: {availability: 9h-12h, 14h-16h}\ncandidates: {}":     `unknown key "14h-16h" in recruiters > R (known: availability, duration); between braces, write the time spans between quotes`,
+		"recruiters:\n  R: {availability: 9h-12h, 14h-16h}\ncandidates: {}":     `unknown key "14h-16h" in recruiters > R (known: availability, duration, min-gap); between braces, write the time spans between quotes`,
 		"{\"recruiters\": {}, \"candidates\": {}, \"x\": 1}":                    `unknown key "x"`,
 	} {
 		_, err := Parse([]byte(text))
@@ -441,6 +441,73 @@ func TestPanelsOfTheFile(t *testing.T) {
 
 	_, _, err = f.Problem("", "")
 	require.EqualError(t, err, `panels: "R9" is not a recruiter of the file`)
+}
+
+// The gap of the recruiters: theirs, or else the one of the file; 0 removes
+// it for one of them.
+func TestRecruiterGapsOfTheFile(t *testing.T) {
+	t.Parallel()
+
+	f, err := Parse([]byte("recruiter-min-gap: 10m\nrecruiters:\n  R1:\n  R2: {min-gap: 12h}\n  R3: {min-gap: 0}\ncandidates: {}\n"))
+	require.NoError(t, err)
+
+	p, _, err := f.Problem("", "")
+	require.NoError(t, err)
+	require.Equal(t, []time.Duration{10 * time.Minute, 12 * time.Hour, 0},
+		[]time.Duration{p.Recruiters[0].MinGap, p.Recruiters[1].MinGap, p.Recruiters[2].MinGap})
+}
+
+func TestTravelOfTheFile(t *testing.T) {
+	t.Parallel()
+
+	const shoots = "recruiters: {Host: }\ncandidates:\n  S1: {meet: [Host], place: Paris}\n  S2: {meet: [Host], place: ' Lyon '}\n  S3: {meet: [Host]}\n"
+
+	f, err := Parse([]byte(shoots + "travel:\n  default: 3h\n  journeys:\n    - [Paris, Lyon, 2h]\n    - [Lyon, Saint-Étienne, 45m]\n"))
+	require.NoError(t, err)
+
+	p, _, err := f.Problem("", "")
+	require.NoError(t, err)
+	require.Equal(t, []string{"Paris", "Lyon", ""}, []string{p.Candidates[0].Place, p.Candidates[1].Place, p.Candidates[2].Place})
+	require.Equal(t, planning.Travel{Default: 3 * time.Hour, Journeys: []planning.Journey{
+		{From: "Paris", To: "Lyon", Duration: 2 * time.Hour},
+		{From: "Lyon", To: "Saint-Étienne", Duration: 45 * time.Minute},
+	}}, p.Travel)
+	require.Nil(t, f.PlacesWithoutJourney())
+
+	// Without a default, every two places of the candidates are listed.
+	f, err = Parse([]byte(shoots + "travel:\n  journeys: [[Lyon, Paris, 2h]]\n"))
+	require.NoError(t, err)
+
+	_, _, err = f.Problem("", "")
+	require.NoError(t, err)
+
+	f, err = Parse([]byte(shoots + "  S4: {meet: [Host], place: Nice}\ntravel:\n  journeys: [[Lyon, Paris, 2h]]\n"))
+	require.NoError(t, err)
+
+	_, _, err = f.Problem("", "")
+	require.EqualError(t, err, "travel: no journey between Paris and Nice: list it, such as [Paris, Nice, 2h], or give a default")
+
+	// With journeys and a default, a place that no journey names may be a typo.
+	f, err = Parse([]byte(shoots + "  S4: {meet: [Host], place: Lyonn}\ntravel:\n  default: 3h\n  journeys: [[Lyon, Paris, 2h]]\n"))
+	require.NoError(t, err)
+	require.Equal(t, []string{"Lyonn"}, f.PlacesWithoutJourney())
+
+	for text, want := range map[string]string{
+		"travel: [Paris, Lyon]":                                              "line 3: travel has a default and journeys, such as [Paris, Lyon, 2h]",
+		"travel:\n  journeys: [[Paris, Lyon]]":                               "line 4: a journey is [from, to, time], such as [Paris, Lyon, 2h]",
+		"travel:\n  journeys: [[Paris, [Lyon], 2h]]":                         "line 4: a journey is [from, to, time], such as [Paris, Lyon, 2h]",
+		"travel:\n  journeys: [[Paris, '', 2h]]":                             "line 4: a journey without a place",
+		"travel:\n  journeys: [[Paris, ' Paris', 2h]]":                       "line 4: a journey from Paris to itself",
+		"travel:\n  journeys: [[Paris, Lyon, 2]]":                            "line 4: Paris to Lyon: the time of a journey has its unit, such as 2h or 90m",
+		"travel:\n  journeys: [[Paris, Lyon, soon]]":                         `line 4: Paris to Lyon: invalid duration "soon" (examples: 45m, 1h30, 90)`,
+		"travel:\n  journeys:\n  - [Paris, Lyon, 2h]\n  - [Lyon, Paris, 3h]": "line 6: Lyon to Paris is already given line 5",
+	} {
+		_, err := Parse([]byte("recruiters: {}\ncandidates: {}\n" + text))
+		require.EqualError(t, err, want, text)
+	}
+
+	_, err = Parse([]byte("recruiters: {}\ncandidates: {}\ntravel:\n  speed: 80"))
+	require.ErrorContains(t, err, "speed")
 }
 
 func TestWithoutAvailability(t *testing.T) {
