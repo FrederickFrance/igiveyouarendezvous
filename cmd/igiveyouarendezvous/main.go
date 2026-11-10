@@ -316,6 +316,10 @@ func loadProblem(o *options, stdin io.Reader, stderr io.Writer) (*config.File, *
 		fmt.Fprintf(stderr, "note: no availability for %s: available whenever the day allows (%s)\n", abbreviate(without, maxListed), day)
 	}
 
+	if unnamed := f.PlacesWithoutJourney(); len(unnamed) > 0 {
+		fmt.Fprintf(stderr, "note: no journey names %s: the default, %s, applies (a typo?)\n", abbreviate(unnamed, maxListed), *f.Travel.Default)
+	}
+
 	if o.objectives != "" {
 		if opts.Objectives, err = planning.ParseObjectives(o.objectives); err != nil {
 			return nil, nil, planning.Options{}, period{}, err

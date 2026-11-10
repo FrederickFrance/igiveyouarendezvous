@@ -1,0 +1,66 @@
+# yaml-language-server: $schema=../../schema/problem.schema.json
+#
+# Une tournée : cinq épisodes tournés dans cinq villes, chacun avec un invité
+# du coin. L'animatrice et le cadreur vont d'un tournage au suivant ; chaque
+# épisode est un « candidat » que tout le monde rencontre à la fois
+# (together: true), à son lieu (place). Entre deux tournages dans des villes
+# différentes, l'équipe a besoin du trajet, plus une heure pour ranger le
+# matériel (min-gap). Les trajets sont des estimations hautes, de porte à
+# porte : le programme ne calcule aucun itinéraire.
+
+from: 2026-11-16
+to: 2026-11-20
+day: 08:00-20:00
+duration: 3h            # un tournage
+recruiter-min-gap: 1h   # pour ranger et déballer le matériel
+objectives: [complete-candidates, recruiters, day-end]   # tous les épisodes, puis le moins de jours
+
+travel:
+  default: 5h           # tout trajet qui n'est pas listé dessous
+  journeys:
+    - [Paris, Lille, 1h30]
+    - [Paris, Lyon, 2h30]
+    - [Paris, Bordeaux, 2h30]
+    - [Lyon, Marseille, 2h]
+
+recruiters:             # les personnes : l'équipe et les invités
+  Animatrice:
+  Cadreur:
+  Invité Lille:
+    availability:
+      2026-11-16: 14:00-20:00
+      2026-11-17: 08:00-12:00
+  Invité Paris:
+  Invité Lyon:
+    availability:
+      2026-11-18: 08:00-20:00
+      2026-11-19: 08:00-20:00
+  Invité Marseille:
+    availability:
+      2026-11-19: 08:00-20:00
+  Invité Bordeaux:
+    availability:
+      2026-11-16: 08:00-13:00
+      2026-11-20: 08:00-20:00
+
+candidates:             # les épisodes, chacun à son lieu
+  les archives de Lille:
+    meet: [Animatrice, Cadreur, Invité Lille]
+    together: true
+    place: Lille
+  les catacombes de Paris:
+    meet: [Animatrice, Cadreur, Invité Paris]
+    together: true
+    place: Paris
+  les canuts de Lyon:
+    meet: [Animatrice, Cadreur, Invité Lyon]
+    together: true
+    place: Lyon
+  le vieux port de Marseille:
+    meet: [Animatrice, Cadreur, Invité Marseille]
+    together: true
+    place: Marseille
+  les chais de Bordeaux:
+    meet: [Animatrice, Cadreur, Invité Bordeaux]
+    together: true
+    place: Bordeaux

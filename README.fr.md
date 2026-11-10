@@ -259,11 +259,15 @@ Les clés sont en anglais, comme le reste du programme. `recruiters` et
 | `objectives` | voir plus bas | objectifs, le plus important d'abord |
 | `recruiters.<nom>.duration` | `duration` | durée des entretiens avec ce recruteur ; un entretien commun dure autant que sa plus longue partie |
 | `recruiters.<nom>.availability` | `day` | plages du recruteur (`none` : absent), chaque jour ou par date (voir plus bas) |
+| `recruiters.<nom>.min-gap` | `recruiter-min-gap` | le temps minimal entre deux entretiens de ce recruteur, de la fin de l'un au début du suivant, nuits comprises : pour mettre ses notes au propre (`30m`), pour se reposer (`12h`) ; les trajets s'y ajoutent (voir `travel`) ; `0` : aucun |
+| `recruiter-min-gap` | `0` | le `min-gap` de chaque recruteur qui n'a pas le sien, comme `10m` de battement pour tout le monde |
 | `candidates.<nom>.meet` | obligatoire | les recruteurs à rencontrer, dans n'importe quel ordre, ou avec leurs rangs et les durées des rencontres (voir plus bas) |
 | `candidates.<nom>.availability` | `day` | plages du candidat, chaque jour ou par date |
 | `candidates.<nom>.priority` | `1` | plus c'est haut, plus c'est important (objectif `priorities`) |
 | `candidates.<nom>.duration` | celle des recruteurs | durée des entretiens de ce candidat, à la place de celles des recruteurs (la durée d'une rencontre dans `meet` l'emporte) |
 | `candidates.<nom>.together` | `false` | `true` : une réunion, tous les recruteurs à la fois en un seul entretien, ou rien (voir [Autres usages](#autres-usages)) |
+| `candidates.<nom>.place` | aucun | où l'on rencontre le candidat, comme la ville d'un tournage ; aucun : pas de trajet vers lui ni depuis lui, comme un appel (voir plus bas) |
+| `travel` | aucun | les trajets entre les lieux : `default`, et `journeys`, comme `[Paris, Lyon, 2h]` (voir plus bas) |
 
 Une clé inconnue (une faute de frappe), un recruteur inconnu ou un nom donné
 deux fois est une erreur, avec son numéro de ligne. Entre accolades,
@@ -344,6 +348,36 @@ pas du tout : jamais l'un après l'autre. Un recruteur appartient à un jury au
 plus, et alors à aucun groupe commun ; `max-joint-size` ne s'applique pas aux
 jurys. Exemple complet : [une commission de
 recrutement](example/fr/panel.yaml).
+
+**Lieux et trajets.** Un candidat peut avoir un lieu, `place`, comme la
+ville d'un tournage ; les recruteurs vont de l'un à l'autre. Entre deux
+entretiens d'un recruteur à des lieux différents, il lui faut le trajet,
+plus son `min-gap`, nuits comprises. Les trajets sont des estimations hautes
+que vous donnez, de porte à porte : le programme ne calcule aucun
+itinéraire.
+
+```yaml
+travel:
+  default: 5h                 # tout trajet non listé
+  journeys:
+    - [Paris, Lyon, 2h30]     # dans les deux sens
+    - [Lyon, Marseille, 2h]
+candidates:
+  épisode 1:
+    meet: [Animatrice, Invité 1]
+    together: true
+    place: Lyon
+```
+
+Un trajet par d'autres lieux compte quand il est plus court : Paris à
+Marseille prend au plus 2h30 plus 2h ici. Sans `default`, chaque paire de
+lieux des candidats doit être listée ; avec, la commande signale un lieu
+qu'aucun trajet ne nomme, peut-être une faute de frappe. Un candidat sans
+lieu ne demande aucun trajet, mais un recruteur doit quand même aller de
+Paris à Lyon autour de lui. Sur la grille du temps, les trajets sont
+arrondis aux 5 minutes supérieures : `2h07` compte pour `2h10`, plutôt que
+de faire une grille d'une minute. Exemple complet : [une
+tournée](example/fr/tour.yaml).
 
 **La période suivante.** `-rest` réécrit le fichier problème, sans les
 candidats servis ; les autres gardent toutes leurs rencontres. La période
@@ -474,6 +508,12 @@ Sans deux jours d'affilée avec toute l'équipe, le tournage n'est pas
 planifié. La limite : pour le programme, `Ada jour 1` n'est pas Ada, donc un
 conflit avec un autre enregistrement de la même personne, dans le même
 fichier, passe inaperçu.
+
+**Des tournages dans plusieurs villes.** Chaque tournage est un candidat avec
+`together: true` et un lieu, `place`, ses invités les recruteurs ;
+l'animateur, recruteur lui aussi, va d'une ville à l'autre avec les trajets
+de `travel`, et range le matériel avec un `min-gap` d'une heure :
+[l'exemple d'une tournée](example/fr/tour.yaml).
 
 ## Objectifs
 

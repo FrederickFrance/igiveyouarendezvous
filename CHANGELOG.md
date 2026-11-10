@@ -7,6 +7,24 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
+## [0.6.0] - 2026-11-10 "Phileas Fogg" 🚂
+
+### Added
+
+- **The gap of a recruiter**: `recruiters.<name>.min-gap`, the shortest
+  time between two of their interviews, nights included: 30 minutes to
+  write notes, an hour to pack the gear; `recruiter-min-gap` gives it to
+  every recruiter without one (`planning.Recruiter.MinGap`).
+- **Places and journeys**: `candidates.<name>.place`, such as the city of a
+  shoot, and `travel`, the journeys between places, upper estimates given
+  by the user: `default`, and `journeys` such as `[Paris, Lyon, 2h30]`.
+  Between two interviews of a recruiter at different places, the journey
+  comes on top of their gap; a journey through other places counts when
+  shorter. A tour among the examples (`planning.Candidate.Place`,
+  `planning.Problem.Travel`).
+- **A place column** in the table (`-csv`) and in the printed schedule,
+  when some candidate has a place.
+
 ## [0.5.1] - 2026-11-09 "Dan Hibiki" 🌸
 
 ### Changed
@@ -171,6 +189,7 @@ lexicographic objectives, fixed appointments resumed with `-start`, the
 problem file of the next day with `-rest`, and ready-to-use zips for a
 beginner's tutorial.
 
+[0.6.0]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.4.0...v0.4.1

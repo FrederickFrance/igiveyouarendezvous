@@ -4,13 +4,15 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/FrederickFrance/igiveyouarendezvous/planning"
 )
 
-// CSVHeader names the columns of WriteCSV.
+// CSVHeader names the columns of WriteCSV; a column "place" follows
+// "candidate" when some candidate has a place.
 var CSVHeader = []string{"date", "start", "end", "candidate", "recruiters", "fixed"}
 
 // ParseSeparator reads the separator of a CSV file: a comma (the default of
@@ -31,7 +33,8 @@ func ParseSeparator(s string) (rune, error) {
 
 // WriteCSV writes schedule s as a table, one row per interview in the order
 // of time: its date (empty without a period, from, to plan), times,
-// candidate, recruiters (joined by " + ") and whether it is fixed. The file
+// candidate, their place when some candidate has one, recruiters (joined by
+// " + ") and whether it is fixed. The file
 // starts with a byte order mark, so that Excel reads the accents, and
 // separates the columns with sep.
 func WriteCSV(w io.Writer, p *planning.Problem, s *planning.Schedule, from string, sep rune) error {
@@ -41,8 +44,14 @@ func WriteCSV(w io.Writer, p *planning.Problem, s *planning.Schedule, from strin
 
 	cw := csv.NewWriter(w)
 	cw.Comma = sep
+	places := p.HasPlaces()
 
-	if err := cw.Write(CSVHeader); err != nil {
+	header := CSVHeader
+	if places {
+		header = slices.Insert(slices.Clone(CSVHeader), 4, "place")
+	}
+
+	if err := cw.Write(header); err != nil {
 		return err
 	}
 
@@ -68,6 +77,10 @@ func WriteCSV(w io.Writer, p *planning.Problem, s *planning.Schedule, from strin
 			date, planning.Clock(iv.Start), planning.Clock(iv.End),
 			cell(p.Candidates[iv.Candidate].Name), cell(strings.Join(names, " + ")), fixed,
 		}
+		if places {
+			row = slices.Insert(row, 4, cell(p.Candidates[iv.Candidate].Place))
+		}
+
 		if err := cw.Write(row); err != nil {
 			return err
 		}

@@ -57,6 +57,16 @@ a des valeurs par défaut) :
   rang 2…, `X` n'importe quand. Une rencontre peut avoir sa propre durée,
   `{Anne: 15m}`, ou les deux, `{Anne: {rank: 1, duration: 15m}}` ; un
   nombre seul est un rang, donc une durée a toujours son unité.
+- `recruiters.<nom>.min-gap` : le temps minimal entre deux entretiens de ce
+  recruteur, nuits comprises (`30m` pour les notes) ; `recruiter-min-gap` :
+  la même chose pour chaque recruteur qui n'a pas le sien.
+- `candidates.<nom>.place` : où l'on rencontre le candidat, comme la ville
+  d'un tournage ; les recruteurs voyagent entre les lieux. `travel` : les
+  trajets, `default` pour toute paire non listée, et `journeys`, une liste de
+  `[Paris, Lyon, 2h30]`, dans les deux sens. Donne des estimations hautes, de
+  porte à porte, avec un commentaire sur ce qui fonde chacune
+  (`# train 2h + 30 min jusqu'à la gare`) ; sans `default`, liste chaque
+  paire de lieux.
 - `candidates.<nom>.priority` : `1` par défaut ; plus il est grand, plus le
   candidat compte quand tout le monde ne tient pas.
 - `joint-groups` : des listes de recruteurs qui PEUVENT recevoir un candidat

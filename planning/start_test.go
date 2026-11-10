@@ -3,6 +3,7 @@ package planning_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -385,21 +386,30 @@ func TestGreedyBreaksTiesAtRandom(t *testing.T) {
 	require.Len(t, served, 3, "each candidate comes first with some seed")
 }
 
-// The search never moves a candidate onto a fixed interview: A fits only
-// where F is fixed, B keeps the search busy elsewhere.
+// The search never moves a candidate onto a fixed interview, nor closer to
+// it than the recruiter's gap: A fits only where F is fixed, B keeps the
+// search busy elsewhere.
 func TestSearchRespectsTheFixedInterviews(t *testing.T) {
 	t.Parallel()
 
-	p := table(t, "| | R | S |\n| F | X | |\n| A | X | |\n| B | | X |\n")
-	p.Candidates[1].Availability = []planning.Interval{{Start: clock(9, 0), End: clock(10, 0)}}
-	o := planning.Options{Day: []planning.Interval{{Start: clock(8, 0), End: clock(12, 0)}}}
-	start := &planning.Schedule{Interviews: []planning.Interview{
-		{Candidate: 0, Recruiters: []int{0}, Requests: []int{0}, Start: clock(9, 0), End: clock(10, 0), Fixed: true},
-	}, Unscheduled: []int{1, 2}}
+	for _, gap := range []time.Duration{0, 30 * time.Minute} {
+		p := table(t, "| | R | S |\n| F | X | |\n| A | X | |\n| B | | X |\n")
+		p.Recruiters[0].MinGap = gap
+		p.Candidates[1].Availability = []planning.Interval{{Start: clock(9, 0), End: clock(10, 0)}}
 
-	for seed := range uint64(20) {
-		s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Seed: seed, Iterations: 500, Start: start})
-		require.NoError(t, err, "seed %d", seed)
-		require.Equal(t, []int{1}, s.Unscheduled, "A cannot fit")
+		if gap > 0 { // A ends when F starts
+			p.Candidates[1].Availability = []planning.Interval{{Start: clock(8, 0), End: clock(9, 0)}}
+		}
+
+		o := planning.Options{Day: []planning.Interval{{Start: clock(8, 0), End: clock(12, 0)}}}
+		start := &planning.Schedule{Interviews: []planning.Interview{
+			{Candidate: 0, Recruiters: []int{0}, Requests: []int{0}, Start: clock(9, 0), End: clock(10, 0), Fixed: true},
+		}, Unscheduled: []int{1, 2}}
+
+		for seed := range uint64(20) {
+			s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Seed: seed, Iterations: 500, Start: start})
+			require.NoError(t, err, "gap %s, seed %d", gap, seed)
+			require.Equal(t, []int{1}, s.Unscheduled, "A cannot fit")
+		}
 	}
 }

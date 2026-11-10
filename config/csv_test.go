@@ -31,6 +31,14 @@ func TestWriteCSV(t *testing.T) {
 	buf.Reset()
 	require.NoError(t, WriteCSV(&buf, p, s, "", ','))
 	require.Contains(t, buf.String(), "\n,09:00,10:00,Zoé,Alice + Bob,yes\n", "no date without a period")
+
+	p.Candidates[0].Place = "Lyon"
+
+	buf.Reset()
+	require.NoError(t, WriteCSV(&buf, p, s, "2026-11-09", ','))
+	require.Equal(t, "\ufeffdate,start,end,candidate,place,recruiters,fixed\n"+
+		"2026-11-09,09:00,10:00,Zoé,Lyon,Alice + Bob,yes\n"+
+		`2026-11-10,14:00,14:30,"'=HYPERLINK(""x"")",,Bob,no`+"\n", buf.String(), "a column of places")
 }
 
 func TestParseSeparator(t *testing.T) {

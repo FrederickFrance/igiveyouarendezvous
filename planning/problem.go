@@ -83,6 +83,11 @@ type Recruiter struct {
 	// period (see Interval), each span within one day; nil means Options.Day
 	// on every day that is not closed.
 	Availability []Interval
+	// MinGap is the shortest time between two interviews of the recruiter,
+	// from the end of one to the start of the next, nights included: to
+	// write notes, to rest; the journeys between places come on top (see
+	// Problem.Travel). Zero means none.
+	MinGap time.Duration
 }
 
 // Candidate is a person who must meet some recruiters (see Request).
@@ -109,6 +114,11 @@ type Candidate struct {
 	// at all: a meeting, such as a recording or a game, rather than
 	// interviews. Ranks then make no sense.
 	Together bool
+	// Place is where the candidate is met, such as the city of a shoot:
+	// between two interviews of a recruiter at different places, the
+	// journey (see Problem.Travel) comes on top of the recruiter's MinGap.
+	// Empty means no journey to or from the candidate, such as a call.
+	Place string
 }
 
 // Request states that a candidate must meet a recruiter.
@@ -143,6 +153,8 @@ type Problem struct {
 	// (and whatever Options.MaxJointSize). A recruiter belongs to one panel
 	// at most, and then to no joint group.
 	Panels [][]int
+	// Travel gives the journeys between the places of the candidates.
+	Travel Travel
 }
 
 // priority returns the priority of candidate c, 1 by default.
@@ -217,7 +229,8 @@ type Options struct {
 	// Duration is the default interview length; zero means DefaultDuration.
 	Duration time.Duration
 	// Step is the time grid: interviews start on multiples of it. Zero picks
-	// the coarsest grid on which every duration and availability falls.
+	// the coarsest grid on which every duration and availability falls, the
+	// journeys rounded up to 5 minutes (2h07 counts as 2h10).
 	Step time.Duration
 	// MinGap and MaxGap bound the gap between two consecutive interviews of
 	// a candidate. Both zero (the default): the interviews follow each other
@@ -377,6 +390,26 @@ func (o Options) checkPeriod() error {
 	return nil
 }
 
+// checkRecruiters verifies the durations, gaps and availabilities of the
+// recruiters.
+func (p *Problem) checkRecruiters(o Options) error {
+	for _, r := range p.Recruiters {
+		if r.Duration < 0 {
+			return fmt.Errorf("planning: recruiter %s: negative duration", r.Name)
+		}
+
+		if r.MinGap < 0 {
+			return fmt.Errorf("planning: recruiter %s: negative gap", r.Name)
+		}
+
+		if _, err := normalize(r.Availability, o.days()); err != nil {
+			return fmt.Errorf("planning: recruiter %s: %w", r.Name, err)
+		}
+	}
+
+	return nil
+}
+
 // check validates the problem itself, for the period of o.
 func (p *Problem) check(o Options) error {
 	if err := uniqueNames("recruiter", len(p.Recruiters), func(i int) string { return p.Recruiters[i].Name }); err != nil {
@@ -387,14 +420,12 @@ func (p *Problem) check(o Options) error {
 		return err
 	}
 
-	for _, r := range p.Recruiters {
-		if r.Duration < 0 {
-			return fmt.Errorf("planning: recruiter %s: negative duration", r.Name)
-		}
+	if err := p.checkRecruiters(o); err != nil {
+		return err
+	}
 
-		if _, err := normalize(r.Availability, o.days()); err != nil {
-			return fmt.Errorf("planning: recruiter %s: %w", r.Name, err)
-		}
+	if err := p.Travel.check(); err != nil {
+		return err
 	}
 
 	for _, c := range p.Candidates {

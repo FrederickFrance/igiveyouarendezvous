@@ -72,6 +72,7 @@ func (s *Schedule) Remaining(p *Problem) *Problem {
 		Candidates:  slices.Clone(p.Candidates),
 		JointGroups: p.JointGroups,
 		Panels:      p.Panels,
+		Travel:      p.Travel,
 	}
 
 	for _, r := range s.Unscheduled {
@@ -242,7 +243,68 @@ func checkOverlaps(p *Problem, s *Schedule) error {
 		}
 	}
 
+	return checkRecruiterGaps(p, s)
+}
+
+// checkRecruiterGaps verifies the time between any two interviews of each
+// recruiter, nights included: their gap, and the journey between the places
+// of the candidates.
+func checkRecruiterGaps(p *Problem, s *Schedule) error {
+	j := p.journeys()
+	travel := j.needed()
+
+	type meeting struct {
+		iv        Interval
+		candidate int
+	}
+
+	for h, r := range p.Recruiters {
+		if r.MinGap <= 0 && !travel {
+			continue
+		}
+
+		var list []meeting
+
+		for _, iv := range s.Interviews {
+			if slices.Contains(iv.Recruiters, h) {
+				list = append(list, meeting{Interval{iv.Start, iv.End}, iv.Candidate})
+			}
+		}
+
+		slices.SortFunc(list, func(a, b meeting) int { return cmp.Compare(a.iv.Start, b.iv.Start) })
+
+		for i, a := range list {
+			for _, b := range list[i+1:] {
+				if b.iv.Start >= a.iv.End+r.MinGap+j.longest[a.candidate] {
+					break // and so are the next ones
+				}
+
+				journey := j.between(a.candidate, b.candidate)
+				if gap := b.iv.Start - a.iv.End; gap < r.MinGap+journey {
+					return gapError(p, r, gap, a.iv, b.iv, a.candidate, b.candidate, journey)
+				}
+			}
+		}
+	}
+
 	return nil
+}
+
+// gapError tells that recruiter r has only gap between interviews a and b,
+// with candidates ca and cb.
+func gapError(p *Problem, r Recruiter, gap time.Duration, a, b Interval, ca, cb int, journey time.Duration) error {
+	if journey == 0 {
+		return fmt.Errorf("%s has %s between two interviews (%s and %s), less than their gap of %s",
+			r.Name, gap, a, b, r.MinGap)
+	}
+
+	need := "the journey of " + journey.String()
+	if r.MinGap > 0 {
+		need += " and their gap of " + r.MinGap.String()
+	}
+
+	return fmt.Errorf("%s has %s between two interviews (%s in %s and %s in %s), less than %s",
+		r.Name, gap, a, p.Candidates[ca].Place, b, p.Candidates[cb].Place, need)
 }
 
 // checkCandidates verifies "all or nothing", and the gaps and the order of

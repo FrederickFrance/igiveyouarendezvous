@@ -30,6 +30,11 @@
 // as the recording of a show with its host and guests. [Candidate.Duration]
 // then gives its length.
 //
+// A recruiter may need time between two of their interviews, nights
+// included: [Recruiter.MinGap], to write notes for instance. When the
+// candidates have places ([Candidate.Place]), such as the cities of shoots,
+// the journey between them ([Problem.Travel]) comes on top.
+//
 // # Objectives
 //
 // The objectives are optimised lexicographically, in the order of

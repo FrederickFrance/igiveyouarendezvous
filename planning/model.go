@@ -13,6 +13,8 @@ const (
 	maxOptionsPerGroup = 4096
 	// maxSlots bounds the size of the time grid, over the period.
 	maxSlots = 20000
+	// journeyRounding is the precision of the journeys on the time grid.
+	journeyRounding = 5 * time.Minute
 )
 
 // grid is the discretised period: every day has perDay slots of step from
@@ -89,6 +91,8 @@ type instance struct {
 	requestsOf [][]int  // requests of each candidate
 	options    []option
 	crit       []criterion // the objectives, MaxPriorities and MaxUrgency expanded by level
+	trips      journeys    // the journeys between the places of the candidates
+	travel     bool        // some journey takes time
 }
 
 // option is one possible interview: some requests of a candidate held
@@ -111,7 +115,8 @@ func newInstance(p *Problem, opts Options) (*instance, error) {
 		return nil, err
 	}
 
-	in := &instance{p: p, o: o, crit: criteria(p, o.Objectives)}
+	in := &instance{p: p, o: o, crit: criteria(p, o.Objectives), trips: p.journeys()}
+	in.travel = in.trips.needed()
 
 	// Everything the grid must represent exactly, as times of day.
 	values := []time.Duration{o.Duration}
@@ -149,6 +154,22 @@ func newInstance(p *Problem, opts Options) (*instance, error) {
 	for _, r := range p.Requests {
 		if r.Duration > 0 {
 			values = append(values, r.Duration)
+		}
+	}
+
+	for _, r := range p.Recruiters { // a gap shifts the next interview by as much
+		if r.MinGap > 0 {
+			values = append(values, r.MinGap)
+		}
+	}
+
+	// The journeys too, rounded up to journeyRounding: an estimate of 2h07
+	// counts as 2h10 rather than making a grid of one minute. An explicit
+	// step leaves them out: the interview after a journey then starts at the
+	// next step.
+	if o.Step == 0 {
+		for _, d := range p.Travel.durations() {
+			values = append(values, (d+journeyRounding-1)/journeyRounding*journeyRounding)
 		}
 	}
 

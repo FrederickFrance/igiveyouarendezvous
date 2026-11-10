@@ -226,7 +226,8 @@ type searcher struct {
 
 	// The presence of the recruiters is kept by unit: a recruiter on a day,
 	// unit h*days + d (see unit).
-	busy []bitset // [recruiter]: busy slots
+	busy  []bitset  // [recruiter]: busy slots
+	owner [][]int32 // [recruiter][slot]: the candidate of a busy slot, with journeys only
 	// fixedBusy: the busy slots of the fixed interviews, which even eject
 	// respects; nil without them.
 	fixedBusy []bitset
@@ -337,6 +338,13 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 
 	for h := range s.busy {
 		s.busy[h] = newBitset(in.g.slots)
+	}
+
+	if in.travel {
+		s.owner = make([][]int32, nR)
+		for h := range s.owner {
+			s.owner[h] = make([]int32, in.g.slots)
+		}
 	}
 
 	for u := range s.first {
@@ -865,19 +873,22 @@ func (s *searcher) apply(pr *prepared) {
 		from := d*s.perDay + min(max(0, int((start-g.start)/g.step)), s.perDay)
 		to := d*s.perDay + min(max(0, int((end-g.start+g.step-1)/g.step)), s.perDay)
 
-		for _, h := range iv.Recruiters {
-			if from < to {
-				if s.fixedBusy == nil {
-					s.fixedBusy = make([]bitset, len(s.busy))
-					for k := range s.fixedBusy {
-						s.fixedBusy[k] = newBitset(g.slots)
-					}
-				}
+		if from >= to {
+			continue
+		}
 
-				s.fixedBusy[h].set(from, to, true)
-				s.busy[h].set(from, to, true)
-				s.refresh(s.unit(h, from))
+		if s.fixedBusy == nil {
+			s.fixedBusy = make([]bitset, len(s.busy))
+			for k := range s.fixedBusy {
+				s.fixedBusy[k] = newBitset(g.slots)
 			}
+		}
+
+		for _, h := range iv.Recruiters {
+			s.fixedBusy[h].set(from, to, true)
+			s.busy[h].set(from, to, true)
+			s.own(h, from, to, iv.Candidate)
+			s.refresh(s.unit(h, from))
 		}
 	}
 
@@ -1045,7 +1056,7 @@ func (s *searcher) takenBy(pl placed) string {
 		}
 	}
 
-	return "a recruiter is taken then"
+	return "too close to another interview of " + s.names(opt.recruiters) + ", for their gap or a journey"
 }
 
 // names joins the names of recruiters.
@@ -1290,7 +1301,7 @@ func (s *searcher) eject(served []int) []int {
 	var victims []int
 
 	for _, c := range served {
-		if s.conflict(plan, s.plans[c]) {
+		if s.conflict(x, plan, c, s.plans[c]) {
 			victims = append(victims, c)
 		}
 	}
@@ -1304,20 +1315,51 @@ func (s *searcher) eject(served []int) []int {
 	return victims
 }
 
-// conflict tells whether two plans need the same recruiter at the same time.
-func (s *searcher) conflict(a, b []placed) bool {
+// conflict tells whether plan a of candidate x and plan b of candidate c
+// need the same recruiter at the same time, or closer than the recruiter's
+// gap and the journey between the places of x and c.
+func (s *searcher) conflict(x int, a []placed, c int, b []placed) bool {
+	journey := int(s.in.trips.between(x, c) / time.Minute)
+
 	for _, pa := range a {
 		oa := &s.in.options[pa.option]
 
 		for _, pb := range b {
 			ob := &s.in.options[pb.option]
-			if pa.start < pb.start+ob.length && pb.start < pa.start+oa.length && shareAny(oa.recruiters, ob.recruiters) {
+			if !shareAny(oa.recruiters, ob.recruiters) {
+				continue
+			}
+
+			if pa.start < pb.start+ob.length && pb.start < pa.start+oa.length {
 				return true
+			}
+
+			if need := s.sharedGap(oa.recruiters, ob.recruiters) + journey; need > 0 {
+				startA, endA := s.in.minute[pa.start], s.endMinutes(pa.start, oa.length)
+				startB, endB := s.in.minute[pb.start], s.endMinutes(pb.start, ob.length)
+
+				if startA < endB+need && startB < endA+need {
+					return true
+				}
 			}
 		}
 	}
 
 	return false
+}
+
+// sharedGap returns the longest gap, in minutes, of the recruiters in both
+// lists.
+func (s *searcher) sharedGap(a, b []int) int {
+	gap := 0
+
+	for _, h := range a {
+		if slices.Contains(b, h) {
+			gap = max(gap, int(s.in.p.Recruiters[h].MinGap/time.Minute))
+		}
+	}
+
+	return gap
 }
 
 // planMask returns the requests held by candidate c's plan.
@@ -1663,12 +1705,74 @@ func (s *searcher) free(o, t int) bool {
 
 	opt := &s.in.options[o]
 	for _, h := range opt.recruiters {
-		if !busy[h].free(t, t+opt.length) {
+		if !s.roomFor(busy[h], h, opt.candidate, t, opt.length) {
 			return false
 		}
 	}
 
 	return true
+}
+
+// roomFor tells whether recruiter h, busy in the slots of busy, can meet
+// candidate c from slot t for length slots: free then, and far enough from
+// their other interviews for their gap and the journeys, nights included.
+func (s *searcher) roomFor(busy bitset, h, c, t, length int) bool {
+	gap := int(s.in.p.Recruiters[h].MinGap / time.Minute)
+
+	reach := gap
+	if s.in.travel {
+		reach += int(s.in.trips.longest[c] / time.Minute)
+	}
+
+	if reach == 0 {
+		return busy.free(t, t+length)
+	}
+
+	from, to := s.gapSlots(t, length, reach)
+	if !s.in.travel { // every busy slot of the window is too close
+		return busy.free(from, to)
+	}
+
+	if !busy.free(t, t+length) {
+		return false
+	}
+
+	minute, step := s.in.minute, int(s.in.g.step/time.Minute)
+	start, end := minute[t], s.endMinutes(t, length)
+
+	for u := from; u < t; u++ {
+		if busy.has(u) && minute[u]+step+gap+s.journey(int(s.owner[h][u]), c) > start {
+			return false
+		}
+	}
+
+	for u := t + length; u < to; u++ {
+		if busy.has(u) && end+gap+s.journey(c, int(s.owner[h][u])) > minute[u] {
+			return false
+		}
+	}
+
+	return true
+}
+
+// journey returns the journey between the places of candidates a and b, in
+// minutes.
+func (s *searcher) journey(a, b int) int {
+	return int(s.in.trips.between(a, b) / time.Minute)
+}
+
+// gapSlots returns the slots [from, to) that a recruiter with a gap of gap
+// minutes must have free to hold an interview of length slots at slot t:
+// those that end less than gap minutes before its start, or start less
+// than gap minutes after its end, nights included.
+func (s *searcher) gapSlots(t, length, gap int) (from, to int) {
+	minute, step := s.in.minute, int(s.in.g.step/time.Minute)
+	start, end := minute[t], s.endMinutes(t, length)
+
+	from = sort.Search(t, func(u int) bool { return minute[u]+step > start-gap })
+	to = t + length + sort.Search(len(minute)-t-length, func(i int) bool { return minute[t+length+i] >= end+gap })
+
+	return from, to
 }
 
 // earliestFree returns the first possible start of option o in [from, latest].
@@ -1700,8 +1804,8 @@ func (s *searcher) undo() {
 }
 
 func (s *searcher) replace(c int, plan []placed) {
-	touched := s.mark(s.plans[c], false)
-	touched = append(touched, s.mark(plan, true)...)
+	touched := s.mark(c, s.plans[c], false)
+	touched = append(touched, s.mark(c, plan, true)...)
 	s.plans[c] = plan
 
 	for _, u := range touched {
@@ -1746,8 +1850,9 @@ func (s *searcher) refresh(u int) {
 	}
 }
 
-// mark sets or clears the busy slots of a plan and returns the units.
-func (s *searcher) mark(plan []placed, busy bool) []int {
+// mark sets or clears the busy slots of plan, of candidate c, and returns
+// the units.
+func (s *searcher) mark(c int, plan []placed, busy bool) []int {
 	var touched []int
 
 	for _, pl := range plan {
@@ -1755,10 +1860,26 @@ func (s *searcher) mark(plan []placed, busy bool) []int {
 		for _, h := range opt.recruiters {
 			s.busy[h].set(pl.start, pl.start+opt.length, busy)
 			touched = append(touched, s.unit(h, pl.start))
+
+			if busy {
+				s.own(h, pl.start, pl.start+opt.length, c)
+			}
 		}
 	}
 
 	return touched
+}
+
+// own records candidate c as the holder of the slots [from, to) of
+// recruiter h, when journeys matter.
+func (s *searcher) own(h, from, to, c int) {
+	if s.owner == nil {
+		return
+	}
+
+	for t := from; t < to; t++ {
+		s.owner[h][t] = int32(c) //nolint:gosec // fewer candidates than an int32 holds
+	}
 }
 
 // contribution writes the score contribution of candidate c's plan.
@@ -1927,6 +2048,11 @@ func (b bitset) free(from, to int) bool {
 	}
 
 	return true
+}
+
+// has tells whether slot t is in the set.
+func (b bitset) has(t int) bool {
+	return b[t>>6]&(1<<(t&63)) != 0
 }
 
 func (b bitset) set(from, to int, on bool) {

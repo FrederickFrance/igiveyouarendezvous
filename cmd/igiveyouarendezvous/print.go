@@ -92,7 +92,13 @@ func printSchedule(w io.Writer, p *planning.Problem, s *planning.Schedule, pe pe
 	fmt.Fprintf(w, ", on a %s grid\n\n", hours(int(s.Step/time.Minute)))
 
 	tw := tabwriter.NewWriter(w, 0, 0, 3, ' ', 0)
-	fmt.Fprintln(tw, "Time\tCandidate\tRecruiters\t")
+	places := p.HasPlaces()
+
+	if places {
+		fmt.Fprintln(tw, "Time\tCandidate\tPlace\tRecruiters\t")
+	} else {
+		fmt.Fprintln(tw, "Time\tCandidate\tRecruiters\t")
+	}
 
 	for _, iv := range s.Interviews {
 		mark := ""
@@ -100,8 +106,13 @@ func printSchedule(w io.Writer, p *planning.Problem, s *planning.Schedule, pe pe
 			mark = "fixed"
 		}
 
+		candidate := p.Candidates[iv.Candidate].Name
+		if places {
+			candidate += "\t" + p.Candidates[iv.Candidate].Place
+		}
+
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n",
-			pe.when(planning.Interval{Start: iv.Start, End: iv.End}), p.Candidates[iv.Candidate].Name, recruiterNames(p, iv.Recruiters), mark)
+			pe.when(planning.Interval{Start: iv.Start, End: iv.End}), candidate, recruiterNames(p, iv.Recruiters), mark)
 	}
 
 	_ = tw.Flush() // to the terminal: nothing sensible to do on failure
