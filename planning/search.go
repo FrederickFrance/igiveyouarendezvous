@@ -35,6 +35,11 @@ const (
 	// noiseRate, on average, is put back at a random place rather than the best
 	// one.
 	noiseRate = 8
+
+	// ruinEvery reserves one move in this many for ruin and recreate, so
+	// that the search keeps changing who meets whom and not only when:
+	// re-timing alone never reaches another grouping of the requests.
+	ruinEvery = 50
 )
 
 // SearchOptions tunes Search.
@@ -1094,6 +1099,13 @@ func (s *searcher) names(recruiters []int) string {
 // move removes some candidates and inserts them back, with a few candidates
 // who had no interview.
 func (s *searcher) move() {
+	// Re-timing a whole day packs it tighter than any insertion can, so
+	// most moves go to it; when it changes nothing, and once in ruinEvery
+	// moves, the ruin and recreate below takes over.
+	if s.rnd.IntN(ruinEvery) != 0 && s.resequence() {
+		return
+	}
+
 	pool := s.ruin()
 
 	var idle []int

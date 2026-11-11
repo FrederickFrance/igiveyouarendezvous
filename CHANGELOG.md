@@ -7,6 +7,21 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
+## [0.9.0] - 2026-11-11 "Lola rennt" 🏃‍♀️
+
+### Changed
+
+- **A tighter schedule on a full day.** Until now the search placed one
+  candidate at a time, in the room the others had left. It now also re-times
+  a whole day: it takes its interviews in the order of their starts, moves
+  one of them in this order, and places them all again, each as early as the
+  people and the gaps allow. Everybody moves, so a day nobody could improve
+  by an insertion gets packed. On a dense evening of 197 interviews, the
+  last one ends 100 minutes earlier than before. A day with room to spare is
+  unchanged, since nothing was blocking there. The name is the film where
+  the same twenty minutes are run again and again, and a few seconds of
+  difference change everything.
+
 ## [0.8.0] - 2026-11-11 "Terminator" 🤖
 
 ### Added
@@ -230,6 +245,7 @@ lexicographic objectives, fixed appointments resumed with `-start`, the
 problem file of the next day with `-rest`, and ready-to-use zips for a
 beginner's tutorial.
 
+[0.9.0]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.5.1...v0.6.0
