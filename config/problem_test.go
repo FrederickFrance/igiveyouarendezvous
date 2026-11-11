@@ -457,6 +457,63 @@ func TestRecruiterGapsOfTheFile(t *testing.T) {
 		[]time.Duration{p.Recruiters[0].MinGap, p.Recruiters[1].MinGap, p.Recruiters[2].MinGap})
 }
 
+func TestMeetingsOfTheFile(t *testing.T) {
+	t.Parallel()
+
+	const episode = "duration: 20m\nrecruiters: {Host: , Camera: , Guest: }\ncandidates:\n  Episode:\n"
+
+	f, err := Parse([]byte(episode + "    duration: 30m\n    meet: [Guest]\n    meetings:\n" +
+		"      - {with: [Host, Camera], duration: 1h, times: 2}\n" +
+		"      - {with: [Host, Camera, ' Guest'], rank: 2}\n"))
+	require.NoError(t, err)
+
+	p, _, err := f.Problem("", "")
+	require.NoError(t, err)
+	require.Equal(t, []planning.Request{
+		{Candidate: 0, Recruiter: 2},
+		{Candidate: 0, Recruiter: 0, Duration: time.Hour, Meeting: 1}, {Candidate: 0, Recruiter: 1, Duration: time.Hour, Meeting: 1},
+		{Candidate: 0, Recruiter: 0, Duration: time.Hour, Meeting: 2}, {Candidate: 0, Recruiter: 1, Duration: time.Hour, Meeting: 2},
+		{Candidate: 0, Recruiter: 0, Rank: 2, Duration: 30 * time.Minute, Meeting: 3},
+		{Candidate: 0, Recruiter: 1, Rank: 2, Duration: 30 * time.Minute, Meeting: 3},
+		{Candidate: 0, Recruiter: 2, Rank: 2, Duration: 30 * time.Minute, Meeting: 3},
+	}, p.Requests, "the candidate's duration when the meeting has none")
+
+	// Without meet, and without the candidate's duration: the file's.
+	f, err = Parse([]byte(episode + "    meetings: [{with: [Host]}]\n"))
+	require.NoError(t, err)
+
+	p, _, err = f.Problem("", "")
+	require.NoError(t, err)
+	require.Equal(t, []planning.Request{{Candidate: 0, Recruiter: 0, Duration: 20 * time.Minute, Meeting: 1}}, p.Requests)
+
+	for text, want := range map[string]string{
+		"    meetings: [[Host]]":                                                       "Episode: line 5: a meeting is {with: [recruiters], duration: 1h}, with times or a rank if needed",
+		"    meetings: [{duration: 1h}]":                                               "Episode: line 5: a meeting without anybody: with lists the recruiters met at once",
+		"    meetings: [{with: []}]":                                                   "Episode: line 5: a meeting without anybody: with lists the recruiters met at once",
+		"    meetings: [{with: Host}]":                                                 "Episode: line 5: with lists the recruiters met at once, such as [Host, Camera]",
+		"    meetings: [{with: [Host], times: 0}]":                                     "Episode: line 5: times is the number of such meetings, 1 or more",
+		"    meetings: [{with: [Host], duration: 2}]":                                  "Episode: line 5: the duration of a meeting has its unit, such as 45m or 1h",
+		"    meetings: [{with: [Host], rank: first}]":                                  "Episode: line 5: the rank of a meeting is 1, 2... or X for any time",
+		"    meetings: [{with: [Host], length: 1h}]":                                   `Episode: line 5: unknown key "length" in a meeting (known: duration, rank, times, with)`,
+		"    meet: [Host, Camera]\n    together: true\n    meetings: [{with: [Host]}]": "Episode: line 5: together makes one meeting of meet: write it in meetings instead",
+		"    priority: 2":                                                              `Episode: line 5: "meet" is missing: the recruiters to meet (or "meetings")`,
+	} {
+		_, err := Parse([]byte(episode + text + "\n"))
+		require.EqualError(t, err, want, text)
+	}
+
+	for text, want := range map[string]string{
+		"    meetings: [{with: [Host, Nobody]}]": `line 5: candidate Episode: "Nobody" is not a recruiter of the file`,
+		"    meetings: [{with: [Host, Host]}]":   "line 5: candidate Episode: Host is given twice in one meeting",
+	} {
+		f, err := Parse([]byte(episode + text + "\n"))
+		require.NoError(t, err, text)
+
+		_, _, err = f.Problem("", "")
+		require.EqualError(t, err, want, text)
+	}
+}
+
 func TestTravelOfTheFile(t *testing.T) {
 	t.Parallel()
 

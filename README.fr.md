@@ -269,7 +269,8 @@ Les clés sont en anglais, comme le reste du programme. `recruiters` et
 | `recruiters.<nom>.availability` | `day` | plages du recruteur (`none` : absent), chaque jour ou par date (voir plus bas) |
 | `recruiters.<nom>.min-gap` | `recruiter-min-gap` | le temps minimal entre deux entretiens de ce recruteur, de la fin de l'un au début du suivant, nuits comprises : pour mettre ses notes au propre (`30m`), pour se reposer (`12h`) ; les trajets s'y ajoutent (voir `travel`) ; `0` : aucun |
 | `recruiter-min-gap` | `0` | le `min-gap` de chaque recruteur qui n'a pas le sien, comme `10m` de battement pour tout le monde |
-| `candidates.<nom>.meet` | obligatoire | les recruteurs à rencontrer, dans n'importe quel ordre, ou avec leurs rangs et les durées des rencontres (voir plus bas) |
+| `candidates.<nom>.meet` | obligatoire sans `meetings` | les recruteurs à rencontrer, un entretien chacun, dans n'importe quel ordre, ou avec leurs rangs et les durées des rencontres (voir plus bas) |
+| `candidates.<nom>.meetings` | aucune | des rencontres avec plusieurs recruteurs à la fois, chacune telle quelle ; un recruteur peut revenir dans plusieurs (voir plus bas) |
 | `candidates.<nom>.availability` | `day` | plages du candidat, chaque jour ou par date |
 | `candidates.<nom>.priority` | `1` | plus c'est haut, plus c'est important (objectif `priorities`) |
 | `candidates.<nom>.duration` | celle des recruteurs | durée des entretiens de ce candidat, à la place de celles des recruteurs (la durée d'une rencontre dans `meet` l'emporte) |
@@ -356,6 +357,30 @@ pas du tout : jamais l'un après l'autre. Un recruteur appartient à un jury au
 plus, et alors à aucun groupe commun ; `max-joint-size` ne s'applique pas aux
 jurys. Exemple complet : [une commission de
 recrutement](example/fr/panel.yaml).
+
+**Rencontres.** `meet` donne un entretien par recruteur ; `meetings` donne
+des rencontres avec plusieurs recruteurs à la fois, telles quelles, sans
+personne d'autre, où un recruteur peut revenir : le tournage d'un épisode,
+avec l'animatrice et le cadreur, puis avec eux et un invité ; ou un
+candidat qui voit le responsable seul, puis avec un collègue.
+
+```yaml
+candidates:
+  épisode Lille:
+    meetings:
+      - {with: [Animatrice, Cadreur], duration: 1h, times: 2}   # deux rencontres pareilles
+      - {with: [Animatrice, Cadreur, Nathan], duration: 2h, rank: 2}
+```
+
+`times` répète une rencontre, `rank` ordonne les rencontres comme dans
+`meet` (`1` d'abord, `X` n'importe quand). Une rencontre dure sa
+`duration`, sinon celle du candidat, sinon la `duration` par défaut du
+fichier, jamais celle d'un recruteur, puisqu'ils sont plusieurs. Le
+candidat a tout `meet` et tout `meetings`, ou rien ; les écarts (`min-gap`,
+`max-gap`) valent entre tous ses entretiens, et le `min-gap` d'un recruteur
+entre deux rencontres d'un même candidat aussi. `together: true` est un
+raccourci pour une seule rencontre avec tout `meet` : il ne va donc pas avec
+`meetings`.
 
 **Lieux et trajets.** Un candidat peut avoir un lieu, `place`, comme la
 ville d'un tournage ; les recruteurs vont de l'un à l'autre. Entre deux
@@ -517,11 +542,13 @@ planifié. La limite : pour le programme, `Ada jour 1` n'est pas Ada, donc un
 conflit avec un autre enregistrement de la même personne, dans le même
 fichier, passe inaperçu.
 
-**Des tournages dans plusieurs villes.** Chaque tournage est un candidat avec
-`together: true` et un lieu, `place`, ses invités les recruteurs ;
-l'animateur, recruteur lui aussi, va d'une ville à l'autre avec les trajets
-de `travel`, et range le matériel avec un `min-gap` d'une heure :
-[l'exemple d'une tournée](example/fr/tour.yaml).
+**Des tournages dans plusieurs villes.** Le tournage d'un épisode est un
+candidat, à son lieu, `place`, avec ses rencontres, `meetings` :
+l'animatrice et le cadreur, seuls ou avec un invité, tous recruteurs.
+L'équipe va d'une ville à l'autre avec les trajets de `travel`, qui peuvent
+compter le temps de ranger le matériel : un `min-gap` s'appliquerait aussi
+entre deux rencontres d'un même tournage. Voir [l'exemple d'une
+tournée](example/fr/tour.yaml).
 
 ## Objectifs
 

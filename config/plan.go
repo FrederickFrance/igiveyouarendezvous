@@ -183,6 +183,7 @@ func readInterviews(p *planning.Problem, c int, pis []planInterview, fixed bool,
 	dates []string,
 ) ([]planning.Interview, string, error) {
 	out := make([]planning.Interview, 0, len(pis))
+	taken := map[int]bool{} // the requests already held by an interview
 
 	for _, pi := range pis {
 		when, err := ParseInterval(pi.Time)
@@ -213,18 +214,65 @@ func readInterviews(p *planning.Problem, c int, pis []planInterview, fixed bool,
 			}
 
 			iv.Recruiters = append(iv.Recruiters, h)
-
-			if r := slices.IndexFunc(p.Requests, func(rq planning.Request) bool { return rq.Candidate == c && rq.Recruiter == h }); r >= 0 {
-				iv.Requests = append(iv.Requests, r)
-			}
 		}
 
 		slices.Sort(iv.Recruiters)
-		slices.Sort(iv.Requests)
+		iv.Requests = matchRequests(p, c, iv.Recruiters, taken)
 		out = append(out, iv)
 	}
 
 	return out, "", nil
+}
+
+// matchRequests returns the requests of candidate c that an interview with
+// recruiters (sorted) holds, among those not taken yet: a meeting with
+// exactly these recruiters, the first of identical ones, or else their
+// requests outside meetings.
+func matchRequests(p *planning.Problem, c int, recruiters []int, taken map[int]bool) []int {
+	meetings := map[int][]int{}
+
+	var order []int
+
+	for r, req := range p.Requests {
+		if req.Candidate == c && req.Meeting > 0 && !taken[r] {
+			if meetings[req.Meeting] == nil {
+				order = append(order, req.Meeting)
+			}
+
+			meetings[req.Meeting] = append(meetings[req.Meeting], r)
+		}
+	}
+
+	held := func(requests []int) []int {
+		for _, r := range requests {
+			taken[r] = true
+		}
+
+		return requests
+	}
+
+	for _, m := range order {
+		hs := make([]int, 0, len(meetings[m]))
+		for _, r := range meetings[m] {
+			hs = append(hs, p.Requests[r].Recruiter)
+		}
+
+		slices.Sort(hs)
+
+		if slices.Equal(hs, recruiters) {
+			return held(meetings[m])
+		}
+	}
+
+	var out []int
+
+	for r, req := range p.Requests {
+		if req.Candidate == c && req.Meeting == 0 && !taken[r] && slices.Contains(recruiters, req.Recruiter) {
+			out = append(out, r)
+		}
+	}
+
+	return held(out)
 }
 
 // dayIn returns the day of date in the period of dates.

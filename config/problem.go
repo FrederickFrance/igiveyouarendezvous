@@ -41,6 +41,11 @@
 //	  a meeting:
 //	    meet: [recruiter 1, recruiter 2]
 //	    together: true                       # everybody at once, or not at all
+//	  an episode:                            # meetings, each as given
+//	    place: Lille                         # the recruiters travel (key travel)
+//	    meetings:
+//	      - {with: [recruiter 1, recruiter 2], duration: 1h, times: 2}
+//	      - {with: [recruiter 1, recruiter 3], duration: 2h}
 //
 // The same in JSON, with the same keys, is read the same way; the schemas of
 // both files are in the schema directory of the module, for editors. A
@@ -50,6 +55,7 @@
 package config
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
@@ -113,8 +119,12 @@ type Recruiter struct {
 
 // Candidate is a candidate of the problem file.
 type Candidate struct {
-	// Meet lists the recruiters to meet (mandatory, may be empty).
+	// Meet lists the recruiters to meet, one interview each (mandatory
+	// without Meetings, may be empty).
 	Meet Meets
+	// Meetings lists the meetings with several recruiters at once, held as
+	// given: a candidate may meet a recruiter in several of them.
+	Meetings []Meeting
 	// Priority ranks the candidate (objective "priorities"): one candidate
 	// outranks any number of candidates of lower priority. 1 by default.
 	Priority     int
@@ -134,6 +144,7 @@ type Candidate struct {
 func (c *Candidate) UnmarshalYAML(n *yaml.Node) error {
 	var raw struct {
 		Meet         *Meets       `yaml:"meet"`
+		Meetings     []Meeting    `yaml:"meetings"`
 		Priority     *int         `yaml:"priority"`
 		Availability Availability `yaml:"availability"`
 		Duration     Duration     `yaml:"duration"`
@@ -145,9 +156,15 @@ func (c *Candidate) UnmarshalYAML(n *yaml.Node) error {
 		return err
 	}
 
+	if raw.Meet == nil && raw.Meetings != nil {
+		raw.Meet = &Meets{}
+	}
+
 	switch {
 	case raw.Meet == nil:
-		return fmt.Errorf(`line %d: "meet" is missing: the recruiters to meet`, n.Line)
+		return fmt.Errorf(`line %d: "meet" is missing: the recruiters to meet (or "meetings")`, n.Line)
+	case raw.Together && len(raw.Meetings) > 0:
+		return fmt.Errorf("line %d: together makes one meeting of meet: write it in meetings instead", n.Line)
 	case raw.Priority != nil && *raw.Priority < 1:
 		return fmt.Errorf("line %d: the priority is 1 or more", n.Line)
 	case raw.Together && slices.ContainsFunc(*raw.Meet, func(m Meet) bool { return m.Rank > 0 }):
@@ -156,7 +173,10 @@ func (c *Candidate) UnmarshalYAML(n *yaml.Node) error {
 		return fmt.Errorf("line %d: together, everybody meets at once: no durations in meet, give the candidate's duration", n.Line)
 	}
 
-	*c = Candidate{Meet: *raw.Meet, Availability: raw.Availability, Duration: raw.Duration, Together: raw.Together, Place: NormalizeName(raw.Place)}
+	*c = Candidate{
+		Meet: *raw.Meet, Meetings: raw.Meetings, Availability: raw.Availability, Duration: raw.Duration,
+		Together: raw.Together, Place: NormalizeName(raw.Place),
+	}
 	if raw.Priority != nil {
 		c.Priority = *raw.Priority
 	}
@@ -219,7 +239,7 @@ var problemKeys = shape{
 	"day": nil, "breaks": nil, "duration": nil, "step": nil, "min-gap": nil, "max-gap": nil,
 	"recruiter-min-gap": nil, "joint-groups": nil, "panels": nil, "max-joint-size": nil, "objectives": nil,
 	"recruiters": {"*": {"duration": nil, "availability": nil, "min-gap": nil}},
-	"candidates": {"*": {"meet": nil, "priority": nil, "availability": nil, "duration": nil, "together": nil, "place": nil}},
+	"candidates": {"*": {"meet": nil, "meetings": nil, "priority": nil, "availability": nil, "duration": nil, "together": nil, "place": nil}},
 	"travel":     {"default": nil, "journeys": nil},
 }
 
@@ -499,6 +519,10 @@ func (f *File) Problem(from, to string) (*planning.Problem, planning.Options, er
 			met[h] = true
 			p.Requests = append(p.Requests, planning.Request{Candidate: c, Recruiter: h, Rank: m.Rank, Duration: m.Duration})
 		}
+
+		if p.Requests, err = meetings(p.Requests, c, e, recruiters, o.Duration); err != nil {
+			return nil, o, err
+		}
 	}
 
 	if p.JointGroups, err = groups("joint-groups", f.JointGroups, recruiters); err != nil {
@@ -609,6 +633,42 @@ func (f *File) WithoutAvailability() []string {
 	}
 
 	return without
+}
+
+// meetings adds the meetings of candidate c (entry e) to requests: each
+// lasts its own duration, or else the candidate's, or else the default of
+// the file, never a recruiter's, since they are several at once.
+func meetings(requests []planning.Request, c int, e Entry[Candidate], recruiters map[string]int, duration time.Duration) ([]planning.Request, error) {
+	number := 0
+
+	for _, m := range e.Value.Meetings {
+		length := cmp.Or(m.Duration, time.Duration(e.Value.Duration), duration, planning.DefaultDuration)
+
+		hs := make([]int, 0, len(m.With))
+
+		for _, name := range m.With {
+			h, ok := recruiters[name]
+
+			switch {
+			case !ok:
+				return nil, fmt.Errorf("line %d: candidate %s: %q is not a recruiter of the file", m.Line, e.Name, name)
+			case slices.Contains(hs, h):
+				return nil, fmt.Errorf("line %d: candidate %s: %s is given twice in one meeting", m.Line, e.Name, name)
+			}
+
+			hs = append(hs, h)
+		}
+
+		for range m.Times {
+			number++
+
+			for _, h := range hs {
+				requests = append(requests, planning.Request{Candidate: c, Recruiter: h, Rank: m.Rank, Duration: length, Meeting: number})
+			}
+		}
+	}
+
+	return requests, nil
 }
 
 // groups converts groups of recruiters' names (the key named key) to

@@ -148,38 +148,30 @@ func checkInterview(p *Problem, o Options, iv Interview, held []int, breaks []In
 
 	var recruiters []int
 
+	meeting := -1 // of the requests, 0 outside meetings
+
 	for _, r := range iv.Requests {
 		if r < 0 || r >= len(p.Requests) || p.Requests[r].Candidate != iv.Candidate {
 			return fmt.Errorf("interview of %s holds a request of somebody else", candidate)
 		}
 
+		m := p.Requests[r].Meeting
+		if meeting >= 0 && m != meeting {
+			return fmt.Errorf("interview of %s mixes meetings", candidate)
+		}
+
+		meeting = m
+
 		held[r]++
 		recruiters = append(recruiters, p.Requests[r].Recruiter)
 	}
 
-	if err := p.panel(iv.Candidate, recruiters); err != nil {
+	if err := checkGathering(p, o, iv, recruiters, meeting); err != nil {
 		return err
 	}
 
-	if err := p.joint(iv.Candidate, recruiters, o); err != nil {
-		return fmt.Errorf("joint interview of %s with %w", candidate, err)
-	}
-
-	if p.Candidates[iv.Candidate].Together {
-		all := 0
-		for _, r := range p.Requests {
-			if r.Candidate == iv.Candidate {
-				all++
-			}
-		}
-
-		if len(iv.Requests) != all {
-			return fmt.Errorf("%s meets everybody together, in one interview", candidate)
-		}
-	}
-
 	slices.Sort(recruiters)
-	length := p.length(iv.Candidate, recruiters, o)
+	length := p.length(iv.Requests, o)
 
 	if !slices.Equal(recruiters, iv.Recruiters) {
 		return fmt.Errorf("interview of %s: recruiters do not match the requests", candidate)
@@ -307,6 +299,59 @@ func gapError(p *Problem, r Recruiter, gap time.Duration, a, b Interval, ca, cb 
 		r.Name, gap, a, p.Candidates[ca].Place, b, p.Candidates[cb].Place, need)
 }
 
+// checkGathering verifies who meets candidate c in interview iv: the whole
+// of one meeting and nobody else, or the rules of the panels, the joint
+// groups and Candidate.Together outside meetings.
+func checkGathering(p *Problem, o Options, iv Interview, recruiters []int, meeting int) error {
+	c := iv.Candidate
+	candidate := p.Candidates[c].Name
+
+	for i, h := range recruiters {
+		if slices.Contains(recruiters[:i], h) {
+			return fmt.Errorf("interview of %s: %s twice", candidate, p.Recruiters[h].Name)
+		}
+	}
+
+	if meeting > 0 {
+		var all []int
+
+		for _, r := range p.Requests {
+			if r.Candidate == c && r.Meeting == meeting {
+				all = append(all, r.Recruiter)
+			}
+		}
+
+		if len(all) != len(recruiters) {
+			return fmt.Errorf("%s meets %s in one interview, without anybody else", candidate, recruiterNames(p, slices.Sorted(slices.Values(all))))
+		}
+
+		return nil
+	}
+
+	if err := p.panel(c, recruiters); err != nil {
+		return err
+	}
+
+	if err := p.joint(c, recruiters, o); err != nil {
+		return fmt.Errorf("joint interview of %s with %w", candidate, err)
+	}
+
+	if p.Candidates[c].Together {
+		all := 0
+		for _, r := range p.Requests {
+			if r.Candidate == c {
+				all++
+			}
+		}
+
+		if len(iv.Requests) != all {
+			return fmt.Errorf("%s meets everybody together, in one interview", candidate)
+		}
+	}
+
+	return nil
+}
+
 // checkCandidates verifies "all or nothing", and the gaps and the order of
 // the interviews of each candidate.
 func checkCandidates(p *Problem, o Options, s *Schedule, held []int, breaks []Interval) error {
@@ -406,7 +451,11 @@ func recruiterNames(p *Problem, recruiters []int) string {
 		names[i] = p.Recruiters[h].Name
 	}
 
-	return strings.Join(names, " and ")
+	if len(names) < 3 {
+		return strings.Join(names, " and ")
+	}
+
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
 }
 
 // candidateWait returns the time candidate c waits between interviews of a

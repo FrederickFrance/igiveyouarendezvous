@@ -119,6 +119,41 @@ func TestReadPlanReadsWhatWritePlanWrites(t *testing.T) {
 	}
 }
 
+// Identical meetings are told apart in a plan file by their order: each
+// interview takes the first meeting with its recruiters not taken yet.
+func TestReadPlanOfMeetings(t *testing.T) {
+	t.Parallel()
+
+	f, err := Parse([]byte("day: 08:00-12:00\nrecruiters: {Host: , Camera: , Guest: }\ncandidates:\n  Episode:\n" +
+		"    meet: [Guest]\n    meetings:\n      - {with: [Host, Camera], duration: 1h, times: 2}\n      - {with: [Host, Guest], duration: 30m}\n"))
+	require.NoError(t, err)
+
+	p, o, err := f.Problem("", "")
+	require.NoError(t, err)
+
+	s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Seed: 1, Iterations: 200})
+	require.NoError(t, err)
+	require.Empty(t, s.Unscheduled)
+
+	var b bytes.Buffer
+	require.NoError(t, WritePlan(&b, p, s, "", "", YAML))
+
+	plan, err := ReadPlan(b.Bytes(), p, true)
+	require.NoError(t, err)
+	require.Empty(t, plan.Rejected)
+
+	var held []int
+	for _, iv := range plan.Schedule.Interviews {
+		held = append(held, iv.Requests...)
+	}
+
+	require.ElementsMatch(t, []int{0, 1, 2, 3, 4, 5, 6}, held, "every request once")
+
+	again, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Iterations: 10, Start: plan.Schedule})
+	require.NoError(t, err)
+	require.Empty(t, again.Unscheduled, "the fixed plan is kept")
+}
+
 func TestReadPlanOfAPeriod(t *testing.T) {
 	t.Parallel()
 

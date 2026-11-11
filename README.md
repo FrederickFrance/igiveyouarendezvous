@@ -258,7 +258,8 @@ candidates:
 | `recruiters.<name>.availability` | `day` | time spans of the recruiter (`none`: absent), every day or by date (see below) |
 | `recruiters.<name>.min-gap` | `recruiter-min-gap` | the shortest time between two interviews of this recruiter, from the end of one to the start of the next, nights included: to write notes (`30m`), to rest (`12h`); the journeys come on top (see `travel`); `0`: none |
 | `recruiter-min-gap` | `0` | the `min-gap` of every recruiter without one of their own, such as `10m` of break for everybody |
-| `candidates.<name>.meet` | mandatory | the recruiters to meet, in any order, or with their ranks and the lengths of the meetings (see below) |
+| `candidates.<name>.meet` | mandatory without `meetings` | the recruiters to meet, one interview each, in any order, or with their ranks and the lengths of the meetings (see below) |
+| `candidates.<name>.meetings` | none | meetings with several recruiters at once, each held as given; a recruiter may come back in several (see below) |
 | `candidates.<name>.availability` | `day` | time spans of the candidate, every day or by date |
 | `candidates.<name>.priority` | `1` | the higher, the more important (objective `priorities`) |
 | `candidates.<name>.duration` | the recruiters' | length of the interviews of this candidate, in place of the recruiters' ones (the length of a meeting in `meet` still wins) |
@@ -343,6 +344,29 @@ must meet, the candidate meets in one interview, with nobody else, or not at
 all: never one after the other. A recruiter belongs to one panel at most,
 and then to no joint group; `max-joint-size` does not apply to panels. Full
 example: [a selection panel](example/panel.yaml).
+
+**Meetings.** `meet` gives one interview per recruiter; `meetings` gives
+meetings with several recruiters at once, held as given, with nobody else,
+in which a recruiter may come back: the shoot of an episode, with the host
+and the camera operator, then with them and a guest; or a candidate who
+meets the lead alone, then with a colleague.
+
+```yaml
+candidates:
+  episode Lille:
+    meetings:
+      - {with: [Host, Camera], duration: 1h, times: 2}   # two such meetings
+      - {with: [Host, Camera, Nathan], duration: 2h, rank: 2}
+```
+
+`times` repeats a meeting, `rank` orders the meetings as in `meet` (`1`
+first, `X` any time). A meeting lasts its `duration`, or else the
+candidate's, or else the default `duration` of the file, never a
+recruiter's, since they are several. The candidate meets all of `meet` and
+all of `meetings`, or nothing; the gaps (`min-gap`, `max-gap`) apply between
+all their interviews, and the `min-gap` of a recruiter between two meetings
+of the same candidate too. `together: true` is a shortcut for one meeting
+with everybody of `meet`, so it does not go with `meetings`.
 
 **Places and journeys.** A candidate may have a `place`, such as the city
 of a shoot; the recruiters travel from one to the next. Between two
@@ -498,10 +522,12 @@ Without two days in a row with the whole team, the shoot is not planned.
 The limit: for the program, `Ada day 1` is not Ada, so a clash with another
 recording of the same person, in the same file, goes unseen.
 
-**Shoots in several cities.** Each shoot is a candidate with `together:
-true` and a `place`, its guests the recruiters; the host, a recruiter too,
-travels between the cities with the journeys of `travel`, and packs the gear
-with a `min-gap` of an hour: [the example of a tour](example/tour.yaml).
+**Shoots in several cities.** The shoot of an episode is a candidate, at
+its `place`, with its `meetings`: the host and the camera operator, alone or
+with a guest, all recruiters. The team travels between the cities with the
+journeys of `travel`, which may include the time to pack the gear: a
+`min-gap` would also apply between two meetings of the same shoot. See [the
+example of a tour](example/tour.yaml).
 
 ## Objectives
 

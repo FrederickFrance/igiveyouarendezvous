@@ -203,8 +203,17 @@
       },
       "additionalProperties": {
         "type": "object",
-        "required": [
-          "meet"
+        "anyOf": [
+          {
+            "required": [
+              "meet"
+            ]
+          },
+          {
+            "required": [
+              "meetings"
+            ]
+          }
         ],
         "additionalProperties": false,
         "properties": {
@@ -269,6 +278,52 @@
                 }
               }
             ]
+          },
+          "meetings": {
+            "description": "Meetings with several recruiters at once, each held as given, with nobody else: a candidate may meet a recruiter in several of them, such as {with: [Host, Camera], duration: 1h, times: 5}. Each lasts its duration, or else the candidate's, or else the default.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "with"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "with": {
+                  "description": "The recruiters met at once.",
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {
+                    "$ref": "#/$defs/name"
+                  }
+                },
+                "duration": {
+                  "type": "string",
+                  "pattern": "^\\s*(?:\\d+h\\d+|(?:\\d+(?:\\.\\d+)?(?:h|m|s))+)\\s*$"
+                },
+                "times": {
+                  "description": "How many such meetings, 1 by default.",
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "rank": {
+                  "oneOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^\\s*(?:[Xx]|[Aa][Nn][Yy])\\s*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
           },
           "priority": {
             "type": "integer",

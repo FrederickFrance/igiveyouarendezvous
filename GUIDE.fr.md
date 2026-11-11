@@ -84,10 +84,11 @@ d'autres choses :
 |---|---|---|
 | `recruiters` | les personnes qui reçoivent, une à la fois | jurés, invités d'une émission, l'équipe d'un tournage |
 | `candidates` | ce qu'il faut planifier | un épisode, une partie, un tournage |
-| `meet` | qui le candidat doit voir, éventuellement dans un ordre | |
+| `meet` | qui le candidat doit voir, un entretien chacun, éventuellement dans un ordre | |
+| `meetings` | des rencontres à plusieurs, telles quelles ; quelqu'un peut revenir | les scènes d'un tournage, un candidat qui revoit le responsable |
 | `availability` | quand une personne est libre ; sans elle, les horaires de `day` | |
 | `duration` | la durée d'un entretien | |
-| `together: true` | une réunion : tout le monde à la fois | un enregistrement, un tournage |
+| `together: true` | une réunion : tout `meet` à la fois | un enregistrement |
 | `place`, `travel` | le lieu d'un candidat, et les trajets entre les lieux | les villes d'une tournée |
 
 Toutes les clés sont dans le [README](README.fr.md#le-fichier-problème).
@@ -159,8 +160,8 @@ arrivent… sans tout déplacer :
 - **Les écarts** (`min-gap`, `max-gap`) valent entre deux entretiens
   consécutifs quelconques d'un candidat. Par défaut, ses entretiens se
   suivent, le même jour.
-- **Un nom écrit autrement** dans `meet` que sous `recruiters` est une
-  erreur : le programme le dit, avec la ligne.
+- **Un nom écrit autrement** dans `meet` ou `meetings` que sous
+  `recruiters` est une erreur : le programme le dit, avec la ligne.
 - **Entre accolades**, mettez les plages horaires entre guillemets :
   `{availability: "09:00-12:00, 14:00-16:00"}`.
 - **Personne ne tient** : une règle est sans doute trop stricte. Relâchez-la

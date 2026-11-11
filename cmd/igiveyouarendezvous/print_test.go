@@ -57,3 +57,30 @@ func TestImpossibleWithAbsentPeople(t *testing.T) {
 	printImpossible(&b, p, s)
 	require.Equal(t, "\nImpossible, available at no time of the period: Guest, J1\nImpossible, never free together long enough: B (R)\n", b.String())
 }
+
+// In meetings, a recruiter is named once, and a meeting with an absent
+// person is explained by the absence alone.
+func TestImpossibleMeetings(t *testing.T) {
+	t.Parallel()
+
+	p := &planning.Problem{
+		Recruiters: []planning.Recruiter{{Name: "Host"}, {Name: "Camera"}, {Name: "Guest"}},
+		Candidates: []planning.Candidate{{Name: "Episode"}},
+		Requests: []planning.Request{
+			{Candidate: 0, Recruiter: 0, Meeting: 1}, {Candidate: 0, Recruiter: 1, Meeting: 1},
+			{Candidate: 0, Recruiter: 0, Meeting: 2}, {Candidate: 0, Recruiter: 1, Meeting: 2},
+			{Candidate: 0, Recruiter: 0, Meeting: 3}, {Candidate: 0, Recruiter: 2, Meeting: 3},
+		},
+	}
+
+	var b strings.Builder
+	printImpossible(&b, p, &planning.Schedule{Impossible: []int{0, 1, 2, 3}})
+	require.Equal(t, "\nImpossible, never free together long enough: Episode (Host, Camera)\n", b.String())
+
+	s := &planning.Schedule{Impossible: []int{4, 5}}
+	s.Absent.Recruiters = []int{2}
+
+	b.Reset()
+	printImpossible(&b, p, s)
+	require.Equal(t, "\nImpossible, available at no time of the period: Guest\n", b.String())
+}
