@@ -7,6 +7,19 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
+## [0.9.1] - 2026-11-11 "Dupond et Dupont" 👬
+
+Dupond et Dupont, Thomson and Thompson in English, are the two detectives
+nobody can tell apart.
+
+### Fixed
+
+- **The schedule returned is the last one reported.** With several workers,
+  the search often ends on several schedules of the same score, and the
+  progress only reports a better one: the result could then be a schedule
+  the caller had never seen, as good but not the one on the last line of
+  the progress. The tie now goes to the schedule reported last.
+
 ## [0.9.0] - 2026-11-11 "Lola rennt" 🏃‍♀️
 
 ### Changed
@@ -245,6 +258,7 @@ lexicographic objectives, fixed appointments resumed with `-start`, the
 problem file of the next day with `-rest`, and ready-to-use zips for a
 beginner's tutorial.
 
+[0.9.1]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.6.0...v0.7.0

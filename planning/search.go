@@ -129,6 +129,7 @@ func Search(ctx context.Context, p *Problem, o Options, so SearchOptions) (*Sche
 	var (
 		mu       sync.Mutex
 		reported []int
+		reporter *searcher // the one whose best was reported last
 		wg       sync.WaitGroup
 	)
 
@@ -144,7 +145,7 @@ func Search(ctx context.Context, p *Problem, o Options, so SearchOptions) (*Sche
 			return
 		}
 
-		reported = s.best.score
+		reported, reporter = s.best.score, s
 
 		sched := s.schedule()
 		if err := s.evaluate(sched, reported); err != nil {
@@ -170,6 +171,13 @@ func Search(ctx context.Context, p *Problem, o Options, so SearchOptions) (*Sche
 		if compare(other.best.score, s.best.score) < 0 {
 			s = other
 		}
+	}
+
+	// Several workers often end on the same score with different schedules.
+	// The last one Progress reported is the one the caller has seen, so it
+	// wins the tie: the end of the progress is the result.
+	if reporter != nil && compare(reporter.best.score, s.best.score) == 0 {
+		s = reporter
 	}
 
 	sched := s.schedule()
