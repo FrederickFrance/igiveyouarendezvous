@@ -7,6 +7,30 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
+## [0.8.0] - 2026-11-11 "Terminator" 🤖
+
+### Added
+
+- **Meetings**: `candidates.<name>.meetings`, meetings with several
+  recruiters at once, held as given, in which a recruiter may come back
+  ("I'll be back"): the shoot of an episode, with the host and the camera
+  operator, then with them and a guest; a candidate who meets the lead
+  alone, then with a colleague. `times` repeats a meeting, `rank` orders
+  them as in `meet`; a candidate may have `meet`, `meetings`, or both, all
+  or nothing. A plan file tells identical meetings apart by their order
+  (`planning.Request.Meeting`).
+
+### Changed
+
+- The example of a tour: each episode has its meetings, and the journeys
+  count the time to pack the gear, rather than a gap that would also apply
+  between two meetings of the same shoot.
+- The messages name three recruiters or more as "A, B and C".
+
+### Removed
+
+- The `lol` folder, hello worlds in esoteric languages added in 0.5.1.
+
 ## [0.7.0] - 2026-11-10 "Mary Poppins" ☂️
 
 ### Added
@@ -206,6 +230,7 @@ lexicographic objectives, fixed appointments resumed with `-start`, the
 problem file of the next day with `-rest`, and ready-to-use zips for a
 beginner's tutorial.
 
+[0.8.0]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/FrederickFrance/igiveyouarendezvous/compare/v0.5.0...v0.5.1

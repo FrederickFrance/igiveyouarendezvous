@@ -28,7 +28,10 @@
 // A candidate with [Candidate.Together] meets all their recruiters in one
 // single interview, or not at all: a meeting rather than interviews, such
 // as the recording of a show with its host and guests. [Candidate.Duration]
-// then gives its length.
+// then gives its length. The requests with the same [Request.Meeting] are
+// such meetings too, as given, and a candidate may meet a recruiter in
+// several of them: the shoot of an episode, with the host and the camera
+// operator, then with them and a guest.
 //
 // A recruiter may need time between two of their interviews, nights
 // included: [Recruiter.MinGap], to write notes for instance. When the

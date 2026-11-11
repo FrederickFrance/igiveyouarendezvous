@@ -207,14 +207,17 @@ type searcher struct {
 	fixed  []Interview // kept as they are (see SearchOptions.Start)
 	pinned []bool      // [candidate]: has fixed interviews, never planned
 
+	// The masks hold the parts of a candidate's plan, as bits: a request
+	// outside meetings, or a whole meeting (see Request.Meeting).
 	optionsOf [][]int   // options of each candidate, largest first
-	holding   [][][]int // [candidate][request]: the options holding the request
-	longest   [][]int   // [candidate][request]: the longest of them, in slots
-	before    []uint64  // [option]: requests of its candidate to hold before it (ranks)
-	fewest    [][]int8  // [candidate][mask]: fewest interviews holding the requests of mask
-	optMask   []uint64  // requests of each option, as bits of its candidate's request list
-	fullMask  []uint64  // every request of each candidate
-	possible  []uint64  // requests of each candidate that some option holds
+	holding   [][][]int // [candidate][part]: the options holding the part
+	longest   [][]int   // [candidate][part]: the longest of them, in slots
+	before    []uint64  // [option]: parts of its candidate to hold before it (ranks, identical meetings)
+	fewest    [][]int8  // [candidate][mask]: fewest interviews holding the parts of mask
+	optMask   []uint64  // parts of each option
+	fullMask  []uint64  // every part of each candidate
+	possible  []uint64  // parts of each candidate that some option holds
+	repeats   []bool    // [candidate]: meets a recruiter with a gap in two parts
 	bound     []int     // obvious bound of each objective, in score units
 	// sessionEnd[t]: the slot after the end of the session holding slot t.
 	sessionEnd []int
@@ -289,28 +292,24 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 		total:     make([]int, len(in.crit)),
 	}
 
-	local := make([]int, len(in.p.Requests)) // position of each request in its candidate's list
+	part, parts := in.parts()
 
-	for c, requests := range in.requestsOf {
-		if len(requests) > 64 {
-			return nil, fmt.Errorf("planning: %s has more than 64 requests", in.p.Candidates[c].Name)
+	for c := range in.requestsOf {
+		if parts[c] > 64 {
+			return nil, fmt.Errorf("planning: %s has more than 64 interviews to hold", in.p.Candidates[c].Name)
 		}
 
-		for i, r := range requests {
-			local[r] = i
-		}
-
-		s.fullMask[c] = 1<<len(requests) - 1
+		s.fullMask[c] = 1<<parts[c] - 1
 		s.contrib[c] = make([]int, len(s.crit))
 	}
 
 	for o, opt := range in.options {
 		for _, r := range opt.requests {
-			s.optMask[o] |= 1 << local[r]
+			s.optMask[o] |= 1 << part[r]
 
 			for _, q := range in.requestsOf[opt.candidate] { // the lower ranks come before
 				if k := in.p.Requests[q].Rank; k > 0 && k < in.p.Requests[r].Rank {
-					s.before[o] |= 1 << local[q]
+					s.before[o] |= 1 << part[q]
 				}
 			}
 		}
@@ -319,13 +318,16 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 		s.optionsOf[opt.candidate] = append(s.optionsOf[opt.candidate], o)
 	}
 
+	s.breakSymmetries()
+	s.repeats = in.repeats()
+
 	for c := range s.optionsOf { // largest groups first: good placements are found early
 		slices.SortStableFunc(s.optionsOf[c], func(a, b int) int {
 			return len(in.options[b].requests) - len(in.options[a].requests)
 		})
 
-		s.holding[c] = make([][]int, len(in.requestsOf[c]))
-		s.longest[c] = make([]int, len(in.requestsOf[c]))
+		s.holding[c] = make([][]int, parts[c])
+		s.longest[c] = make([]int, parts[c])
 
 		for _, o := range s.optionsOf[c] {
 			for m := s.optMask[o]; m != 0; m &= m - 1 {
@@ -559,7 +561,7 @@ func (s *searcher) firstPlacement(c int) []placed {
 			}
 
 			for _, w := range windows {
-				t, ok := s.earliestFree(o, w.from, w.to)
+				t, ok := s.nextFree(o, w.from, w.to, cur)
 				if !ok {
 					continue
 				}
@@ -929,15 +931,33 @@ func (s *searcher) locate(iv Interview) (placed, string) {
 		}
 	}
 
-	if err := in.p.panel(c, recruiters); err != nil {
-		return placed{}, err.Error()
+	// A meeting is found by its requests: identical ones have the same
+	// recruiters.
+	requests := slices.Sorted(slices.Values(iv.Requests))
+	for _, r := range requests {
+		if r < 0 || r >= len(in.p.Requests) || in.p.Requests[r].Candidate != c {
+			return placed{}, "holds a request of somebody else"
+		}
 	}
 
-	if in.p.joint(c, recruiters, in.o) != nil {
-		return placed{}, s.names(recruiters) + " may no longer interview together"
+	meeting := len(requests) > 0 && in.p.Requests[requests[0]].Meeting > 0
+	if !meeting {
+		if err := in.p.panel(c, recruiters); err != nil {
+			return placed{}, err.Error()
+		}
+
+		if in.p.joint(c, recruiters, in.o) != nil {
+			return placed{}, s.names(recruiters) + " may no longer interview together"
+		}
 	}
 
-	idx := slices.IndexFunc(s.optionsOf[c], func(o int) bool { return slices.Equal(in.options[o].recruiters, recruiters) })
+	idx := slices.IndexFunc(s.optionsOf[c], func(o int) bool {
+		if meeting {
+			return slices.Equal(in.options[o].requests, requests)
+		}
+
+		return slices.Equal(in.options[o].recruiters, recruiters) && !in.isMeeting(o)
+	})
 	if idx < 0 {
 		return placed{}, fmt.Sprintf("%s and %s are never available together long enough any more", name, s.names(recruiters))
 	}
@@ -1012,11 +1032,13 @@ func (s *searcher) fits(c int, plan []placed) string {
 
 		switch {
 		case s.optMask[pl.option]&mask != 0:
-			return name + " would meet the same recruiter twice"
+			return name + " would have the same meeting twice"
 		case i > 0 && pl.start < end:
 			return "two interviews of " + name + " at once"
 		case !s.free(pl.option, pl.start):
 			return s.takenBy(pl)
+		case !s.clearOfChain(pl.option, pl.start, plan[:i]):
+			return "too close to another interview of " + s.names(opt.recruiters) + " with " + name + ", for their gap"
 		}
 
 		mask |= s.optMask[pl.option]
@@ -1348,6 +1370,71 @@ func (s *searcher) conflict(x int, a []placed, c int, b []placed) bool {
 	return false
 }
 
+// breakSymmetries orders the identical meetings of each candidate, with the
+// same recruiters, for as long, at the same times: their order changes
+// nothing, so each is held after the previous one, which spares exploring
+// every order. It needs the options of each candidate in their order.
+func (s *searcher) breakSymmetries() {
+	ranks := slices.Clone(s.before)
+
+	for _, opts := range s.optionsOf {
+		for i, o := range opts {
+			a := &s.in.options[o]
+			if !s.in.isMeeting(o) {
+				continue
+			}
+
+			for _, q := range slices.Backward(opts[:i]) {
+				b := &s.in.options[q]
+				if s.in.isMeeting(q) && ranks[q] == ranks[o] && a.length == b.length &&
+					slices.Equal(a.recruiters, b.recruiters) && slices.Equal(a.starts, b.starts) {
+					s.before[o] |= s.optMask[q] // the latest twin, which needs the earlier ones
+
+					break
+				}
+			}
+		}
+	}
+}
+
+// clearOfChain tells whether option o, from slot t, keeps the gaps of the
+// recruiters it shares with plan, the interviews of the same candidate placed
+// so far: busy only holds those of the other candidates.
+func (s *searcher) clearOfChain(o, t int, plan []placed) bool {
+	opt := &s.in.options[o]
+	if !s.repeats[opt.candidate] {
+		return true
+	}
+
+	start, end := s.in.minute[t], s.endMinutes(t, opt.length)
+
+	for _, pl := range plan {
+		other := &s.in.options[pl.option]
+		if gap := s.sharedGap(opt.recruiters, other.recruiters); gap > 0 {
+			from, to := s.in.minute[pl.start], s.endMinutes(pl.start, other.length)
+			if start < to+gap && from < end+gap {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+// nextFree returns the earliest start of option o in [from, latest] where
+// its recruiters are free and keep their gaps with plan, the interviews of
+// the same candidate placed so far.
+func (s *searcher) nextFree(o, from, latest int, plan []placed) (int, bool) {
+	for {
+		t, ok := s.earliestFree(o, from, latest)
+		if !ok || s.clearOfChain(o, t, plan) {
+			return t, ok
+		}
+
+		from = t + 1
+	}
+}
+
 // sharedGap returns the longest gap, in minutes, of the recruiters in both
 // lists.
 func (s *searcher) sharedGap(a, b []int) int {
@@ -1537,7 +1624,7 @@ func (s *searcher) bestPlacement(c int) []placed {
 					return
 				}
 
-				t, ok := s.earliestFree(o, w.from, w.to)
+				t, ok := s.nextFree(o, w.from, w.to, cur)
 				if !ok {
 					continue
 				}

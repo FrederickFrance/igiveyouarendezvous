@@ -14,7 +14,6 @@ on:
       - "WTFPL.txt"
       - ".github/ISSUE_TEMPLATE/**"
       - "docs/**"
-      - "lol/**"
   pull_request:
     paths-ignore:
       - "**.md"
@@ -23,7 +22,6 @@ on:
       - "WTFPL.txt"
       - ".github/ISSUE_TEMPLATE/**"
       - "docs/**"
-      - "lol/**"
   schedule:
     - cron: "17 5 * * 1"
   workflow_dispatch: # "Run workflow" button

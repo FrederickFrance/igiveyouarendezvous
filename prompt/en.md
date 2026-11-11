@@ -72,10 +72,15 @@ has defaults):
 - `panels`: lists of recruiters who ALWAYS interview together, such as a
   jury: the members a candidate must meet, they meet in one interview. A
   recruiter belongs to one panel at most, and then to no joint group.
+- `candidates.<name>.meetings`: meetings with several recruiters at once,
+  held as given, in which a recruiter may come back, such as
+  `[{with: [Host, Camera], duration: 1h, times: 2}, {with: [Host, Camera, Guest], duration: 2h}]`;
+  `times` repeats a meeting, `rank` orders them as in `meet`. A candidate
+  may have `meet`, `meetings`, or both.
 - `candidates.<name>.together: true`: one single meeting with all the
-  recruiters of `meet` at once (a show, a workshop session); no ranks then.
-  Other uses map onto the same words: guests are "recruiters", episodes or
-  sessions are "candidates".
+  recruiters of `meet` at once (a show, a workshop session); no ranks then,
+  and no `meetings`. Other uses map onto the same words: guests and crews
+  are "recruiters", episodes, shoots or sessions are "candidates".
 - `objectives`: what matters, the most important first. Keep the default
   unless I say otherwise; "finish the day as early as possible" is
   `day-end`, "as little waiting as possible between two meetings" is

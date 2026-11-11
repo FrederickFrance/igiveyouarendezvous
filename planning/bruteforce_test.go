@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -44,7 +45,7 @@ func TestAgainstBruteForce(t *testing.T) {
 				got[i] = sc.Value
 			}
 
-			best, _ := bestSchedule(t, p, o)
+			best, _ := exhaustive(t, seed, p, o)
 			require.Equal(t, best, got, "seed %d, objectives %v, options %+v", seed, o.Objectives, o)
 		})
 	}
@@ -60,20 +61,50 @@ func TestSearchKeepsAnOptimalStart(t *testing.T) {
 	}
 
 	for seed := range uint64(60) {
-		rnd := rand.New(rand.NewPCG(seed, 7))
-		p, o := randomProblem(rnd)
-		best, start := bestSchedule(t, p, o)
+		t.Run(fmt.Sprint("seed ", seed), func(t *testing.T) {
+			t.Parallel()
 
-		s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Seed: seed + 100, Iterations: 1, Start: start})
-		require.NoError(t, err)
+			rnd := rand.New(rand.NewPCG(seed, 7))
+			p, o := randomProblem(rnd)
+			best, start := exhaustive(t, seed, p, o)
 
-		got := make([]int, len(s.Scores))
-		for i, sc := range s.Scores {
-			got[i] = sc.Value
-		}
+			s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Seed: seed + 100, Iterations: 1, Start: start})
+			require.NoError(t, err)
 
-		require.Equal(t, best, got, "seed %d", seed)
+			got := make([]int, len(s.Scores))
+			for i, sc := range s.Scores {
+				got[i] = sc.Value
+			}
+
+			require.Equal(t, best, got, "seed %d", seed)
+		})
 	}
+}
+
+// exhaustiveResults keeps the exhaustive search of each seed, which both
+// tests above need: it is the longest part of the tests.
+var exhaustiveResults sync.Map // seed → *exhaustiveResult
+
+type exhaustiveResult struct {
+	once  sync.Once
+	best  []int
+	sched *planning.Schedule
+}
+
+// exhaustive returns bestSchedule for the problem of seed, computed once.
+func exhaustive(t *testing.T, seed uint64, p *planning.Problem, o planning.Options) ([]int, *planning.Schedule) {
+	t.Helper()
+
+	v, _ := exhaustiveResults.LoadOrStore(seed, &exhaustiveResult{})
+	r := v.(*exhaustiveResult)
+
+	r.once.Do(func() { r.best, r.sched = bestSchedule(t, p, o) })
+	require.NotNil(t, r.best, "the exhaustive search of seed %d failed", seed)
+
+	sched := *r.sched
+	sched.Interviews = slices.Clone(r.sched.Interviews)
+
+	return r.best, &sched
 }
 
 // randomProblem draws 3 candidates and 3 recruiters on a 08:00-11:00 day.
@@ -153,6 +184,23 @@ func randomProblem(rnd *rand.Rand) (*planning.Problem, planning.Options) {
 		}
 
 		p.Travel = planning.Travel{Default: time.Hour, Journeys: []planning.Journey{{From: "Lyon", To: "Paris", Duration: 30 * time.Minute}}}
+	}
+
+	if rnd.IntN(4) == 0 { // A meets a recruiter twice: with another one, then alone
+		p.Requests = slices.DeleteFunc(p.Requests, func(r planning.Request) bool { return r.Candidate == 0 })
+		p.Candidates[0].Together = false
+
+		pair := rnd.Perm(3)[:2]
+		p.Requests = append(p.Requests,
+			planning.Request{Candidate: 0, Recruiter: pair[0], Meeting: 1},
+			planning.Request{Candidate: 0, Recruiter: pair[1], Meeting: 1},
+			planning.Request{Candidate: 0, Recruiter: pair[0], Meeting: 2},
+		)
+
+		if len(p.Requests) > 6 { // keeps the exhaustive search short: B, who has two, loses one
+			b := slices.IndexFunc(p.Requests, func(r planning.Request) bool { return r.Candidate == 1 })
+			p.Requests = slices.Delete(p.Requests, b, b+1)
+		}
 	}
 
 	return p, o

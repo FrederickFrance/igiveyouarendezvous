@@ -250,7 +250,9 @@ func printImpossible(w io.Writer, p *planning.Problem, s *planning.Schedule) {
 			order = append(order, req.Candidate)
 		}
 
-		never[req.Candidate] = append(never[req.Candidate], p.Recruiters[req.Recruiter].Name)
+		if name := p.Recruiters[req.Recruiter].Name; !slices.Contains(never[req.Candidate], name) { // once, whatever the meetings
+			never[req.Candidate] = append(never[req.Candidate], name)
+		}
 	}
 
 	if len(order) == 0 {
@@ -267,16 +269,19 @@ func printImpossible(w io.Writer, p *planning.Problem, s *planning.Schedule) {
 
 // withAbsent tells whether meeting req is impossible because it is held
 // with an absent recruiter: in a meeting of everybody at once (together),
-// or in a panel.
+// in one of the meetings of the candidate, or in a panel.
 func withAbsent(p *planning.Problem, req planning.Request, absent map[int]bool) bool {
 	for _, q := range p.Requests {
 		if q.Candidate != req.Candidate || !absent[q.Recruiter] {
 			continue
 		}
 
-		if p.Candidates[req.Candidate].Together || slices.ContainsFunc(p.Panels, func(panel []int) bool {
+		switch {
+		case p.Candidates[req.Candidate].Together, req.Meeting > 0 && q.Meeting == req.Meeting:
+			return true
+		case req.Meeting == 0 && q.Meeting == 0 && slices.ContainsFunc(p.Panels, func(panel []int) bool {
 			return slices.Contains(panel, q.Recruiter) && slices.Contains(panel, req.Recruiter)
-		}) {
+		}):
 			return true
 		}
 	}

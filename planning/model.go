@@ -312,9 +312,33 @@ func (in *instance) addOptions(c int) error {
 		}
 	}
 
+	// The meetings, each as it is given; the other requests make the
+	// interviews below.
+	meetings := map[int][]int{}
+
+	var order, others []int
+
+	for _, r := range in.requestsOf[c] {
+		m := in.p.Requests[r].Meeting
+		switch {
+		case m == 0:
+			others = append(others, r)
+		case meetings[m] == nil:
+			order = append(order, m)
+
+			fallthrough
+		default:
+			meetings[m] = append(meetings[m], r)
+		}
+	}
+
+	for _, m := range order {
+		add(meetings[m])
+	}
+
 	if in.p.Candidates[c].Together { // one interview with everybody
-		if len(in.requestsOf[c]) > 0 {
-			add(slices.Clone(in.requestsOf[c]))
+		if len(others) > 0 {
+			add(others)
 		}
 
 		return nil
@@ -327,7 +351,7 @@ func (in *instance) addOptions(c int) error {
 	for k := range in.p.Panels {
 		var members []int
 
-		for _, r := range in.requestsOf[c] {
+		for _, r := range others {
 			if in.p.panelOf(in.p.Requests[r].Recruiter) == k {
 				members = append(members, r)
 				held[r] = true
@@ -339,7 +363,7 @@ func (in *instance) addOptions(c int) error {
 		}
 	}
 
-	for _, r := range in.requestsOf[c] {
+	for _, r := range others {
 		if !held[r] {
 			add([]int{r})
 		}
@@ -348,7 +372,7 @@ func (in *instance) addOptions(c int) error {
 	for _, group := range in.p.JointGroups {
 		var members []int
 
-		for _, r := range in.requestsOf[c] {
+		for _, r := range others {
 			if slices.Contains(group, in.p.Requests[r].Recruiter) {
 				members = append(members, r)
 			}
@@ -426,7 +450,7 @@ func (in *instance) addOption(c int, requests []int) {
 	}
 
 	slices.Sort(opt.recruiters)
-	opt.length = int(in.p.length(c, opt.recruiters, in.o) / in.g.step)
+	opt.length = int(in.p.length(requests, in.o) / in.g.step)
 
 	for t := 0; t+opt.length <= in.g.slots; t++ {
 		if t%in.g.perDay+opt.length <= in.g.perDay && in.free(c, opt.recruiters, t, opt.length) {
@@ -468,4 +492,62 @@ func count(flags []bool) int {
 	}
 
 	return n
+}
+
+// parts returns the part of each request in its candidate's plan, as an
+// index from 0, and the number of parts of each candidate: a request
+// outside meetings is a part, a whole meeting is one (see Request.Meeting).
+func (in *instance) parts() (part, parts []int) {
+	part = make([]int, len(in.p.Requests))
+	parts = make([]int, len(in.p.Candidates))
+
+	for c, requests := range in.requestsOf {
+		meeting := map[int]int{} // the part of each meeting
+
+		for _, r := range requests {
+			m := in.p.Requests[r].Meeting
+			if k, ok := meeting[m]; ok && m > 0 {
+				part[r] = k
+
+				continue
+			}
+
+			part[r] = parts[c]
+			meeting[m] = parts[c]
+			parts[c]++
+		}
+	}
+
+	return part, parts
+}
+
+// repeats tells, for each candidate, whether a recruiter with a gap
+// (Recruiter.MinGap) is in two of their parts: their plan must then keep the
+// gap between its own interviews.
+func (in *instance) repeats() []bool {
+	out := make([]bool, len(in.p.Candidates))
+
+	for c, requests := range in.requestsOf {
+		part := map[int]int{} // recruiter → their meeting, 0 outside meetings
+
+		for _, r := range requests {
+			req := in.p.Requests[r]
+			if in.p.Recruiters[req.Recruiter].MinGap <= 0 {
+				continue
+			}
+
+			if m, ok := part[req.Recruiter]; ok && m != req.Meeting {
+				out[c] = true
+			}
+
+			part[req.Recruiter] = req.Meeting
+		}
+	}
+
+	return out
+}
+
+// isMeeting tells whether option o holds a meeting (see Request.Meeting).
+func (in *instance) isMeeting(o int) bool {
+	return in.p.Requests[in.options[o].requests[0]].Meeting > 0
 }

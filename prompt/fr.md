@@ -76,10 +76,16 @@ a des valeurs par défaut) :
   un jury : les membres qu'un candidat doit voir, il les voit en un seul
   entretien. Un recruteur appartient à un jury au plus, et alors à aucun
   groupe commun.
+- `candidates.<nom>.meetings` : des rencontres avec plusieurs recruteurs à
+  la fois, telles quelles, où un recruteur peut revenir, comme
+  `[{with: [Animatrice, Cadreur], duration: 1h, times: 2}, {with: [Animatrice, Cadreur, Invité], duration: 2h}]` ;
+  `times` répète une rencontre, `rank` les ordonne comme dans `meet`. Un
+  candidat peut avoir `meet`, `meetings`, ou les deux.
 - `candidates.<nom>.together: true` : une seule réunion avec tous les
   recruteurs de `meet` à la fois (une émission, une séance d'atelier) ; pas
-  de rangs alors. D'autres usages reprennent les mêmes mots : les invités
-  sont des « recruteurs », les épisodes ou séances des « candidats ».
+  de rangs alors, ni de `meetings`. D'autres usages reprennent les mêmes
+  mots : les invités et l'équipe sont des « recruteurs », les épisodes,
+  tournages ou séances des « candidats ».
 - `objectives` : ce qui compte, le plus important d'abord. Garde la valeur
   par défaut sauf si je dis autre chose ; « finir la journée le plus tôt
   possible » est `day-end`, « attendre le moins possible entre deux

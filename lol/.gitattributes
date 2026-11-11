@@ -1,3 +1,0 @@
-# GitHub does not know INTERCAL: without this line, it would count hello.i
-# as another language that uses the .i extension.
-*.i linguist-detectable=false

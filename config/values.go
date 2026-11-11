@@ -601,3 +601,83 @@ func (j *Journey) UnmarshalYAML(n *yaml.Node) error {
 
 	return nil
 }
+
+// Meeting is an element of meetings: recruiters a candidate meets at once,
+// with nobody else, such as {with: [Host, Camera], duration: 1h, times: 5}
+// (see planning.Request.Meeting).
+type Meeting struct {
+	With     []string // normalised (see NormalizeName)
+	Duration time.Duration
+	Times    int // how many such meetings, 1 by default
+	Rank     int // 1, 2...; 0 for any time
+	Line     int // in the file, 0 when unknown
+}
+
+// UnmarshalYAML implements yaml.Unmarshaler.
+func (m *Meeting) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind != yaml.MappingNode {
+		return fmt.Errorf("line %d: a meeting is {with: [recruiters], duration: 1h}, with times or a rank if needed", n.Line)
+	}
+
+	meeting := Meeting{Times: 1, Line: n.Line}
+
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		k, v := n.Content[i], n.Content[i+1]
+
+		var err error
+
+		switch k.Value {
+		case "with":
+			meeting.With, err = readNames(v)
+		case "duration":
+			meeting.Duration, err = readMeetDuration(v)
+			if err != nil {
+				return fmt.Errorf("line %d: the duration of a meeting has its unit, such as 45m or 1h", v.Line)
+			}
+		case "times":
+			meeting.Times, err = strconv.Atoi(strings.TrimSpace(v.Value))
+			if err != nil || v.Kind != yaml.ScalarNode || meeting.Times < 1 {
+				return fmt.Errorf("line %d: times is the number of such meetings, 1 or more", v.Line)
+			}
+		case "rank":
+			meeting.Rank, err = readRank(v)
+			if err != nil {
+				return fmt.Errorf("line %d: the rank of a meeting is 1, 2... or X for any time", v.Line)
+			}
+		default:
+			return fmt.Errorf("line %d: unknown key %q in a meeting (known: duration, rank, times, with)", k.Line, k.Value)
+		}
+
+		if err != nil {
+			return fmt.Errorf("line %d: with lists the recruiters met at once, such as [Host, Camera]", v.Line)
+		}
+	}
+
+	if len(meeting.With) == 0 {
+		return fmt.Errorf("line %d: a meeting without anybody: with lists the recruiters met at once", n.Line)
+	}
+
+	*m = meeting
+
+	return nil
+}
+
+// readNames reads a non-empty list of names.
+func readNames(n *yaml.Node) ([]string, error) {
+	if n.Kind != yaml.SequenceNode {
+		return nil, errors.New("a list of names is expected")
+	}
+
+	names := make([]string, 0, len(n.Content))
+
+	for _, item := range n.Content {
+		name := NormalizeName(item.Value)
+		if item.Kind != yaml.ScalarNode || name == "" {
+			return nil, errors.New("a list of names is expected")
+		}
+
+		names = append(names, name)
+	}
+
+	return names, nil
+}

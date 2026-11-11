@@ -135,6 +135,13 @@ type Request struct {
 	// and the recruiter's; zero means the candidate's Duration, or else the
 	// recruiter's. A joint interview lasts as long as its longest meeting.
 	Duration time.Duration
+	// Meeting gathers the requests of a candidate held at once, in one
+	// interview, with nobody else: those with the same non-zero Meeting. A
+	// candidate may then meet a recruiter several times, in several
+	// meetings, such as the host of a shoot with the camera operator, then
+	// with them and a guest. Zero: an interview with this recruiter alone,
+	// or jointly as JointGroups and Panels allow.
+	Meeting int
 }
 
 // Problem is what has to be planned.
@@ -462,9 +469,16 @@ func (p *Problem) check(o Options) error {
 		return err
 	}
 
-	type pair struct{ candidate, recruiter int }
+	return p.checkRequests()
+}
 
-	seen := map[pair]bool{}
+// checkRequests validates the requests: a candidate meets a recruiter once
+// outside meetings, and once in each meeting at most.
+func (p *Problem) checkRequests() error {
+	type key struct{ candidate, meeting, recruiter int }
+
+	seen := map[key]bool{}
+	rank := map[key]int{} // of each meeting, without its recruiter
 
 	for i, r := range p.Requests {
 		if r.Candidate < 0 || r.Candidate >= len(p.Candidates) || r.Recruiter < 0 || r.Recruiter >= len(p.Recruiters) {
@@ -479,19 +493,37 @@ func (p *Problem) check(o Options) error {
 			return fmt.Errorf("planning: %s meets everybody together: no ranks", p.Candidates[r.Candidate].Name)
 		}
 
+		name := p.Candidates[r.Candidate].Name
+
 		switch {
 		case r.Duration < 0:
-			return fmt.Errorf("planning: %s meets %s: negative duration", p.Candidates[r.Candidate].Name, p.Recruiters[r.Recruiter].Name)
+			return fmt.Errorf("planning: %s meets %s: negative duration", name, p.Recruiters[r.Recruiter].Name)
 		case r.Duration > 0 && p.Candidates[r.Candidate].Together:
-			return fmt.Errorf("planning: %s meets everybody together: no meeting durations, give the candidate's", p.Candidates[r.Candidate].Name)
+			return fmt.Errorf("planning: %s meets everybody together: no meeting durations, give the candidate's", name)
+		case r.Meeting < 0:
+			return fmt.Errorf("planning: %s: negative meeting", name)
+		case r.Meeting > 0 && p.Candidates[r.Candidate].Together:
+			return fmt.Errorf("planning: %s meets everybody together: no other meetings", name)
 		}
 
-		key := pair{r.Candidate, r.Recruiter}
-		if seen[key] {
-			return fmt.Errorf("planning: %s must meet %s twice", p.Candidates[r.Candidate].Name, p.Recruiters[r.Recruiter].Name)
+		k := key{r.Candidate, r.Meeting, r.Recruiter}
+		switch {
+		case seen[k] && r.Meeting == 0:
+			return fmt.Errorf("planning: %s must meet %s twice outside meetings", name, p.Recruiters[r.Recruiter].Name)
+		case seen[k]:
+			return fmt.Errorf("planning: %s meets %s twice in one meeting", name, p.Recruiters[r.Recruiter].Name)
 		}
 
-		seen[key] = true
+		seen[k] = true
+
+		if r.Meeting > 0 {
+			m := key{r.Candidate, r.Meeting, -1}
+			if k, ok := rank[m]; ok && k != r.Rank {
+				return fmt.Errorf("planning: %s: a meeting with two ranks", name)
+			}
+
+			rank[m] = r.Rank
+		}
 	}
 
 	return nil
@@ -584,30 +616,30 @@ func (p *Problem) jointAllowed(recruiters []int) bool {
 	return false
 }
 
-// length returns the length of an interview of candidate c with recruiters.
-func (p *Problem) length(c int, recruiters []int, o Options) time.Duration {
+// length returns the length of an interview holding requests: its longest
+// request.
+func (p *Problem) length(requests []int, o Options) time.Duration {
 	var length time.Duration
-	for _, h := range recruiters {
-		length = max(length, p.meetingDuration(c, h, o))
+	for _, r := range requests {
+		length = max(length, p.requestDuration(r, o))
 	}
 
 	return length
 }
 
-// meetingDuration returns the length of the meeting of candidate c with
-// recruiter h: the meeting's own, the candidate's, or the recruiter's.
-func (p *Problem) meetingDuration(c, h int, o Options) time.Duration {
-	for _, r := range p.Requests {
-		if r.Candidate == c && r.Recruiter == h && r.Duration > 0 {
-			return r.Duration
-		}
+// requestDuration returns the length of request r: its own, the
+// candidate's, or the recruiter's.
+func (p *Problem) requestDuration(r int, o Options) time.Duration {
+	req := p.Requests[r]
+	if req.Duration > 0 {
+		return req.Duration
 	}
 
-	if d := p.Candidates[c].Duration; d > 0 {
+	if d := p.Candidates[req.Candidate].Duration; d > 0 {
 		return d
 	}
 
-	return p.duration(h, o)
+	return p.duration(req.Recruiter, o)
 }
 
 // joint tells whether candidate c may meet recruiters in one interview, as
@@ -656,7 +688,7 @@ func (p *Problem) checkPanels() error {
 
 	for _, r := range p.Requests {
 		k := key{r.Candidate, p.panelOf(r.Recruiter)}
-		if k.panel < 0 || r.Rank == 0 {
+		if k.panel < 0 || r.Rank == 0 || r.Meeting > 0 { // a meeting is as given
 			continue
 		}
 
@@ -681,8 +713,8 @@ func (p *Problem) panelOf(h int) int {
 func (p *Problem) panelMembers(c, k int) []int {
 	var members []int
 
-	for _, r := range p.Requests {
-		if r.Candidate == c && slices.Contains(p.Panels[k], r.Recruiter) {
+	for _, r := range p.Requests { // outside meetings, which are as given
+		if r.Candidate == c && r.Meeting == 0 && slices.Contains(p.Panels[k], r.Recruiter) {
 			members = append(members, r.Recruiter)
 		}
 	}

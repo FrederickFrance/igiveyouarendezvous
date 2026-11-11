@@ -1,26 +1,25 @@
 # yaml-language-server: $schema=../schema/problem.schema.json
 #
 # A tour: five episodes shot in five cities, each with a local guest. The
-# host and the camera operator travel from one shoot to the next; each
-# episode is a "candidate" met by everybody at once (together: true), at
-# its place. Between two shoots in different cities, the team needs the
-# journey, plus an hour to pack the gear (min-gap). The journeys are upper
-# estimates, door to door: the program computes no route.
+# host and the camera operator travel from one shoot to the next. Each
+# episode is a "candidate" at its place, with its meetings: two scenes in
+# the city with the host and the camera operator, an hour each, and the
+# interview of the guest, two hours, in any order. Between two shoots in different cities,
+# the team needs the journey: upper estimates, door to door, packing the
+# gear included; the program computes no route.
 
 from: 2026-11-16
 to: 2026-11-20
 day: 08:00-20:00
-duration: 3h            # a shoot
-recruiter-min-gap: 1h   # to pack and unpack the gear
 objectives: [complete-candidates, recruiters, day-end]   # every episode, then the fewest days
 
 travel:
-  default: 5h           # any journey not listed below
+  default: 6h           # any journey not listed below
   journeys:
-    - [Paris, Lille, 1h30]
-    - [Paris, Lyon, 2h30]
-    - [Paris, Bordeaux, 2h30]
-    - [Lyon, Marseille, 2h]
+    - [Paris, Lille, 2h30]
+    - [Paris, Lyon, 3h30]
+    - [Paris, Bordeaux, 3h30]
+    - [Lyon, Marseille, 3h]
 
 recruiters:             # the people: the team, and the guests
   Host:
@@ -42,24 +41,29 @@ recruiters:             # the people: the team, and the guests
       2026-11-16: 08:00-13:00
       2026-11-20: 08:00-20:00
 
-candidates:             # the episodes, each at its place
+candidates:             # the episodes, each at its place, shot in one go
   the archives of Lille:
-    meet: [Host, Camera, Guest Lille]
-    together: true
+    meetings:
+      - {with: [Host, Camera], duration: 1h, times: 2}   # two scenes in the city
+      - {with: [Host, Camera, Guest Lille], duration: 2h}
     place: Lille
   the Paris catacombs:
-    meet: [Host, Camera, Guest Paris]
-    together: true
+    meetings:
+      - {with: [Host, Camera], duration: 1h, times: 2}   # two scenes in the city
+      - {with: [Host, Camera, Guest Paris], duration: 2h}
     place: Paris
   the silk workers of Lyon:
-    meet: [Host, Camera, Guest Lyon]
-    together: true
+    meetings:
+      - {with: [Host, Camera], duration: 1h, times: 2}   # two scenes in the city
+      - {with: [Host, Camera, Guest Lyon], duration: 2h}
     place: Lyon
   the old port of Marseille:
-    meet: [Host, Camera, Guest Marseille]
-    together: true
+    meetings:
+      - {with: [Host, Camera], duration: 1h, times: 2}   # two scenes in the city
+      - {with: [Host, Camera, Guest Marseille], duration: 2h}
     place: Marseille
   the wine cellars of Bordeaux:
-    meet: [Host, Camera, Guest Bordeaux]
-    together: true
+    meetings:
+      - {with: [Host, Camera], duration: 1h, times: 2}   # two scenes in the city
+      - {with: [Host, Camera, Guest Bordeaux], duration: 2h}
     place: Bordeaux

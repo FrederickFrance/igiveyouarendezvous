@@ -81,10 +81,11 @@ purposes:
 |---|---|---|
 | `recruiters` | the people who receive, one at a time | jury members, guests of a show, the crew of a shoot |
 | `candidates` | what has to be planned | an episode, a game, a shoot |
-| `meet` | whom the candidate must meet, possibly in an order | |
+| `meet` | whom the candidate must meet, one interview each, possibly in an order | |
+| `meetings` | meetings with several people at once, as given; somebody may come back | the scenes of a shoot, a candidate who meets the lead again |
 | `availability` | when a person is free; without it, the hours of `day` | |
 | `duration` | the length of an interview | |
-| `together: true` | a meeting: everybody at once | a recording, a shoot |
+| `together: true` | a meeting: everybody of `meet` at once | a recording |
 | `place`, `travel` | the place of a candidate, and the journeys between places | the cities of a tour |
 
 Every key is in the [README](README.md#the-problem-file).
@@ -152,8 +153,8 @@ moving everything:
 - **The gaps** (`min-gap`, `max-gap`) apply between any two consecutive
   interviews of a candidate. By default, their interviews follow each
   other, the same day.
-- **A name written differently** in `meet` than under `recruiters` is an
-  error: the program says so, with the line.
+- **A name written differently** in `meet` or `meetings` than under
+  `recruiters` is an error: the program says so, with the line.
 - **Inside braces**, quote the time spans:
   `{availability: "09:00-12:00, 14:00-16:00"}`.
 - **Nobody fits**: a rule is probably too strict. Relax it (a gap, an
