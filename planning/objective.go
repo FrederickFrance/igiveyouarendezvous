@@ -55,6 +55,10 @@ const (
 	// time of day in minutes, summed over the days with interviews: the
 	// days finish as early as possible.
 	MinDayEnds
+	// MinSpan minimises the time from the start of the first interview to
+	// the end of the last one, over the whole period, nights included: the
+	// campaign is over as soon as possible.
+	MinSpan
 )
 
 var objectiveNames = map[Objective][2]string{
@@ -69,13 +73,14 @@ var objectiveNames = map[Objective][2]string{
 	MinRecruiterHalfDays:  {"recruiter-half-days", "minimise the half-days (morning, afternoon) in which recruiters have an interview"},
 	MaxUrgency:            {"urgency", "maximise the complete candidates with the fewest days left, the fewest first"},
 	MinDayEnds:            {"day-end", "minimise the end of the last interview of each day"},
+	MinSpan:               {"span", "minimise the time from the first interview to the end of the last one"},
 }
 
 // AllObjectives lists every objective.
 func AllObjectives() []Objective {
 	return []Objective{
 		MaxPriorities, MaxUrgency, MaxCompleteCandidates, MaxMeetings, MinRecruiters, MinRecruiterHalfDays,
-		MinInterviews, MinRecruiterSpan, MinCandidateWait, MinEndTimes, MinDayEnds,
+		MinInterviews, MinRecruiterSpan, MinCandidateWait, MinEndTimes, MinDayEnds, MinSpan,
 	}
 }
 

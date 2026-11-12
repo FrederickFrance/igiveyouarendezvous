@@ -7,6 +7,47 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
+## [0.10.0] - unreleased "Thomas Anderson" 💊
+
+Thomas Anderson is Neo's name before he chooses. The red pill or the blue
+one: here you choose what the schedule is optimised for.
+
+### Added
+
+- **The objectives are chosen in the demo**: a block to tick them and order
+  them, so that a case of the scientific literature can be run on the
+  criterion of its paper without editing the file. Nothing ticked leaves the
+  objectives of the problem file, which stays the right thing for an
+  ordinary day.
+- **The curves of the objectives in the demo**: one step chart per
+  objective, drawn as the search improves, which shows what the computing
+  time bought and when it stopped buying anything.
+- **The objective `span`**: be over as soon as possible, from the start of
+  the first interview to the end of the last one, over the whole period,
+  nights included. It is the only objective that can ask for an interview to
+  be held *later*: if two days are needed, the first one may as well end late
+  and the second one start early.
+- **`-progress-json`**: every improvement as one JSON object per line, with
+  the value, its unit and the way that is better for each objective, for a
+  program to read. The demo draws its curves from it.
+
+### Fixed
+
+- **A meeting of several requests counted as one.** The objective `meetings`
+  counts the candidate/recruiter meetings held, but the search counted the
+  interviews that held them: a meeting of a candidate with two recruiters at
+  once counted one instead of two, so the search could drop it in favour of
+  a single meeting and believe the two schedules equal. The comparison with
+  the exhaustive search found it on a problem it had never drawn before.
+- **An availability past the end of the day.** Somebody free until ten on a
+  day that ends at half past nine was interviewed until ten: an availability
+  was taken as it was given, instead of being cut to the hours of the day.
+  Both the search and `Check` did it, so the schedule looked valid.
+
+### Changed
+
+- Go 1.27.4.
+
 ## [0.9.1] - 2026-11-11 "Dupond et Dupont" 👬
 
 Dupond et Dupont, Thomson and Thompson in English, are the two detectives

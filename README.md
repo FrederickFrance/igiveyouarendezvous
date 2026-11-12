@@ -186,6 +186,7 @@ igiveyouarendezvous -date 2026-11-23 week3.yaml               # one day
 | `-timeout 1m` | maximum computing time |
 | `-patience 30s` | stop after this long without improvement (`0`: until the timeout) |
 | `-progress` | print every improvement |
+| `-progress-json` | print every improvement as one JSON object per line, for a program to read |
 | `-workers N` | searches run in parallel (default: the number of cores) |
 | `-seed N` | random seed |
 | `-list-objectives` | list the objectives |
@@ -544,6 +545,7 @@ example of a tour](example/tour.yaml).
 | `candidate-wait` | minimise the time candidates wait between two interviews of a day (useful when `max-gap` is not `0`) |
 | `earliest` | hold the interviews as early as possible in the period |
 | `day-end` | finish each day as early as possible: minimise the end of the last interview of the day, summed over the days with interviews |
+| `span` | be over as soon as possible: minimise the time from the start of the first interview to the end of the last one, over the whole period, nights included |
 
 The optimisation is **lexicographic**: a schedule is better than another if
 it does better on the first objective, or as well on the first and better on
@@ -582,7 +584,12 @@ recruiters, `complete-candidates` first those who need few.
 ## Following, stopping and resuming
 
 - **Following**: `-progress` prints the objectives at every improvement, with
-  the time elapsed.
+  the time elapsed. `-progress-json` prints the same thing as one JSON object
+  per line, for a program: `{"seconds":4.7,"iterations":812345,"scores":
+  [{"objective":"day-end","label":"day-end","value":1283,"unit":"minutes",
+  "direction":"min","proven":false}]}`. The demo draws its curves from it.
+  Both go to the standard error output, so the schedule on the standard
+  output stays clean.
 - **Stopping**: Ctrl+C stops the computation and prints the best schedule
   found so far, as if the timeout had been reached. A second Ctrl+C kills the
   program.

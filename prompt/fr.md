@@ -51,6 +51,14 @@ a des valeurs par défaut) :
   les autres dates. Sans `availability` : les horaires de `day`. Quelqu'un
   d'absent quelques jours : liste par date tous ses jours de présence ; les
   seuls jours d'absence, avec `none`, le rendraient absent toute la période.
+- **Une disponibilité est une contrainte, pas une décision.** Donne à une
+  personne ou à un lieu ses horaires réels, et laisse la recherche choisir le
+  jour et l'heure. Écrire une seule date et une fenêtre juste assez large pour
+  la durée (`duration: 75m` avec `availability: {2026-12-23: 11:00-12:30}`) ne
+  laisse rien à choisir : le fichier est alors un planning écrit à la main, que
+  le programme se contente de recopier. Ne mets une date que quand la date est
+  elle-même la contrainte (« le marché ferme le 23 », « elle n'est là que
+  lundi »).
 - `candidates.<nom>.meet` : les recruteurs à rencontrer, en liste dans
   n'importe quel ordre, `[Anne, Bruno]`, ou avec des rangs pour imposer un
   ordre, `{Anne: 1, Bruno: 2, Carl: X}` : le rang 1 d'abord, puis le

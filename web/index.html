@@ -55,6 +55,13 @@
       <label class="inline-field"><span data-i18n="notBefore"></span> <input type="date" id="not-before"></label>
     </details>
 
+    <details class="objectives" id="objectives-box">
+      <summary data-i18n="objectivesSummary"></summary>
+      <p class="help" data-i18n="objectivesHelp"></p>
+      <div class="objective-list" id="objective-list"></div>
+      <button type="button" id="objectives-reset" data-i18n="objectivesReset"></button>
+    </details>
+
     <div class="run">
       <label class="inline-field"><span data-i18n="from"></span> <input type="date" id="from"></label>
       <label class="inline-field"><span data-i18n="to"></span> <input type="date" id="to"></label>
@@ -75,6 +82,11 @@
     <h2 id="schedule-heading" data-i18n="scheduleHeading"></h2>
     <p class="status" id="status"></p>
     <div class="message error" id="error" hidden></div>
+    <details class="charts" id="charts-box" hidden>
+      <summary data-i18n="chartsSummary"></summary>
+      <p class="help" data-i18n="chartsHelp"></p>
+      <div class="chart-list" id="charts"></div>
+    </details>
     <ul class="notes" id="notes" hidden></ul>
     <p class="legend" id="legend" data-i18n="legend" hidden></p>
     <div class="board" id="board"></div>

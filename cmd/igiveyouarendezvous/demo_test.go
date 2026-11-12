@@ -24,7 +24,9 @@ func TestRunInMemory(t *testing.T) {
 	var bests, tables []string
 
 	output, written, err := runInMemory(t.Context(),
-		[]string{"-patience", "200ms", "-progress", "-out", "plan.json", "-rest", "rest.yaml", "-csv", "schedule.csv", "-csv-separator", ";"},
+		// the arguments of the demo, which draws its curves from the reports
+		[]string{"-patience", "200ms", "-progress-json", "-objectives", "complete-candidates,day-end",
+			"-out", "plan.json", "-rest", "rest.yaml", "-csv", "schedule.csv", "-csv-separator", ";"},
 		string(problem), nil, progress, func(text, plan, table string) {
 			require.Contains(t, text, "planned with the local search")
 			require.True(t, json.Valid([]byte(plan)), plan)
@@ -40,6 +42,23 @@ func TestRunInMemory(t *testing.T) {
 
 	require.Contains(t, output, "All meetings are planned.")
 	require.NotEmpty(t, lines, "the progress, line by line")
+
+	reports := 0
+
+	for _, line := range lines { // the notes and the reports share the output
+		if !strings.HasPrefix(line, "{") {
+			continue
+		}
+
+		var report progressLine
+		require.NoError(t, json.Unmarshal([]byte(line), &report), line)
+		require.Len(t, report.Scores, 2, "the two objectives asked for")
+		require.Equal(t, "complete-candidates", report.Scores[0].Objective)
+		reports++
+	}
+
+	require.NotZero(t, reports, "the progress of the search, as the demo reads it")
+
 	require.Contains(t, written["rest.yaml"], "candidates: {}")
 
 	var plan struct {

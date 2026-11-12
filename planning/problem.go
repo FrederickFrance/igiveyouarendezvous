@@ -595,8 +595,28 @@ func availability(own []Interval, o Options) []Interval {
 	}
 
 	merged, _ := normalize(own, o.days()) // already validated by check
+	merged = slices.DeleteFunc(merged, func(iv Interval) bool { return !o.open(iv.Day()) })
 
-	return slices.DeleteFunc(merged, func(iv Interval) bool { return !o.open(iv.Day()) })
+	// The hours of the day frame the period: somebody who says they are free
+	// until ten, on a day that ends at half past nine, is free until half
+	// past nine.
+	return intersect(merged, o.everyDay(o.Day))
+}
+
+// intersect returns the parts of the intervals of a that are also in one of
+// the intervals of b.
+func intersect(a, b []Interval) []Interval {
+	var out []Interval
+
+	for _, x := range a {
+		for _, y := range b {
+			if start, end := max(x.Start, y.Start), min(x.End, y.End); start < end {
+				out = append(out, Interval{Start: start, End: end})
+			}
+		}
+	}
+
+	return out
 }
 
 // jointAllowed tells whether the recruiters belong to a common joint group.

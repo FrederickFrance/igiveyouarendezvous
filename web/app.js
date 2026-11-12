@@ -14,6 +14,23 @@ const examples = [
   { file: "tour.yaml", en: "A tour of shoots in five cities", fr: "Une tournée de tournages dans cinq villes" },
 ];
 
+// The objectives, in the order of AllObjectives in the program: the names
+// are what the -objectives flag and the objectives key of the file take.
+const objectives = [
+  { name: "priorities", en: "Priorities first", fr: "Les priorités d'abord" },
+  { name: "urgency", en: "The most urgent first", fr: "Les plus urgents d'abord" },
+  { name: "complete-candidates", en: "Candidates who meet everybody", fr: "Candidats qui voient tout le monde" },
+  { name: "meetings", en: "Meetings held", fr: "Rencontres tenues" },
+  { name: "recruiters", en: "Fewest recruiters, day by day", fr: "Le moins de recruteurs, jour par jour" },
+  { name: "recruiter-half-days", en: "Fewest half-days for recruiters", fr: "Le moins de demi-journées pour les recruteurs" },
+  { name: "interviews", en: "Fewest interviews (group them)", fr: "Le moins d'entretiens (les grouper)" },
+  { name: "recruiter-span", en: "Shortest presence of recruiters", fr: "Présence des recruteurs la plus courte" },
+  { name: "candidate-wait", en: "Least waiting for candidates", fr: "Le moins d'attente pour les candidats" },
+  { name: "earliest", en: "Interviews as early as possible", fr: "Entretiens le plus tôt possible" },
+  { name: "day-end", en: "Each day ends as early as possible", fr: "Chaque journée finit le plus tôt possible" },
+  { name: "span", en: "Over as soon as possible", fr: "Tout fini le plus tôt possible" },
+];
+
 const texts = {
   en: {
     tagline: "You have everybody's availabilities: this makes the schedule, right here in your browser. Interviews, recordings, a colloquium, a tour…",
@@ -37,6 +54,13 @@ const texts = {
     timeLimit: "Search for at most",
     periodHelp: "Leave the dates empty to plan the period of the file. The search also stops when it no longer improves.",
     plan: "Plan",
+    objectivesSummary: "Choose what counts",
+    objectivesHelp: "Tick the objectives and order them: the first one decides, the next one only breaks ties, and so on. Nothing ticked leaves the objectives of the file, which is what you want in most cases; this is here for the cases of the literature, where the criterion is set by the problem.",
+    objectivesReset: "Back to the file",
+    objectiveUp: "Earlier",
+    objectiveDown: "Later",
+    chartsSummary: "How the objectives moved",
+    chartsHelp: "One curve per objective, as the search improved the schedule. A step means a better schedule was found; a flat line to the end means the search found nothing better.",
     stop: "Stop",
     scheduleHeading: "The schedule",
     loading: "Loading the planner…",
@@ -107,6 +131,13 @@ const texts = {
     timeLimit: "Chercher au plus",
     periodHelp: "Laissez les dates vides pour planifier la période du fichier. La recherche s'arrête aussi quand elle ne s'améliore plus.",
     plan: "Planifier",
+    objectivesSummary: "Choisir ce qui compte",
+    objectivesHelp: "Cochez les objectifs et ordonnez-les : le premier décide, le suivant ne sert qu'à départager, et ainsi de suite. Rien de coché laisse les objectifs du fichier, ce qui convient dans presque tous les cas ; ceci est là pour les cas de la littérature, où le critère est imposé par le problème.",
+    objectivesReset: "Revenir au fichier",
+    objectiveUp: "Plus tôt",
+    objectiveDown: "Plus tard",
+    chartsSummary: "Comment les objectifs ont évolué",
+    chartsHelp: "Une courbe par objectif, au fil des améliorations. Une marche signifie qu'un meilleur planning a été trouvé ; une ligne plate jusqu'au bout signifie que la recherche n'a rien trouvé de mieux.",
     stop: "Arrêter",
     scheduleHeading: "Le planning",
     loading: "Chargement du planificateur…",
@@ -198,6 +229,10 @@ let currentExample = store.get("igy.example") || examples[0].file;
 let loadedExample = ""; // the example as loaded, to follow the language while untouched
 let loading = 0; // the last example asked for: an earlier one that arrives late is ignored
 let downloadURLs = [];
+let chosen = readChosen(); // the objectives picked here, in order; empty: the file decides
+let curve = []; // the progress of the run: {seconds, scores}, oldest first
+let drawing = 0; // the last time the charts were drawn, to draw them at most twice a second
+let ranFor = 0; // the seconds the search lasted, to scale the curves on the whole of it
 
 // ---------- texts and language
 
@@ -211,6 +246,8 @@ function applyTexts() {
     button.setAttribute("aria-pressed", String(button.dataset.lang === lang));
   }
   renderExamples();
+  renderObjectives();
+  renderCharts();
   renderStatus();
   updateButtons();
   if (best) {
@@ -299,6 +336,181 @@ function selectLine(editor, n) {
   editor.scrollTop = Math.max(0, (n - 4) * lineHeight);
 }
 
+// ---------- the objectives chosen here
+
+function readChosen() {
+  const saved = (store.get("igy.objectives") || "").split(",").filter((name) => name !== "");
+
+  return saved.filter((name) => objectives.some((obj) => obj.name === name));
+}
+
+function setChosen(next) {
+  chosen = next;
+  store.set("igy.objectives", chosen.join(","));
+  renderObjectives();
+}
+
+// renderObjectives lists the objectives chosen here first, in their order,
+// then the others: a checkbox each, and two buttons to move a chosen one.
+function renderObjectives() {
+  const rest = objectives.filter((obj) => !chosen.includes(obj.name)).map((obj) => obj.name);
+  const rows = [...chosen, ...rest].map((name, i) => {
+    const obj = objectives.find((o) => o.name === name);
+    const rank = chosen.indexOf(name);
+    const row = document.createElement("div");
+    row.className = rank < 0 ? "objective" : "objective is-chosen";
+
+    const check = document.createElement("label");
+    check.className = "check";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = rank >= 0;
+    box.addEventListener("change", () =>
+      setChosen(box.checked ? [...chosen, name] : chosen.filter((c) => c !== name)),
+    );
+    const text = document.createElement("span");
+    text.textContent = rank < 0 ? obj[lang] : `${rank + 1}. ${obj[lang]}`;
+    const code = document.createElement("code");
+    code.textContent = name;
+    check.append(box, text, code);
+    row.append(check);
+
+    if (rank >= 0) {
+      row.append(
+        moveButton("\u25B2", t("objectiveUp"), rank, rank - 1),
+        moveButton("\u25BC", t("objectiveDown"), rank, rank + 1),
+      );
+    }
+
+    return row;
+  });
+
+  $("objective-list").replaceChildren(...rows);
+}
+
+function moveButton(sign, title, from, to) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "move";
+  button.textContent = sign;
+  button.title = title;
+  button.setAttribute("aria-label", title);
+  button.disabled = to < 0 || to >= chosen.length;
+  button.addEventListener("click", () => {
+    const next = [...chosen];
+    [next[from], next[to]] = [next[to], next[from]];
+    setChosen(next);
+  });
+
+  return button;
+}
+
+// ---------- the curves of the objectives
+
+// scoreValue formats a value as the program would: hours and minutes for a
+// duration, the count as it is otherwise.
+function scoreValue(score) {
+  if (score.unit !== "minutes") {
+    return String(score.value);
+  }
+
+  const hours = Math.floor(score.value / 60);
+  const minutes = String(score.value % 60).padStart(2, "0");
+
+  return hours === 0 ? `${score.value} min` : `${hours}h${minutes}`;
+}
+
+// onProgress keeps one report of the search and refreshes the page.
+function onProgress(report) {
+  curve.push(report);
+  progressText = report.scores
+    .slice(0, 3)
+    .map((score) => `${score.label} ${scoreValue(score)}`)
+    .join(", ");
+  renderStatus();
+
+  const now = performance.now();
+  if (now - drawing > 500) {
+    drawing = now;
+    renderCharts();
+  }
+}
+
+function renderCharts() {
+  const box = $("charts-box");
+  if (curve.length === 0) {
+    box.hidden = true;
+    $("charts").replaceChildren();
+
+    return;
+  }
+
+  box.hidden = false;
+  $("charts").replaceChildren(
+    ...curve[curve.length - 1].scores.map((score, i) => chart(i, score)),
+  );
+}
+
+// chart draws the values of criterion i as a step line: time from left to
+// right, the value up, each step an improvement.
+function chart(i, last) {
+  const width = 300;
+  const height = 64;
+  const points = curve.map((report) => ({ x: report.seconds, y: report.scores[i].value }));
+  // The whole of the search, so that a flat line to the right really means
+  // that nothing better was found in all that time.
+  const until = Math.max(points[points.length - 1].x, ranFor || (performance.now() - startedAt) / 1000, 1);
+  const low = Math.min(...points.map((p) => p.y));
+  const high = Math.max(...points.map((p) => p.y));
+  const range = high - low;
+  const at = (p) => [
+    (p.x / until) * (width - 2) + 1,
+    range === 0 ? height / 2 : height - 10 - ((p.y - low) / range) * (height - 22),
+  ];
+
+  let path = "";
+  let previous = null;
+
+  for (const point of points) {
+    const [x, y] = at(point);
+    if (previous === null) {
+      path = `M ${x.toFixed(1)} ${y.toFixed(1)}`;
+    } else {
+      path += ` L ${x.toFixed(1)} ${previous.toFixed(1)} L ${x.toFixed(1)} ${y.toFixed(1)}`;
+    }
+    previous = y;
+  }
+
+  const [, lastY] = at(points[points.length - 1]);
+  path += ` L ${width - 1} ${lastY.toFixed(1)}`;
+
+  const figure = document.createElement("figure");
+  figure.className = "chart";
+
+  const caption = document.createElement("figcaption");
+  const name = document.createElement("span");
+  name.className = "chart-name";
+  name.textContent = `${last.label} ${last.direction === "max" ? "\u2197" : "\u2198"}`;
+  const value = document.createElement("strong");
+  value.textContent = scoreValue(last);
+  caption.append(name, value);
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("preserveAspectRatio", "none");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", `${last.label}: ${scoreValue(last)}`);
+
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  line.setAttribute("d", path);
+  line.setAttribute("class", "chart-line");
+  svg.append(line);
+
+  figure.append(caption, svg);
+
+  return figure;
+}
+
 // ---------- the worker
 
 function startWorker() {
@@ -343,6 +555,16 @@ function onMessage(event) {
 // onLine handles a line printed on the standard error output: a progress
 // line ("   4.7 s  priority 1 56, meetings 96, ...") or a note.
 function onLine(line) {
+  if (line.startsWith("{")) {
+    try {
+      onProgress(JSON.parse(line));
+
+      return;
+    } catch {
+      // not a report after all: shown as a note below
+    }
+  }
+
   const progress = /^\s*\d+(?:\.\d+)?\s+s\s{2}(.*)$/.exec(line);
   if (progress) {
     progressText = progress[1].split(", ").slice(0, 3).join(", ");
@@ -364,14 +586,22 @@ function plan() {
   clearResult();
   running = true;
   progressText = "";
+  curve = [];
+  drawing = 0;
+  ranFor = 0;
+  renderCharts();
   startedAt = performance.now();
 
   const limit = Number($("time-limit").value);
   const patience = Math.min(30, Math.max(5, Math.round(limit / 6)));
   // The table separates its columns as a spreadsheet of the language expects:
   // Excel in French reads semicolons.
-  const args = ["-timeout", `${limit}s`, "-patience", `${patience}s`, "-progress", "-out", "plan.json", "-rest", "rest.yaml",
+  const args = ["-timeout", `${limit}s`, "-patience", `${patience}s`, "-progress-json", "-out", "plan.json", "-rest", "rest.yaml",
     "-csv", "schedule.csv", "-csv-separator", lang === "fr" ? ";" : ","];
+
+  if (chosen.length > 0) {
+    args.push("-objectives", chosen.join(","));
+  }
 
   if ($("from").value) {
     args.push("-from", $("from").value);
@@ -427,7 +657,9 @@ function finish(result) {
     $("output-box").open = true;
   }
 
+  ranFor = (performance.now() - startedAt) / 1000;
   setStatus("done", elapsed());
+  renderCharts();
   updateButtons();
 }
 
@@ -882,6 +1114,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     $("fix-all").checked = false;
     $("not-before").value = "";
   });
+  $("objectives-reset").addEventListener("click", () => setChosen([]));
   $("import-plan").addEventListener("change", (event) => importPlan(event.target));
   $("copy-link").addEventListener("click", copyCaseLink);
   $("download-problem").addEventListener("click", downloadProblem);

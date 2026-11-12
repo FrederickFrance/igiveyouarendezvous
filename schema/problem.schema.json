@@ -164,7 +164,8 @@
           "recruiter-span",
           "candidate-wait",
           "earliest",
-          "day-end"
+          "day-end",
+          "span"
         ]
       }
     },

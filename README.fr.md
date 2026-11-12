@@ -195,6 +195,7 @@ igiveyouarendezvous -date 2026-11-23 semaine3.yaml             # un seul jour
 | `-timeout 1m` | temps de calcul maximal |
 | `-patience 30s` | arrêt après ce temps sans amélioration (`0` : jusqu'au timeout) |
 | `-progress` | affiche chaque amélioration |
+| `-progress-json` | affiche chaque amélioration en un objet JSON par ligne, pour un programme |
 | `-workers N` | recherches lancées en parallèle (par défaut : le nombre de cœurs) |
 | `-seed N` | graine aléatoire |
 | `-list-objectives` | liste les objectifs |
@@ -565,6 +566,7 @@ tournée](example/fr/tour.yaml).
 | `candidate-wait` | minimise l'attente des candidats entre deux entretiens d'une même journée (utile quand `max-gap` n'est pas `0`) |
 | `earliest` | place les entretiens le plus tôt possible dans la période |
 | `day-end` | finit chaque journée le plus tôt possible : réduit la fin du dernier entretien du jour, additionnée sur les jours avec entretiens |
+| `span` | termine le plus tôt possible : minimise le temps entre le début du premier entretien et la fin du dernier, sur toute la période, nuits comprises |
 
 L'optimisation est **lexicographique** : un planning est meilleur qu'un autre
 s'il fait mieux sur le premier objectif, ou aussi bien sur le premier et
@@ -605,7 +607,12 @@ qui en voient peu.
 ## Suivre, arrêter et reprendre
 
 - **Suivre** : `-progress` affiche les objectifs à chaque amélioration, avec
-  le temps écoulé.
+  le temps écoulé. `-progress-json` affiche la même chose en un objet JSON
+  par ligne, pour un programme : `{"seconds":4.7,"iterations":812345,
+  "scores":[{"objective":"day-end","label":"day-end","value":1283,
+  "unit":"minutes","direction":"min","proven":false}]}`. C'est ce que lit la
+  démo pour tracer ses courbes. Les deux vont sur la sortie d'erreur, donc le
+  planning de la sortie standard reste propre.
 - **Arrêter** : Ctrl+C arrête le calcul et affiche le meilleur planning trouvé
   jusque-là, comme si le timeout était atteint. Un second Ctrl+C tue le
   programme.
