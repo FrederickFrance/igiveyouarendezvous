@@ -7,7 +7,7 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
-## [0.10.0] - unreleased "Thomas Anderson" 💊
+## [0.10.0] - 2026-11-12 "Thomas Anderson" 💊
 
 Thomas Anderson is Neo's name before he chooses. The red pill or the blue
 one: here you choose what the schedule is optimised for.
