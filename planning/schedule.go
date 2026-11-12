@@ -500,6 +500,40 @@ func Evaluate(p *Problem, opts Options, s *Schedule) ([]Score, error) {
 	return scores, nil
 }
 
+// dayEndMinutes is the end of the last interview of each day, as a time of
+// day, added over the days that hold interviews.
+func dayEndMinutes(s *Schedule) int {
+	last := map[int]time.Duration{} // by day, as a time of day
+	for _, iv := range s.Interviews {
+		d := dayOf(iv.Start)
+		last[d] = max(last[d], iv.End-time.Duration(d)*DayLength)
+	}
+
+	total := time.Duration(0)
+	for _, end := range last {
+		total += end
+	}
+
+	return int(total / time.Minute)
+}
+
+// spanMinutes is the time from the start of the first interview to the end
+// of the last one, over the whole period, nights included.
+func spanMinutes(s *Schedule) int {
+	if len(s.Interviews) == 0 {
+		return 0
+	}
+
+	first, last := s.Interviews[0].Start, time.Duration(0)
+
+	for _, iv := range s.Interviews {
+		first = min(first, iv.Start)
+		last = max(last, iv.End)
+	}
+
+	return int((last - first) / time.Minute)
+}
+
 func evaluate(p *Problem, o Options, s *Schedule, cr criterion, held []bool) int {
 	switch obj := cr.obj; obj {
 	case MinRecruiters, MinRecruiterHalfDays: // by recruiter and day
@@ -573,19 +607,10 @@ func evaluate(p *Problem, o Options, s *Schedule, cr criterion, held []bool) int
 		}
 
 		return int(total / time.Minute)
+	case MinSpan:
+		return spanMinutes(s)
 	case MinDayEnds:
-		last := map[int]time.Duration{} // by day, as a time of day
-		for _, iv := range s.Interviews {
-			d := dayOf(iv.Start)
-			last[d] = max(last[d], iv.End-time.Duration(d)*DayLength)
-		}
-
-		total := time.Duration(0)
-		for _, end := range last {
-			total += end
-		}
-
-		return int(total / time.Minute)
+		return dayEndMinutes(s)
 	}
 
 	return 0

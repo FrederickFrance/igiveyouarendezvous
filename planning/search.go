@@ -206,13 +206,14 @@ type solution struct {
 }
 
 type searcher struct {
-	in     *instance
-	rnd    *rand.Rand
-	crit   []criterion
-	spanAt int // index of MinRecruiterSpan in crit, or -1
-	usedAt int // index of MinRecruiters in crit, or -1
-	halfAt int // index of MinRecruiterHalfDays in crit, or -1
-	endAt  int // index of MinDayEnds in crit, or -1
+	in      *instance
+	rnd     *rand.Rand
+	crit    []criterion
+	spanAt  int // index of MinRecruiterSpan in crit, or -1
+	usedAt  int // index of MinRecruiters in crit, or -1
+	halfAt  int // index of MinRecruiterHalfDays in crit, or -1
+	endAt   int // index of MinDayEnds in crit, or -1
+	wholeAt int // index of MinSpan in crit, or -1
 	// completeFirst: complete candidates rank before meetings.
 	completeFirst bool
 	completeAt    int // index of the first criterion counting complete candidates, or -1
@@ -228,10 +229,13 @@ type searcher struct {
 	before    []uint64  // [option]: parts of its candidate to hold before it (ranks, identical meetings)
 	fewest    [][]int8  // [candidate][mask]: fewest interviews holding the parts of mask
 	optMask   []uint64  // parts of each option
-	fullMask  []uint64  // every part of each candidate
-	possible  []uint64  // parts of each candidate that some option holds
-	repeats   []bool    // [candidate]: meets a recruiter with a gap in two parts
-	bound     []int     // obvious bound of each objective, in score units
+	// held[candidate][part]: the requests that part holds, which is more
+	// than one for a meeting (Request.Meeting): what MaxMeetings counts.
+	held     [][]int8
+	fullMask []uint64 // every part of each candidate
+	possible []uint64 // parts of each candidate that some option holds
+	repeats  []bool   // [candidate]: meets a recruiter with a gap in two parts
+	bound    []int    // obvious bound of each objective, in score units
 	// sessionEnd[t]: the slot after the end of the session holding slot t.
 	sessionEnd []int
 	// halves: the slots of the morning of a day, offsets [0, halves[0]), and
@@ -254,6 +258,9 @@ type searcher struct {
 	// dayEnd[d]: the end of the last interview of day d, as a time of day
 	// in minutes; 0 without interviews.
 	dayEnd []int
+	// wholeLo, wholeHi: the start of the first interview and the end of the
+	// last one over the period, in minutes; wholeLo is -1 without any.
+	wholeLo, wholeHi int
 
 	plans   [][]placed
 	contrib [][]int // score contribution of each candidate
@@ -283,6 +290,7 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 		usedAt:    indexOf(in.crit, MinRecruiters),
 		halfAt:    indexOf(in.crit, MinRecruiterHalfDays),
 		endAt:     indexOf(in.crit, MinDayEnds),
+		wholeAt:   indexOf(in.crit, MinSpan),
 		pinned:    make([]bool, nC),
 		optionsOf: make([][]int, nC),
 		holding:   make([][][]int, nC),
@@ -290,6 +298,7 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 		before:    make([]uint64, len(in.options)),
 		optMask:   make([]uint64, len(in.options)),
 		fullMask:  make([]uint64, nC),
+		held:      make([][]int8, nC),
 		possible:  make([]uint64, nC),
 		days:      in.o.days(),
 		perDay:    in.g.perDay,
@@ -300,6 +309,7 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 		span:      make([]int, nU),
 		half:      make([][2]bool, nU),
 		dayEnd:    make([]int, in.o.days()),
+		wholeLo:   -1,
 		plans:     make([][]placed, nC),
 		contrib:   make([][]int, nC),
 		total:     make([]int, len(in.crit)),
@@ -314,6 +324,11 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 
 		s.fullMask[c] = 1<<parts[c] - 1
 		s.contrib[c] = make([]int, len(s.crit))
+		s.held[c] = make([]int8, parts[c])
+
+		for _, r := range in.requestsOf[c] {
+			s.held[c][part[r]]++
+		}
 	}
 
 	for o, opt := range in.options {
@@ -410,7 +425,7 @@ func (s *searcher) bounds() []int {
 
 	for c, full := range s.fullMask {
 		if full != 0 && s.possible[c] == full {
-			meetings += bits.OnesCount64(s.possible[c])
+			meetings += s.meetings(c, s.possible[c])
 		}
 	}
 
@@ -431,6 +446,19 @@ func (s *searcher) bounds() []int {
 	}
 
 	return b
+}
+
+// meetings counts the requests the parts of mask hold: a meeting holds
+// several, so counting the parts would rank a schedule holding one meeting
+// of two requests below one holding two single requests.
+func (s *searcher) meetings(c int, mask uint64) int {
+	n := 0
+
+	for m := mask; m != 0; m &= m - 1 {
+		n += int(s.held[c][bits.TrailingZeros64(m)])
+	}
+
+	return n
 }
 
 // proven tells, for each objective, whether score reaches its bound while
@@ -1502,16 +1530,17 @@ func shareAny(a, b []int) bool {
 // node is a partial placement of a candidate: some interviews, in the order
 // of time.
 type node struct {
-	mask      uint64 // requests held
-	blocks    int
-	start     int // start of the last interview
-	end       int // end of the last interview (exclusive)
-	wait      int // slots between the interviews of a same day
-	endSum    int // sum of the end times, in minutes
-	spanDelta int // increase of the recruiters' presence
-	endDelta  int // increase of the ends of the days, in minutes
-	usedDelta int // recruiters' days that had no interview
-	halfDelta int // recruiters' half-days that had no interview
+	mask       uint64 // requests held
+	blocks     int
+	start      int // start of the last interview
+	end        int // end of the last interview (exclusive)
+	wait       int // slots between the interviews of a same day
+	endSum     int // sum of the end times, in minutes
+	spanDelta  int // increase of the recruiters' presence
+	endDelta   int // increase of the ends of the days, in minutes
+	wholeDelta int // increase of the span of the whole period, in minutes
+	usedDelta  int // recruiters' days that had no interview
+	halfDelta  int // recruiters' half-days that had no interview
 }
 
 // unit returns the unit of recruiter h on the day of slot t.
@@ -1602,6 +1631,7 @@ func (s *searcher) bestPlacement(c int) []placed {
 		offset := t - s.in.day[t]*s.perDay
 
 		n.endDelta += s.endIncrease(n, t, opt.length)
+		n.wholeDelta += s.wholeIncrease(t, opt.length)
 
 		for _, h := range opt.recruiters {
 			u := s.unit(h, t)
@@ -1753,13 +1783,15 @@ func (s *searcher) vector(dst []int, c int, n node) {
 				dst[i] = -1
 			}
 		case MaxMeetings:
-			dst[i] = -bits.OnesCount64(n.mask)
+			dst[i] = -s.meetings(c, n.mask)
 		case MinInterviews:
 			dst[i] = n.blocks
 		case MinRecruiterSpan:
 			dst[i] = n.spanDelta
 		case MinDayEnds:
 			dst[i] = n.endDelta
+		case MinSpan:
+			dst[i] = n.wholeDelta
 		case MinCandidateWait:
 			dst[i] = n.wait
 		case MinEndTimes:
@@ -1787,6 +1819,23 @@ func (s *searcher) endIncrease(n node, t, length int) int {
 	}
 
 	return increase + max(0, s.clockEnd(t, length)-dayEnd)
+}
+
+// wholeIncrease is the growth of the span of the whole period, in minutes,
+// if an interview of length slots is held at slot t. It compares with the
+// schedule as it stands, so the interviews of the node being built count one
+// by one: enough to steer the insertion, while score has the exact value.
+func (s *searcher) wholeIncrease(t, length int) int {
+	if s.wholeAt < 0 {
+		return 0
+	}
+
+	from, to := s.in.minute[t], s.endMinutes(t, length)
+	if s.wholeLo < 0 {
+		return to - from
+	}
+
+	return max(s.wholeHi, to) - min(s.wholeLo, from) - (s.wholeHi - s.wholeLo)
 }
 
 // spanIncrease is the growth of the presence of unit u if busy in [t, end).
@@ -1955,6 +2004,28 @@ func (s *searcher) refresh(u int) {
 
 		s.dayEnd[d] = end
 	}
+
+	if s.wholeAt >= 0 {
+		s.rebound()
+	}
+}
+
+// rebound recomputes the start of the first interview and the end of the
+// last one over the whole period, for MinSpan.
+func (s *searcher) rebound() {
+	s.wholeLo, s.wholeHi = -1, -1
+
+	for u, first := range s.first {
+		if first < 0 {
+			continue
+		}
+
+		if s.wholeLo < 0 || s.in.minute[first] < s.wholeLo {
+			s.wholeLo = s.in.minute[first]
+		}
+
+		s.wholeHi = max(s.wholeHi, s.endMinutes(s.last[u], 1))
+	}
 }
 
 // mark sets or clears the busy slots of plan, of candidate c, and returns
@@ -2008,7 +2079,7 @@ func (s *searcher) contribution(dst []int, c int, plan []placed) {
 
 	s.vector(dst, c, n)
 
-	for _, i := range []int{s.spanAt, s.usedAt, s.halfAt, s.endAt} {
+	for _, i := range []int{s.spanAt, s.usedAt, s.halfAt, s.endAt, s.wholeAt} {
 		if i >= 0 {
 			dst[i] = 0 // counted per recruiter or per day, by score
 		}
@@ -2037,6 +2108,10 @@ func (s *searcher) score() []int {
 		for _, end := range s.dayEnd {
 			score[s.endAt] += end
 		}
+	}
+
+	if s.wholeAt >= 0 && s.wholeLo >= 0 {
+		score[s.wholeAt] += s.wholeHi - s.wholeLo
 	}
 
 	return score

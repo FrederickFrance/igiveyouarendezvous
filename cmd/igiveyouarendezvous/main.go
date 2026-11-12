@@ -89,7 +89,8 @@ type options struct {
 	timeout, patience            time.Duration
 	seed                         uint64
 	workers                      int
-	progress, list, fixAll       bool
+	progress, progressJSON       bool
+	list, fixAll                 bool
 	problem                      string // the problem file, or "" for stdin
 	files                        files
 }
@@ -109,6 +110,7 @@ func parseFlags(args []string, stderr io.Writer) (*options, error) {
 	fs.Uint64Var(&o.seed, "seed", 1, "search: random seed, to reproduce a result")
 	fs.IntVar(&o.workers, "workers", runtime.NumCPU(), "search: number of searches run in parallel")
 	fs.BoolVar(&o.progress, "progress", false, "search: print every improvement")
+	fs.BoolVar(&o.progressJSON, "progress-json", false, "search: print every improvement as one JSON object per line, for a program to read")
 	fs.StringVar(&o.restPath, "rest", "", "write the problem file of what is left, without the candidates served, to this file (.yaml or .json)")
 	fs.StringVar(&o.outPath, "out", "", "write the schedule to this plan file (.yaml or .json), to resume from with -start")
 	fs.StringVar(&o.startPath, "start", "", "resume from the schedule of this plan file (written by -out)")
@@ -411,7 +413,17 @@ func loadStart(o *options, p *planning.Problem, opts planning.Options, pe period
 func searchOptions(o *options, start *planning.Schedule, stderr io.Writer) planning.SearchOptions {
 	so := planning.SearchOptions{Seed: o.seed, Patience: o.patience, Workers: o.workers, Start: start}
 
-	if o.progress {
+	switch {
+	case o.progressJSON:
+		so.Progress = func(pr planning.Progress) {
+			line, err := progressJSON(pr)
+			if err != nil { // nothing sensible to do on failure: the search goes on
+				return
+			}
+
+			fmt.Fprintln(stderr, line)
+		}
+	case o.progress:
 		so.Progress = func(pr planning.Progress) {
 			fmt.Fprintf(stderr, "%7.1f s  %s\n", pr.Elapsed.Seconds(), progressText(pr.Scores))
 		}

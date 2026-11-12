@@ -50,6 +50,14 @@ has defaults):
   Without `availability`: the hours of `day`. Somebody absent on a few
   days: list by date every day they are present; the absent days alone,
   with `none`, would make them absent for the whole period.
+- **An availability is a constraint, not a decision.** Give a person or a
+  place the hours they are really open, and let the search choose the day and
+  the time. Writing one date and a window just wide enough for the length
+  (`duration: 75m` with `availability: {2026-12-23: 11:00-12:30}`) leaves the
+  search nothing to choose: the file is then a schedule written by hand, and
+  the program only copies it back. Write a date only when the date is itself
+  the constraint ("the market closes on the 23rd", "she is only there on
+  Monday").
 - `candidates.<name>.meet`: the recruiters to meet, as a list in any order,
   `[Ann, Bob]`, or with ranks to set an order, `{Ann: 1, Bob: 2, Carl: X}`:
   rank 1 first, then rank 2…, `X` any time. A meeting may have its own
