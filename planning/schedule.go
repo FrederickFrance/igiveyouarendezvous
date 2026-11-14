@@ -640,21 +640,35 @@ func evaluate(p *Problem, o Options, s *Schedule, cr criterion, held []bool) int
 	return 0
 }
 
-// completeCandidates tells which candidates have all their requests held.
+// completeCandidates tells which candidates have all their mandatory
+// requests held. A guest invited with Request.Optional and unable to come
+// does not make the candidate incomplete — that is the whole point of the
+// guest — so only the requests that are not optional are counted, exactly
+// as checkCandidates counts them for "all or nothing". A candidate holding
+// nothing is never complete, which matters for one whose every request is
+// optional.
 func completeCandidates(p *Problem, held []bool) []bool {
 	missing := make([]int, len(p.Candidates))
+	got := make([]int, len(p.Candidates))
 	asked := make([]bool, len(p.Candidates))
 
 	for r, req := range p.Requests {
 		asked[req.Candidate] = true
-		if !held[r] {
+
+		if held[r] {
+			got[req.Candidate]++
+
+			continue
+		}
+
+		if !req.Optional {
 			missing[req.Candidate]++
 		}
 	}
 
 	complete := make([]bool, len(p.Candidates))
 	for c := range complete {
-		complete[c] = asked[c] && missing[c] == 0
+		complete[c] = asked[c] && missing[c] == 0 && got[c] > 0
 	}
 
 	return complete

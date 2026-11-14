@@ -89,6 +89,16 @@ she can — and about saying out loud what a file does not add up to.
   eol=lf`), so that `gofmt -l .` on a clone made with `core.autocrlf=true`
   no longer lists every file.
 
+### Fixed
+
+- **A guest who could not come lost the candidate.** The search held the
+  visit without them, as `optional` asks, but the score of the schedule
+  counted every request as mandatory: a candidate whose guest stayed at
+  home was counted incomplete, and so lost from the tallies of candidates
+  served and from its priority. The engine and the scoreboard disagreed,
+  and the scoreboard is what a user reads. Found by the build server on
+  `example/trip.yaml`, where the friend cannot come on the second day.
+
 ## [0.10.0] - 2026-11-12 "Thomas Anderson" 💊
 
 Thomas Anderson is Neo's name before he chooses. The red pill or the blue

@@ -91,3 +91,40 @@ func TestACandidateOfGuestsOnlyIsABonus(t *testing.T) {
 	require.Equal(t, 0, s.Interviews[0].Candidate, "the hour goes to the one that counts")
 	require.Equal(t, 1, s.Scores[0].Value, "the bonus candidate is no longer counted as complete")
 }
+
+// The visit counts as served when the guest could not come. The search knew
+// it — it held the visit — but the score of the schedule counted every
+// request as mandatory, so a guest who stayed at home turned a complete
+// candidate into an incomplete one and lost it from the tallies and from
+// every priority. The engine and the scoreboard disagreed, and the
+// scoreboard is what a user reads.
+func TestAnAbsentGuestLeavesTheCandidateComplete(t *testing.T) {
+	t.Parallel()
+
+	p := &planning.Problem{
+		Recruiters: []planning.Recruiter{
+			{Name: "Market"},
+			{Name: "Annick", Availability: []planning.Interval{}}, // never free
+		},
+		Candidates: []planning.Candidate{{Name: "Christmas market", Together: true, Duration: time.Hour}},
+		Requests: []planning.Request{
+			{Candidate: 0, Recruiter: 0},
+			{Candidate: 0, Recruiter: 1, Optional: true},
+		},
+	}
+
+	o := planning.Options{
+		Day: []planning.Interval{{Start: clock(14, 0), End: clock(18, 0)}},
+		Objectives: []planning.Objective{
+			planning.MaxCompleteCandidates, planning.MaxPriorities, planning.MaxMeetings,
+		},
+	}
+
+	s := searchPeriod(t, p, o)
+	require.Len(t, s.Interviews, 1, "the market happens without her")
+
+	require.Equal(t, 1, s.Scores[0].Value, "complete-candidates: the visit is served")
+	require.Equal(t, 1, s.Scores[1].Value, "priorities: and it counts for its priority")
+	require.Equal(t, 1, s.Scores[2].Value, "meetings: one of the two, the guest being the other")
+	require.Len(t, s.Unscheduled, 1, "her own request is still reported as not held")
+}

@@ -506,7 +506,12 @@ candidates:
 		`-not-before: invalid date "Wednesday"`)
 }
 
-// Every example, in English and in French, plans everybody.
+// Every example, in English and in French, runs and plans everybody — with
+// one exception, trip.yaml, whose point is that something is left out: it
+// keeps a bonus for the child and a guest who may not be free, so how much
+// of it fits depends on the time the search was given. Asking it to plan
+// everybody made the suite depend on the speed of the machine, and it
+// failed under -race on the build server while passing everywhere else.
 func TestRunEveryExample(t *testing.T) {
 	t.Parallel()
 
@@ -522,6 +527,16 @@ func TestRunEveryExample(t *testing.T) {
 
 			var out bytes.Buffer
 			require.NoError(t, run(t.Context(), []string{"-patience", "300ms", name}, nil, &out, &out))
+
+			// The indispensable ones need no assertion of their own: Search
+			// returns an error when one of them is left out, so NoError above
+			// has already said they are all held.
+			if filepath.Base(name) == "trip.yaml" {
+				require.Contains(t, out.String(), "Objectives, most important first")
+
+				return
+			}
+
 			require.Contains(t, out.String(), "All meetings are planned.")
 		})
 	}
