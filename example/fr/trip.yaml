@@ -1,0 +1,149 @@
+# yaml-language-server: $schema=../../schema/problem.schema.json
+#
+# Pas seulement des entretiens : deux jours de voyage en train, avec un
+# enfant. Le modèle est retourné, et c'est tout l'astuce :
+#
+#   - le « recruteur » Nous, c'est la famille : elle ne peut être qu'à un
+#     seul endroit à la fois, et ses disponibilités sont ses journées ;
+#   - chaque lieu est un « recruteur » lui aussi, dont les disponibilités
+#     sont ses heures d'ouverture, jour par jour ;
+#   - chaque visite est un « candidat » : une rencontre entre Nous et un lieu.
+#
+# Trois choses portent la journée, et chacune a sa clef :
+#
+#   - required : l'hôtel et les trains. Ils ne sont aucun exploit et la
+#     journée s'écroule sans eux, donc le programme refuse un planning qui
+#     les abandonne au lieu de vous envoyer tranquillement au marché avec
+#     les valises.
+#   - optional : une amie qui se joint si elle peut. La visite ne l'attend
+#     jamais et ne dépend jamais d'elle.
+#   - priority : ce qu'on préfère voir, et ce qui est un bonus.
+
+from: 2026-12-21
+to: 2026-12-22
+day: 08:00-21:00
+max-gap: unlimited
+objectives: [priorities, recruiter-span, day-end]
+
+# La marche dans la ville, et le tram jusqu'à l'hôtel. Attention : un trajet
+# par défaut relie tous les couples de lieux, donc deux lieux ne seraient
+# jamais à plus de deux fois le défaut. Ici tous les couples sont donnés.
+travel:
+  default: 12m
+  journeys:
+    - [Hôtel, Vieille ville, 25m]
+    - [Hôtel, Gare, 20m]
+    - [Gare, Vieille ville, 12m]
+    - [Vieille ville, Ville voisine, 72h] # jamais à pied : c'est le train qui traverse
+    - [Hôtel, Ville voisine, 72h]
+    - [Gare, Ville voisine, 55m]
+
+recruiters:
+  Nous:
+    min-gap: 20m # d'un lieu au suivant, au pas d'un enfant
+    availability:
+      2026-12-21: 12:40-21:00 # le train arrive à 12:37
+      2026-12-22: 08:00-18:30
+
+  Amie: # à remplacer par ses vraies disponibilités
+    availability:
+      2026-12-21: 15:00-21:00
+
+  Réception:
+    availability:
+      2026-12-21: 13:00-21:00
+      2026-12-22: 08:00-10:00
+
+  Marché de Noël:
+    availability:
+      2026-12-21: 11:00-20:00
+      2026-12-22: 11:00-18:00
+  Cathédrale:
+    availability:
+      2026-12-21: 09:30-17:45
+      2026-12-22: 09:30-17:45
+  Rues illuminées:
+    availability: # les illuminations : le soir
+      2026-12-21: 16:30-20:30
+  Musée du jouet:
+    availability:
+      2026-12-22: 10:00-18:00
+
+  # Le train, sous la forme de son horaire : une fenêtre de la longueur du
+  # trajet, et rien d'autre n'y tient.
+  Train aller:
+    availability: {2026-12-22: 09:10-10:15}
+  Train retour:
+    availability: {2026-12-22: 17:00-18:10}
+
+  Marché de la ville voisine:
+    availability: {2026-12-22: 11:00-18:00}
+
+candidates:
+  # ---- ce autour de quoi la journée se construit : aucun intérêt, et pas de journée sans
+  Bagages déposés à l'hôtel:
+    meet: [Nous, Réception]
+    together: true
+    duration: 30m
+    required: true
+    place: Hôtel
+    availability: {2026-12-21: 13:00-15:00}
+  Retour à l'hôtel pour la nuit:
+    meet: [Nous, Réception]
+    together: true
+    duration: 15m
+    required: true
+    place: Hôtel
+    availability: {2026-12-21: 19:30-21:00}
+  Chambre rendue:
+    meet: [Nous, Réception]
+    together: true
+    duration: 20m
+    required: true
+    place: Hôtel
+    availability: {2026-12-22: 08:00-09:00}
+  Train vers la ville voisine:
+    meet: [Nous, Train aller]
+    together: true
+    duration: 1h05 # dix minutes d'avance, puis le trajet
+    required: true
+    place: Gare
+  Train du retour:
+    meet: [Nous, Train retour]
+    together: true
+    duration: 1h10
+    required: true
+    place: Gare
+
+  # ---- les visites. L'amie se joint à deux d'entre elles si elle peut.
+  Le marché de Noël:
+    meet: {Nous: {}, Marché de Noël: {}, Amie: {optional: true}}
+    together: true
+    duration: 1h30
+    priority: 2
+    place: Vieille ville
+  La cathédrale:
+    meet: {Nous: {}, Cathédrale: {}, Amie: {optional: true}}
+    together: true
+    duration: 1h
+    priority: 2
+    place: Vieille ville
+  Les rues illuminées:
+    meet: [Nous, Rues illuminées]
+    together: true
+    duration: 1h
+    priority: 2
+    place: Vieille ville
+  Le marché de la ville voisine:
+    meet: [Nous, Marché de la ville voisine]
+    together: true
+    duration: 2h
+    priority: 2
+    place: Ville voisine
+
+  # ---- les bonus pour l'enfant, pris s'il reste de la place
+  Le musée du jouet:
+    meet: [Nous, Musée du jouet]
+    together: true
+    duration: 1h15
+    place: Ville voisine

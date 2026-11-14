@@ -1,0 +1,523 @@
+package planning
+
+import (
+	"fmt"
+	"maps"
+	"slices"
+	"time"
+)
+
+// outOfScale is how many times the median journey a journey has to exceed
+// to look like a mistake rather than a long trip. A file of ten-minute
+// journeys with one of two hours and a half is a city with one trip out of
+// town, and says nothing; a file of twenty-minute journeys with one of
+// seventy-two hours is a model that wrote three days where it meant three
+// hours.
+const outOfScale = 20
+
+// shortNames are the names too short for a single letter apart to mean a
+// misspelling: Ann and Anna are two people, Gengenbach and Gegenbach are
+// one place written twice.
+const shortNames = 5
+
+// A Doubt is something in a problem that looks like a mistake without being
+// one: the problem holds together, the program runs, and the answer may
+// still not be the one the file meant to ask for. A journey of three days
+// between two streets of the same town, a candidate free for exactly as
+// long as their one visit, a recruiter nobody meets — each is allowed, each
+// is usually a slip of the pen.
+//
+// A Doubt is written to be acted upon by whoever or whatever wrote the
+// file, a person or a model: it names the key it bears on, the value found,
+// and what makes that value look wrong, so that the file can be corrected
+// from the text alone.
+type Doubt struct {
+	// About is what the doubt bears on: a place, a person, or the key of a
+	// setting such as "travel".
+	About string
+	// Text is one sentence: what looks wrong, and against what it is being
+	// compared.
+	Text string
+}
+
+// String formats the doubt as "about: text".
+func (d Doubt) String() string {
+	return d.About + ": " + d.Text
+}
+
+// Doubts returns what looks like a mistake in the problem without being
+// one, in a stable order: the journeys first, then the availabilities, then
+// the people. It returns nothing for a problem that does not hold together
+// — that is what [Problem.Validate] is for, and it comes first.
+//
+// The list is deliberately short of cases that merely cost time: a break
+// that shortens a window, two interviews that could be held jointly. A
+// checker that cries wolf is a checker nobody reads.
+func (p *Problem) Doubts(opts Options) []Doubt {
+	o, err := opts.withDefaults()
+	if err != nil {
+		return nil
+	}
+
+	var out []Doubt
+	out = append(out, p.travelDoubts()...)
+	out = append(out, p.availabilityDoubts(o)...)
+	out = append(out, p.peopleDoubts()...)
+
+	return out
+}
+
+// Validate checks the problem and the options without planning anything: it
+// returns the error Search would return, and nil when the file holds
+// together. It is the first half of a check of a file written by hand or by
+// a model; [Problem.Doubts] is the second.
+func (p *Problem) Validate(o Options) error {
+	_, err := newInstance(p, o)
+
+	return err
+}
+
+// travelDoubts reports the journeys that look wrong: the ones a way through
+// other places undoes, the places left unlinked, the places named and never
+// visited, the names a letter apart and the journeys out of scale.
+func (p *Problem) travelDoubts() []Doubt {
+	var out []Doubt
+
+	for _, c := range p.Shortcuts() {
+		out = append(out, Doubt{
+			About: c.From + " to " + c.To,
+			Text: fmt.Sprintf("given as %s, but a way through other places takes %s, which is what counts: "+
+				"a journey given to forbid a link does not forbid it",
+				Length(c.Given), Length(c.Through)),
+		})
+	}
+
+	out = append(out, p.unlinkedDoubts()...)
+	out = append(out, p.unvisitedDoubts()...)
+	out = append(out, nearNames("place", p.placeNames())...)
+
+	return append(out, p.outOfScaleDoubts()...)
+}
+
+// placeNames returns the places of the problem, the candidates' first, in
+// the order they appear.
+func (p *Problem) placeNames() []string {
+	return p.journeys().places
+}
+
+// unlinkedDoubts reports pairs of visited places that no chain of journeys
+// links, which the program then takes to be at no distance from each other:
+// Travel.Default is zero, so the pair is free. It names one pair per place,
+// not the whole product.
+func (p *Problem) unlinkedDoubts() []Doubt {
+	if p.Travel.Default > 0 {
+		return nil
+	}
+
+	trips := p.journeys()
+	visited := map[int]bool{}
+
+	for _, a := range trips.placeOf {
+		if a >= 0 {
+			visited[a] = true
+		}
+	}
+
+	if len(visited) < 2 {
+		return nil
+	}
+
+	var out []Doubt
+
+	for _, a := range slices.Sorted(maps.Keys(visited)) {
+		for _, b := range slices.Sorted(maps.Keys(visited)) {
+			if a >= b || trips.time[a][b] > 0 {
+				continue
+			}
+
+			out = append(out, Doubt{
+				About: trips.places[a] + " to " + trips.places[b],
+				Text: "no journey, and no default: the program holds the two places to be the same one, " +
+					"and moves between them for nothing — give the journey, or a realistic travel.default",
+			})
+
+			break // one pair per place is enough to point at the hole
+		}
+	}
+
+	return out
+}
+
+// unvisitedDoubts reports the places that journeys names and no candidate is
+// at: a way through other places, which is a use of its own, or a name
+// spelt differently from the candidate's.
+func (p *Problem) unvisitedDoubts() []Doubt {
+	trips := p.journeys()
+	visited := map[string]bool{}
+
+	for c, a := range trips.placeOf {
+		if a >= 0 {
+			visited[p.Candidates[c].Place] = true
+		}
+	}
+
+	var out []Doubt
+
+	for _, name := range trips.places {
+		if visited[name] {
+			continue
+		}
+
+		out = append(out, Doubt{
+			About: name,
+			Text: "named in the journeys and nobody is there: a place one only passes through, " +
+				"or a name spelt differently from the one of a candidate",
+		})
+	}
+
+	return out
+}
+
+// outOfScaleDoubts reports the journeys far longer than the others, which
+// is what a wrong unit looks like: 72h where 72m was meant.
+func (p *Problem) outOfScaleDoubts() []Doubt {
+	if len(p.Travel.Journeys) < 4 {
+		return nil // too few to tell a scale from an exception
+	}
+
+	sorted := make([]time.Duration, 0, len(p.Travel.Journeys))
+	for _, j := range p.Travel.Journeys {
+		sorted = append(sorted, j.Duration)
+	}
+
+	slices.Sort(sorted)
+
+	median := sorted[len(sorted)/2]
+	if median <= 0 {
+		return nil
+	}
+
+	var out []Doubt
+
+	for _, j := range p.Travel.Journeys {
+		if j.Duration < outOfScale*median {
+			continue
+		}
+
+		out = append(out, Doubt{
+			About: j.From + " to " + j.To,
+			Text: fmt.Sprintf("%s, when the middle journey of the file is %s: a unit written for another "+
+				"(%s rather than %s?)", Length(j.Duration), Length(median),
+				Length(j.Duration), Length(j.Duration/time.Hour*time.Minute)),
+		})
+	}
+
+	return out
+}
+
+// availabilityDoubts reports the availabilities cut by the hours of the day,
+// those too short to hold what is asked, and those exactly as long: the
+// shape of a schedule written by hand and handed to the program to copy
+// back.
+func (p *Problem) availabilityDoubts(o Options) []Doubt {
+	var out []Doubt
+
+	for h, r := range p.Recruiters {
+		out = append(out, cutDoubt(r.Name, p.Recruiters[h].Availability, o)...)
+	}
+
+	for c, cand := range p.Candidates {
+		out = append(out, cutDoubt(cand.Name, cand.Availability, o)...)
+		out = append(out, p.roomDoubt(c, o)...)
+	}
+
+	return out
+}
+
+// cutDoubt reports an availability the hours of the day or a closed day cut:
+// somebody said to be free until ten on a day that ends at half past nine is
+// free until half past nine, and the file does not say what it looks like it
+// says.
+func cutDoubt(name string, own []Interval, o Options) []Doubt {
+	if own == nil {
+		return nil
+	}
+
+	merged, err := normalize(own, o.days())
+	if err != nil {
+		return nil // an invalid interval is an error, not a doubt
+	}
+
+	given, kept := total(merged), total(availability(own, o))
+	if kept >= given {
+		return nil
+	}
+
+	return []Doubt{{
+		About: name,
+		Text: fmt.Sprintf("free for %s in the file and for %s once the hours of the day and the closed days "+
+			"are taken out: widen day, or move the availability inside it", Length(given), Length(kept)),
+	}}
+}
+
+// roomDoubt reports a candidate whose availability cannot hold their longest
+// interview, and one whose availability is exactly as long as everything
+// they are asked to attend.
+func (p *Problem) roomDoubt(c int, o Options) []Doubt {
+	lengths := p.interviews(c, o)
+	if len(lengths) == 0 {
+		return nil
+	}
+
+	free := availability(p.Candidates[c].Availability, o)
+
+	var room time.Duration
+	for _, iv := range free {
+		room = max(room, iv.End-iv.Start)
+	}
+
+	longest, whole := slices.Max(lengths), sum(lengths)
+	name := p.Candidates[c].Name
+
+	switch {
+	case room < longest:
+		return []Doubt{{
+			About: name,
+			Text: fmt.Sprintf("never free for %s in a row, the length of their longest interview, "+
+				"but for %s at most: they cannot be served at all", Length(longest), Length(room)),
+		}}
+	case p.Candidates[c].Availability != nil && total(free) == whole:
+		return []Doubt{{
+			About: name,
+			Text: fmt.Sprintf("free for %s and asked to attend %s: the file leaves the search nothing to "+
+				"choose and only copies a schedule back — give the hours they are really free",
+				Length(total(free)), Length(whole)),
+		}}
+	}
+
+	return nil
+}
+
+// interviews returns the length of each interview candidate c is asked to
+// attend: one for everybody at once when Together, one per meeting, and one
+// per request held on its own. Joint groups may still gather some of them,
+// which only shortens the total, so the sum is an upper estimate.
+func (p *Problem) interviews(c int, o Options) []time.Duration {
+	var alone []time.Duration
+
+	meetings := map[int][]int{}
+
+	var own []int
+
+	for r, req := range p.Requests {
+		if req.Candidate != c || req.Optional {
+			continue
+		}
+
+		own = append(own, r)
+
+		switch {
+		case p.Candidates[c].Together:
+		case req.Meeting != 0:
+			meetings[req.Meeting] = append(meetings[req.Meeting], r)
+		default:
+			alone = append(alone, p.requestDuration(r, o))
+		}
+	}
+
+	switch {
+	case len(own) == 0:
+		return nil
+	case p.Candidates[c].Together:
+		return []time.Duration{p.length(own, o)}
+	}
+
+	for _, m := range slices.Sorted(maps.Keys(meetings)) {
+		alone = append(alone, p.length(meetings[m], o))
+	}
+
+	return alone
+}
+
+// peopleDoubts reports the recruiters nobody meets, the names a letter
+// apart, and a priority so far above the others that it was meant to be a
+// constraint.
+func (p *Problem) peopleDoubts() []Doubt {
+	met := make([]bool, len(p.Recruiters))
+	for _, r := range p.Requests {
+		met[r.Recruiter] = true
+	}
+
+	var out []Doubt
+
+	for h, seen := range met {
+		if !seen {
+			out = append(out, Doubt{
+				About: p.Recruiters[h].Name,
+				Text: "a recruiter no candidate meets: a name spelt differently in a meet, " +
+					"or somebody left over from an earlier file",
+			})
+		}
+	}
+
+	names := make([]string, 0, len(p.Recruiters)+len(p.Candidates))
+	for _, r := range p.Recruiters {
+		names = append(names, r.Name)
+	}
+
+	for _, c := range p.Candidates {
+		names = append(names, c.Name)
+	}
+
+	out = append(out, nearNames("person", names)...)
+
+	return append(out, p.priorityDoubts()...)
+}
+
+// priorityDoubts reports a priority far above every other one, which is how
+// one writes a constraint with the only tool that looks like one: Required
+// is the tool, and it makes the program say so rather than weigh it.
+func (p *Problem) priorityDoubts() []Doubt {
+	ranks := make([]int, 0, len(p.Candidates))
+	for c := range p.Candidates {
+		if !p.Candidates[c].Required {
+			ranks = append(ranks, p.priority(c))
+		}
+	}
+
+	if len(ranks) < 2 {
+		return nil
+	}
+
+	slices.Sort(ranks)
+
+	top, next := ranks[len(ranks)-1], ranks[len(ranks)-2]
+	if top < outOfScale*next {
+		return nil
+	}
+
+	var out []Doubt
+
+	for c := range p.Candidates {
+		if !p.Candidates[c].Required && p.priority(c) == top {
+			out = append(out, Doubt{
+				About: p.Candidates[c].Name,
+				Text: fmt.Sprintf("priority %d, when the next one is %d: a priority buys one candidate "+
+					"against others, it does not make them certain — write required: true for what the "+
+					"day is built around", top, next),
+			})
+		}
+	}
+
+	return out
+}
+
+// nearNames reports pairs of names one letter apart, which is what the same
+// name written twice looks like. Short names are left alone: Ann and Anna
+// are two people.
+func nearNames(kind string, names []string) []Doubt {
+	var out []Doubt
+
+	for i, a := range names {
+		for _, b := range names[:i] {
+			if a == b || len([]rune(a)) < shortNames || len([]rune(b)) < shortNames {
+				continue
+			}
+
+			if numbered(a, b) {
+				continue
+			}
+
+			if editDistance(a, b) == 1 {
+				out = append(out, Doubt{
+					About: b + " and " + a,
+					Text:  "two " + kind + " names one letter apart: the same one written twice?",
+				})
+			}
+		}
+	}
+
+	return out
+}
+
+// numbered tells whether two names are one series rather than one name
+// written twice: Sight 1 and Sight 2, R11 and R12, Candidate 7 and Candidate
+// 8. They differ by one letter, and that letter is a digit, which is how
+// every generated or templated file names its people and places. Without
+// this, a file of forty numbered sights reports eight hundred misspellings
+// and buries the one real doubt: a checker that cries wolf is a checker
+// nobody reads.
+func numbered(a, b string) bool {
+	strip := func(s string) (string, bool) {
+		var out []rune
+
+		digit := false
+
+		for _, r := range s {
+			if r >= '0' && r <= '9' {
+				digit = true
+
+				continue
+			}
+
+			out = append(out, r)
+		}
+
+		return string(out), digit
+	}
+
+	x, hasX := strip(a)
+	y, hasY := strip(b)
+
+	return x == y && (hasX || hasY)
+}
+
+// editDistance returns the number of letters to add, remove or change to
+// turn a into b.
+func editDistance(a, b string) int {
+	x, y := []rune(a), []rune(b)
+
+	previous := make([]int, len(y)+1)
+	current := make([]int, len(y)+1)
+
+	for j := range previous {
+		previous[j] = j
+	}
+
+	for i := 1; i <= len(x); i++ {
+		current[0] = i
+
+		for j := 1; j <= len(y); j++ {
+			cost := 1
+			if x[i-1] == y[j-1] {
+				cost = 0
+			}
+
+			current[j] = min(previous[j]+1, current[j-1]+1, previous[j-1]+cost)
+		}
+
+		previous, current = current, previous
+	}
+
+	return previous[len(y)]
+}
+
+// total returns the time the intervals cover.
+func total(intervals []Interval) time.Duration {
+	var covered time.Duration
+	for _, iv := range intervals {
+		covered += iv.End - iv.Start
+	}
+
+	return covered
+}
+
+// sum returns the total of the durations.
+func sum(durations []time.Duration) time.Duration {
+	var whole time.Duration
+	for _, d := range durations {
+		whole += d
+	}
+
+	return whole
+}

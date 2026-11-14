@@ -1,0 +1,150 @@
+# yaml-language-server: $schema=../schema/problem.schema.json
+#
+# Not only interviews: two days away, by train, with a child. The model is
+# turned around, and that is the whole trick:
+#
+#   - the "recruiter" Us is the family: it can only be in one place at a
+#     time, and its availability is its days;
+#   - every place is a "recruiter" too, whose availability is its opening
+#     hours, day by day;
+#   - every visit is a "candidate": a meeting between Us and a place.
+#
+# Three things carry the day, and each is a key of its own:
+#
+#   - required: the hotel and the trains. They are no achievement and the
+#     day falls apart without them, so the program refuses a schedule that
+#     drops them instead of quietly sending you to the market with the
+#     suitcases.
+#   - optional: a friend who comes along if she can. The visit never waits
+#     for her and never depends on her.
+#   - priority: what one would rather see, and what is a bonus.
+
+from: 2026-12-21
+to: 2026-12-22
+day: 08:00-21:00
+max-gap: unlimited
+objectives: [priorities, recruiter-span, day-end]
+
+# Walking inside the town, and the tram out to the hotel. Beware: a default
+# journey links every pair of places, so no two places would ever be more
+# than twice the default apart. Here every pair is given.
+travel:
+  default: 12m
+  journeys:
+    - [Hotel, Old town, 25m]
+    - [Hotel, Station, 20m]
+    - [Station, Old town, 12m]
+    # The next town is reached by train, and nothing says so: the journeys
+    # hold together, so the old town to the next town costs the walk to the
+    # station and the train, 1h07, without a line of its own.
+    - [Station, Next town, 55m]
+
+recruiters:
+  Us:
+    min-gap: 20m # from one place to the next, at a child's pace
+    availability:
+      2026-12-21: 12:40-21:00 # the train gets in at 12:37
+      2026-12-22: 08:00-18:30
+
+  Friend: # to be replaced by her real hours
+    availability:
+      2026-12-21: 15:00-21:00
+
+  Front desk:
+    availability:
+      2026-12-21: 13:00-21:00
+      2026-12-22: 08:00-10:00
+
+  Christmas market:
+    availability:
+      2026-12-21: 11:00-20:00
+      2026-12-22: 11:00-18:00
+  Cathedral:
+    availability:
+      2026-12-21: 09:30-17:45
+      2026-12-22: 09:30-17:45
+  Lit streets:
+    availability: # illuminations: in the evening
+      2026-12-21: 16:30-20:30
+  Toy museum:
+    availability:
+      2026-12-22: 10:00-18:00
+
+  # The train, as its timetable: a window the length of the journey, and
+  # nothing else fits in it.
+  Train out:
+    availability: {2026-12-22: 09:10-10:15}
+  Train back:
+    availability: {2026-12-22: 17:00-18:10}
+
+  Next town market:
+    availability: {2026-12-22: 11:00-18:00}
+
+candidates:
+  # ---- what the day is built around: no interest, and no day without it
+  Bags dropped at the hotel:
+    meet: [Us, Front desk]
+    together: true
+    duration: 30m
+    required: true
+    place: Hotel
+    availability: {2026-12-21: 13:00-15:00}
+  Back to the hotel for the night:
+    meet: [Us, Front desk]
+    together: true
+    duration: 15m
+    required: true
+    place: Hotel
+    availability: {2026-12-21: 19:30-21:00}
+  Room given back:
+    meet: [Us, Front desk]
+    together: true
+    duration: 20m
+    required: true
+    place: Hotel
+    availability: {2026-12-22: 08:00-09:00}
+  Train to the next town:
+    meet: [Us, Train out]
+    together: true
+    duration: 1h05 # ten minutes early, then the journey
+    required: true
+    place: Station
+  Train home:
+    meet: [Us, Train back]
+    together: true
+    duration: 1h10
+    required: true
+    place: Station
+
+  # ---- the visits. The friend comes along to two of them if she can.
+  The Christmas market:
+    meet: {Us: {}, Christmas market: {}, Friend: {optional: true}}
+    together: true
+    duration: 1h30
+    priority: 2
+    place: Old town
+  The cathedral:
+    meet: {Us: {}, Cathedral: {}, Friend: {optional: true}}
+    together: true
+    duration: 1h
+    priority: 2
+    place: Old town
+  The lit streets:
+    meet: [Us, Lit streets]
+    together: true
+    duration: 1h
+    priority: 2
+    place: Old town
+  The market of the next town:
+    meet: [Us, Next town market]
+    together: true
+    duration: 2h
+    priority: 2
+    place: Next town
+
+  # ---- bonuses for the child, taken if there is room
+  The toy museum:
+    meet: [Us, Toy museum]
+    together: true
+    duration: 1h15
+    place: Next town

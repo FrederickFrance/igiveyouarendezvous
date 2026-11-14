@@ -293,6 +293,29 @@ func gcd(a, b int) int {
 // addOptions lists the interviews candidate c can have: each request alone,
 // and every subset of the requests whose recruiters share a joint group, at
 // every start where everybody involved is available.
+// meetingsOf splits the requests of a candidate into the meetings they ask
+// for, in the order the meetings first appear, and the requests that belong
+// to no meeting.
+func (in *instance) meetingsOf(c int) (order []int, meetings map[int][]int, others []int) {
+	meetings = map[int][]int{}
+
+	for _, r := range in.requestsOf[c] {
+		m := in.p.Requests[r].Meeting
+		switch {
+		case m == 0:
+			others = append(others, r)
+		case meetings[m] == nil:
+			order = append(order, m)
+
+			fallthrough
+		default:
+			meetings[m] = append(meetings[m], r)
+		}
+	}
+
+	return order, meetings, others
+}
+
 func (in *instance) addOptions(c int) error {
 	seen := map[string]bool{}
 	add := func(subset []int) {
@@ -314,31 +337,35 @@ func (in *instance) addOptions(c int) error {
 
 	// The meetings, each as it is given; the other requests make the
 	// interviews below.
-	meetings := map[int][]int{}
+	order, meetings, others := in.meetingsOf(c)
 
-	var order, others []int
+	// withAndWithoutGuests offers the interview as it is given, and again
+	// without the optional requests: the guests come along when they are
+	// free at that time, and the interview is held all the same when they
+	// are not (see Request.Optional).
+	withAndWithoutGuests := func(requests []int) {
+		add(requests)
 
-	for _, r := range in.requestsOf[c] {
-		m := in.p.Requests[r].Meeting
-		switch {
-		case m == 0:
-			others = append(others, r)
-		case meetings[m] == nil:
-			order = append(order, m)
+		var alone []int
 
-			fallthrough
-		default:
-			meetings[m] = append(meetings[m], r)
+		for _, r := range requests {
+			if !in.p.Requests[r].Optional {
+				alone = append(alone, r)
+			}
+		}
+
+		if len(alone) > 0 && len(alone) < len(requests) {
+			add(alone)
 		}
 	}
 
 	for _, m := range order {
-		add(meetings[m])
+		withAndWithoutGuests(meetings[m])
 	}
 
 	if in.p.Candidates[c].Together { // one interview with everybody
 		if len(others) > 0 {
-			add(others)
+			withAndWithoutGuests(others)
 		}
 
 		return nil

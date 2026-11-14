@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 	"time"
@@ -83,4 +84,30 @@ func TestImpossibleMeetings(t *testing.T) {
 	b.Reset()
 	printImpossible(&b, p, s)
 	require.Equal(t, "\nImpossible, available at no time of the period: Guest\n", b.String())
+}
+
+// The warning has to show even when every meeting is planned: that is
+// exactly when a journey that does not hold goes unnoticed.
+func TestShortcutsAreReportedEvenWhenAllIsPlanned(t *testing.T) {
+	t.Parallel()
+
+	problem := `travel:
+  default: 12m
+  journeys:
+    - [Ici, Loin, 72h]
+    - [Ailleurs, Autre, 15m]
+recruiters:
+  R1:
+candidates:
+  A: {meet: [R1], place: Ici}
+  B: {meet: [R1], place: Loin}
+`
+
+	var out, notes bytes.Buffer
+	require.NoError(t, run(t.Context(), []string{"-timeout", "2s", "-patience", "200ms", "-"},
+		strings.NewReader(problem), &out, &notes))
+
+	require.Contains(t, out.String(), "All meetings are planned.")
+	require.Contains(t, out.String(),
+		"Journey shortened by a way through other places: Ici to Loin, 72h00 given, 24 min through other places.")
 }

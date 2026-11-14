@@ -495,6 +495,12 @@ pour les invités communs à plusieurs émissions. Exemples complets : [les
 enregistrements d'une émission](example/fr/show.yaml), [des parties de jeu de
 rôle](example/fr/roleplay.yaml) dont la meneuse de jeu anime deux tables.
 
+Pas seulement des entretiens, et pas seulement une journée de travail : le
+même fichier planifie [deux jours de voyage en train](example/fr/trip.yaml),
+où l'hôtel et les trains sont `required` — la journée s'écroule sans eux et
+ils ne sont aucun exploit — et où une amie se joint à deux visites en
+invitée, `optional`, sans que les visites l'attendent jamais.
+
 **Un programme : une chose après l'autre.** Pour un colloque dans une seule
 salle, le colloque est le candidat et les intervenants ses recruteurs : il
 n'est qu'à un endroit à la fois, donc les interventions s'enchaînent. La
@@ -606,6 +612,43 @@ qui en voient peu.
 
 ## Suivre, arrêter et reprendre
 
+- **Combien de candidats les heures permettent.** Chaque entretien prend du
+  temps à un recruteur, donc aucun planning ne sert plus de candidats que
+  ce que les plus courts d'entre eux font tenir dans les heures
+  disponibles. Le programme le calcule et l'affiche à côté du compte :
+  `147/200, at most 154`. Il ignore l'ordre des entretiens, ce qui en fait
+  une borne et non un planning, et c'est la seule chose qui dise si une
+  réponse est bonne sur une journée où la demande dépasse les heures. Là où
+  le compte l'atteint, la réponse est prouvée sans rien énumérer.
+- **`optional: true`** sur un des recruteurs de `meet` l'invite sans en
+  avoir besoin : `meet: {Marché: {}, Annick: {optional: true}}`. Le
+  candidat est complet sans lui, la rencontre se tient avec les invités
+  libres à ce moment-là et sans les autres, et la tenir compte dans
+  `meetings`. C'est l'invité qui se joint s'il peut — une amie pendant une
+  sortie, un second évaluateur s'il est disponible, un manager qui passe
+  sur l'entretien quand sa journée le permet. Un invité ne prend jamais une
+  rencontre en otage : l'heure qui convient aux autres est gardée même s'il
+  ne pouvait venir qu'à un autre moment.
+- **`required: true`** fait d'un candidat une contrainte et non plus un
+  objectif : le programme refuse de rendre un planning sans lui et le nomme
+  à la place. C'est pour ce autour de quoi la journée se construit et qui
+  n'a aucun intérêt propre — le train déjà réservé, les clefs rendues à
+  l'hôtel, la salle à libérer à dix-huit heures. Une `priority` classe ce
+  qu'on préfère avoir ; ceci dit qu'il n'y a rien à classer, donc un
+  candidat indispensable reste en dehors du décompte des candidats servis.
+- **Les trajets tiennent ensemble.** Un trajet par d'autres lieux compte
+  quand il est plus court, donc les temps que vous donnez doivent être
+  cohérents : Paris-Dijon ne peut pas durer plus que Paris-Lyon puis
+  Lyon-Dijon. Deux conséquences, surprenantes toutes les deux. Un **trajet
+  par défaut relie tous les couples de lieux** : avec un défaut de dix
+  minutes, deux lieux ne sont jamais à plus de vingt minutes l'un de
+  l'autre, quoi que dise le fichier — un trajet long donné pour interdire
+  une liaison ne l'interdit pas. Et **un défaut de zéro n'est pas « pas de
+  liaison », c'est une liaison gratuite** : tout couple absent du fichier
+  devient un passage sans coût. Un lieu cité dans `journeys` est un lieu
+  même si aucun candidat n'y est rencontré, donc un nom mal orthographié
+  ouvre un passage que personne ne voulait. Le programme signale chaque
+  trajet qu'un passage rend plus court que ce que vous avez indiqué.
 - **Suivre** : `-progress` affiche les objectifs à chaque amélioration, avec
   le temps écoulé. `-progress-json` affiche la même chose en un objet JSON
   par ligne, pour un programme : `{"seconds":4.7,"iterations":812345,
@@ -856,6 +899,22 @@ régler Pages sur « GitHub Actions », dans Settings > Pages.
 
 Un binaire distribué doit être accompagné de leurs mentions de copyright et
 de licence (et du `NOTICE` de go.yaml.in/yaml).
+
+## Écrire le fichier avec un modèle sur sa propre machine
+
+Rien n'a besoin de sortir de votre ordinateur. Le programme lit le JSON
+aussi bien que le YAML — YAML est un sur-ensemble de JSON, donc un fichier
+`.json` se charge tel quel — et un modèle qui tourne en local (Ollama,
+llama.cpp) peut être contraint à répondre selon un schéma JSON, que le
+décodage impose alors : il ne peut pas inventer une clef ni oublier une
+durée. Donnez-lui `schema/problem.schema.json` comme schéma et
+`prompt/fr.md` comme consignes, puis passez sa réponse directement au
+programme.
+
+Ce qu'un schéma ne vérifie pas, c'est le fond : un fichier qui recopie
+votre planning au lieu de le modéliser, un lieu écrit de deux façons, une
+priorité à l'envers. Lisez `prompt/fr.md` vous-même une fois — c'est court,
+et ça nomme les erreurs qu'un modèle commet sur ce format.
 
 ## Licence
 

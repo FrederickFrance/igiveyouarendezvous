@@ -90,7 +90,7 @@ type options struct {
 	seed                         uint64
 	workers                      int
 	progress, progressJSON       bool
-	list, fixAll                 bool
+	list, fixAll, check, version bool
 	problem                      string // the problem file, or "" for stdin
 	files                        files
 }
@@ -118,7 +118,9 @@ func parseFlags(args []string, stderr io.Writer) (*options, error) {
 
 	separator := fs.String("csv-separator", ",", `with -csv: the separator of the columns, "," or ";" (Excel in French, among others) or "tab"`)
 	fs.BoolVar(&o.fixAll, "fix-all", false, "with -start: keep every appointment of the file as it is (once they are announced)")
+	fs.BoolVar(&o.check, "check", false, "read the problem file and say what looks wrong in it, without planning anything")
 	fs.BoolVar(&o.list, "list-objectives", false, "list the objectives")
+	fs.BoolVar(&o.version, "version", false, "print the version of the program and exit")
 
 	fs.Usage = func() {
 		fmt.Fprintln(fs.Output(), "Usage: igiveyouarendezvous [flags] problem.yaml (or problem.json; standard input without a file)")
@@ -161,6 +163,12 @@ func runOn(ctx context.Context, fsys files, args []string, stdin io.Reader, stdo
 
 	o.files = fsys
 
+	if o.version {
+		fmt.Fprintln(stdout, release())
+
+		return nil
+	}
+
 	if o.list {
 		for _, obj := range planning.AllObjectives() {
 			fmt.Fprintf(stdout, "%-20s %s\n", obj, obj.Description())
@@ -172,6 +180,10 @@ func runOn(ctx context.Context, fsys files, args []string, stdin io.Reader, stdo
 	f, p, opts, pe, err := loadProblem(o, stdin, stderr)
 	if err != nil {
 		return err
+	}
+
+	if o.check {
+		return checkProblem(stdout, p, opts, pe)
 	}
 
 	start, rejected, err := loadStart(o, p, opts, pe, stderr)

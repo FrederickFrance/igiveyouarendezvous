@@ -12,6 +12,7 @@ const examples = [
   { file: "colloquium.yaml", en: "A colloquium", fr: "Un colloque" },
   { file: "roleplay.yaml", en: "Role-playing games", fr: "Des parties de jeu de rôle" },
   { file: "tour.yaml", en: "A tour of shoots in five cities", fr: "Une tournée de tournages dans cinq villes" },
+  { file: "trip.yaml", en: "Two days away, by train", fr: "Deux jours de voyage en train" },
 ];
 
 // The objectives, in the order of AllObjectives in the program: the names
@@ -530,6 +531,7 @@ function onMessage(event) {
   switch (message.type) {
     case "ready":
       ready = true;
+      showRelease(message.release);
       if (status.key === "loading") {
         setStatus("idle");
       }
@@ -550,6 +552,26 @@ function onMessage(event) {
       break;
     default:
   }
+}
+
+// showRelease writes the version of the planner in the footer and links it
+// to its release notes: a visitor who only ever uses the demo sees there
+// that it has moved. An old browser that fails to load the planner shows
+// nothing rather than a wrong version.
+function showRelease(text) {
+  const box = $("release");
+  if (!box || !text) {
+    return;
+  }
+
+  const tag = text.split(" ")[0]; // v0.12.0 "Columbo" 🕵️ → v0.12.0
+  box.textContent = "";
+
+  const link = document.createElement("a");
+  link.href = `https://github.com/FrederickFrance/igiveyouarendezvous/releases/tag/${tag}`;
+  link.textContent = text;
+  box.append(link);
+  box.hidden = false;
 }
 
 // onLine handles a line printed on the standard error output: a progress

@@ -50,6 +50,22 @@ has defaults):
   Without `availability`: the hours of `day`. Somebody absent on a few
   days: list by date every day they are present; the absent days alone,
   with `none`, would make them absent for the whole period.
+- **A guest who comes along if they can** is written `optional: true` on
+  one of the recruiters of `meet`, in its mapping form:
+  `meet: {Market: {}, Annick: {optional: true}}`. Use it rather than a
+  meeting of its own whenever somebody joins an outing or an interview that
+  happens anyway: a separate meeting costs its whole length, a guest costs
+  nothing.
+- **A default journey links every pair of places.** The journeys hold
+  together: one through other places counts when it is shorter. So with
+  `default: 10m` no two places are ever more than twenty minutes apart,
+  whatever you write, and a long journey meant to forbid a link does not
+  forbid it. A `default: 0` is worse: it is not "no link" but a free link,
+  so every pair you leave out becomes free teleportation. Either give the
+  journeys that really matter and no default, or give a default that is
+  realistic for the area. Spell every place exactly the same way in
+  `journeys` and in the candidates: a place named only in `journeys` is
+  still a way through.
 - **An availability is a constraint, not a decision.** Give a person or a
   place the hours they are really open, and let the search choose the day and
   the time. Writing one date and a window just wide enough for the length

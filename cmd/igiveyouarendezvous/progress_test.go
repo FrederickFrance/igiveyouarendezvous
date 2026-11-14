@@ -30,6 +30,7 @@ candidates:
 		strings.NewReader(problem), &out, &progress))
 
 	lines := []progressLine{}
+	jsonLines := []string{}
 
 	for line := range strings.Lines(progress.String()) {
 		if line = strings.TrimSpace(line); !strings.HasPrefix(line, "{") {
@@ -39,12 +40,25 @@ candidates:
 		var pl progressLine
 		require.NoError(t, json.Unmarshal([]byte(line), &pl), "the line is JSON: %s", line)
 		lines = append(lines, pl)
+		jsonLines = append(jsonLines, line)
 	}
 
 	require.NotEmpty(t, lines, "the search reported at least one improvement")
 
+	// The fields are checked for being there, not for being positive: the
+	// first improvement is reported as soon as the opening greedy is done,
+	// and on a problem this small that is the only one. Its elapsed time is
+	// then shorter than the clock of the machine can tell, which on Windows
+	// is a good fraction of a millisecond, so seconds is legitimately zero.
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal([]byte(jsonLines[len(jsonLines)-1]), &raw))
+
+	for _, field := range []string{"seconds", "iterations", "scores"} {
+		require.Contains(t, raw, field, "the demo reads it")
+	}
+
 	last := lines[len(lines)-1]
-	require.Positive(t, last.Seconds)
+	require.GreaterOrEqual(t, last.Seconds, 0.0)
 	require.Len(t, last.Scores, 2, "the two objectives of the file")
 
 	require.Equal(t, "complete-candidates", last.Scores[0].Objective)

@@ -51,6 +51,22 @@ a des valeurs par défaut) :
   les autres dates. Sans `availability` : les horaires de `day`. Quelqu'un
   d'absent quelques jours : liste par date tous ses jours de présence ; les
   seuls jours d'absence, avec `none`, le rendraient absent toute la période.
+- **Un invité qui se joint s'il peut** s'écrit `optional: true` sur un des
+  recruteurs de `meet`, dans sa forme en mapping :
+  `meet: {Marché: {}, Annick: {optional: true}}`. Préférez-le à une
+  rencontre séparée dès que quelqu'un se joint à une sortie ou à un
+  entretien qui a lieu de toute façon : une rencontre séparée coûte toute
+  sa durée, un invité ne coûte rien.
+- **Un trajet par défaut relie tous les couples de lieux.** Les trajets
+  tiennent ensemble : un trajet par d'autres lieux compte quand il est plus
+  court. Donc avec `default: 10m`, deux lieux ne sont jamais à plus de vingt
+  minutes l'un de l'autre, quoi que vous écriviez, et un trajet long censé
+  interdire une liaison ne l'interdit pas. Un `default: 0` est pire : ce
+  n'est pas « pas de liaison » mais une liaison gratuite, donc tout couple
+  oublié devient une téléportation. Donnez soit les trajets qui comptent
+  vraiment sans défaut, soit un défaut réaliste pour la zone. Écrivez chaque
+  lieu exactement de la même façon dans `journeys` et dans les candidats :
+  un lieu cité seulement dans `journeys` reste un lieu de passage.
 - **Une disponibilité est une contrainte, pas une décision.** Donne à une
   personne ou à un lieu ses horaires réels, et laisse la recherche choisir le
   jour et l'heure. Écrire une seule date et une fenêtre juste assez large pour
