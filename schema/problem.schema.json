@@ -272,6 +272,10 @@
                         "duration": {
                           "type": "string",
                           "pattern": "^\\s*(?:\\d+h\\d+|(?:\\d+(?:\\.\\d+)?(?:h|m|s))+)\\s*$"
+                        },
+                        "optional": {
+                          "type": "boolean",
+                          "description": "Invites the recruiter without needing them (false by default): the candidate is complete without this meeting, and holding it is a bonus the search looks for. The guest who comes along if they can \u2014 a friend on an outing, a second assessor if they are free. The meeting is held with the guests who are free at that time and without the others."
                         }
                       }
                     }
@@ -343,6 +347,10 @@
             "type": "string",
             "minLength": 1,
             "description": "Where the candidate is met, such as the city of a shoot: a recruiter needs the journey (see travel) between two interviews at different places. None by default: no journey to or from them, such as a call."
+          },
+          "required": {
+            "type": "boolean",
+            "description": "A constraint and no longer an objective: the program refuses to return a schedule without this candidate, and names them instead (false by default). For what the day is built around and carries no interest of its own: the train that was booked, the keys handed back at the hotel. A priority ranks what one would rather have; this says there is nothing to rank."
           },
           "availability": {
             "$ref": "#/$defs/availability"

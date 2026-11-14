@@ -207,6 +207,9 @@ type Meet struct {
 	Recruiter string
 	Rank      int
 	Duration  time.Duration
+	// Optional invites the recruiter without needing them (see
+	// planning.Request): the guest who comes along if they can.
+	Optional bool
 }
 
 // Meets lists the recruiters to meet: a list, in any order, or a mapping of
@@ -268,8 +271,10 @@ func readMeet(key, value *yaml.Node) (Meet, error) {
 				meet.Rank, err = readRank(v)
 			case "duration":
 				meet.Duration, err = readMeetDuration(v)
+			case "optional":
+				meet.Optional, err = readBool(v)
 			default:
-				return meet, fmt.Errorf("line %d: %s: unknown key %q (known: duration, rank)", k.Line, key.Value, k.Value)
+				return meet, fmt.Errorf("line %d: %s: unknown key %q (known: duration, rank, optional)", k.Line, key.Value, k.Value)
 			}
 
 			if err != nil {
@@ -680,4 +685,16 @@ func readNames(n *yaml.Node) ([]string, error) {
 	}
 
 	return names, nil
+}
+
+// readBool reads true or false.
+func readBool(value *yaml.Node) (bool, error) {
+	switch value.Value {
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	default:
+		return false, fmt.Errorf("line %d: true or false is expected, not %q", value.Line, value.Value)
+	}
 }

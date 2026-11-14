@@ -178,6 +178,8 @@ func printSchedule(w io.Writer, p *planning.Problem, s *planning.Schedule, pe pe
 
 	_ = tw.Flush() // to the terminal: nothing sensible to do on failure
 
+	printShortcuts(w, p)
+
 	if len(s.Unscheduled) == 0 {
 		fmt.Fprintln(w, "\nAll meetings are planned.")
 
@@ -205,6 +207,23 @@ func printSchedule(w io.Writer, p *planning.Problem, s *planning.Schedule, pe pe
 	fmt.Fprintf(w, "\nTo plan later: %s\n", strings.Join(parts, ", "))
 
 	printImpossible(w, p, s)
+}
+
+// printShortcuts warns about the journeys that a way through other places
+// makes shorter than the file says: the time given for them does not hold,
+// and one given to forbid a link does not forbid it.
+func printShortcuts(w io.Writer, p *planning.Problem) {
+	cuts := p.Shortcuts()
+	if len(cuts) == 0 {
+		return
+	}
+
+	fmt.Fprintln(w)
+
+	for _, cut := range cuts {
+		fmt.Fprintf(w, "Journey shortened by a way through other places: %s to %s, %s given, %s through other places.\n",
+			cut.From, cut.To, hours(int(cut.Given/time.Minute)), hours(int(cut.Through/time.Minute)))
+	}
 }
 
 // printImpossible reports the meetings that the availabilities forbid: the
@@ -315,6 +334,12 @@ func scoreText(p *planning.Problem, s *planning.Schedule, pe period, sc planning
 			}
 		}
 
+		// The bound says how much room is left above a value that is not
+		// proven: "147/200, at most 154" tells what "not proven" cannot.
+		if !sc.Proven && sc.Bound > sc.Value && sc.Bound < len(asked) {
+			return fmt.Sprintf("%d/%d, at most %d", sc.Value, len(asked), sc.Bound)
+		}
+
 		return fmt.Sprintf("%d/%d", sc.Value, len(asked))
 	case planning.MaxMeetings:
 		return fmt.Sprintf("%d/%d", sc.Value, len(p.Requests))
@@ -352,6 +377,10 @@ func scoreText(p *planning.Problem, s *planning.Schedule, pe period, sc planning
 
 // counted tells whether score sc counts candidate c, when complete.
 func counted(c planning.Candidate, sc planning.Score) bool {
+	if c.Required { // a given, not an achievement: out of the tally, as in the score
+		return false
+	}
+
 	switch sc.Objective {
 	case planning.MaxPriorities:
 		return max(1, c.Priority) == sc.Priority

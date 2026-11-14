@@ -189,7 +189,32 @@ func Search(ctx context.Context, p *Problem, o Options, so SearchOptions) (*Sche
 		return nil, err
 	}
 
+	if err := requiredHeld(p, sched); err != nil {
+		return nil, err
+	}
+
 	return sched, nil
+}
+
+// requiredHeld reports an error naming the candidates marked Required that
+// the schedule leaves out. A required candidate is a constraint and not an
+// objective: a schedule without them is no answer, and saying so plainly is
+// of more use than handing over a day that quietly dropped the train.
+func requiredHeld(p *Problem, s *Schedule) error {
+	var left []string
+
+	for _, r := range s.Unscheduled {
+		if name := p.Candidates[p.Requests[r].Candidate].Name; p.Candidates[p.Requests[r].Candidate].Required &&
+			!slices.Contains(left, name) {
+			left = append(left, name)
+		}
+	}
+
+	if len(left) == 0 {
+		return nil
+	}
+
+	return fmt.Errorf("planning: required, and left out of the schedule: %s", strings.Join(left, ", "))
 }
 
 // placed is one interview of a solution: an option at a start slot.
@@ -220,6 +245,11 @@ type searcher struct {
 
 	fixed  []Interview // kept as they are (see SearchOptions.Start)
 	pinned []bool      // [candidate]: has fixed interviews, never planned
+	// needed[candidate]: marked Candidate.Required, so the schedule holds no
+	// interest without them. They are inserted first and a move that cannot
+	// put one of them back is refused.
+	needed  []bool
+	needing bool // some candidate is needed: nothing to check otherwise
 
 	// The masks hold the parts of a candidate's plan, as bits: a request
 	// outside meetings, or a whole meeting (see Request.Meeting).
@@ -233,6 +263,10 @@ type searcher struct {
 	// than one for a meeting (Request.Meeting): what MaxMeetings counts.
 	held     [][]int8
 	fullMask []uint64 // every part of each candidate
+	// needMask[candidate]: the parts the candidate cannot do without, which
+	// is every part but those made only of optional requests (see
+	// Request.Optional). Complete means holding these, no more.
+	needMask []uint64
 	possible []uint64 // parts of each candidate that some option holds
 	repeats  []bool   // [candidate]: meets a recruiter with a gap in two parts
 	bound    []int    // obvious bound of each objective, in score units
@@ -292,12 +326,14 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 		endAt:     indexOf(in.crit, MinDayEnds),
 		wholeAt:   indexOf(in.crit, MinSpan),
 		pinned:    make([]bool, nC),
+		needed:    make([]bool, nC),
 		optionsOf: make([][]int, nC),
 		holding:   make([][][]int, nC),
 		longest:   make([][]int, nC),
 		before:    make([]uint64, len(in.options)),
 		optMask:   make([]uint64, len(in.options)),
 		fullMask:  make([]uint64, nC),
+		needMask:  make([]uint64, nC),
 		held:      make([][]int8, nC),
 		possible:  make([]uint64, nC),
 		days:      in.o.days(),
@@ -325,6 +361,23 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 		s.fullMask[c] = 1<<parts[c] - 1
 		s.contrib[c] = make([]int, len(s.crit))
 		s.held[c] = make([]int8, parts[c])
+
+		// A part is optional only when every request in it is: a guest
+		// invited to a meeting does not make the meeting itself optional.
+		var needed, seen uint64
+
+		for _, r := range in.requestsOf[c] {
+			bit := uint64(1) << part[r]
+			seen |= bit
+
+			if !in.p.Requests[r].Optional {
+				needed |= bit
+			}
+		}
+
+		s.needMask[c] = needed & seen
+		s.needed[c] = in.p.Candidates[c].Required
+		s.needing = s.needing || s.needed[c]
 
 		for _, r := range in.requestsOf[c] {
 			s.held[c][part[r]]++
@@ -414,6 +467,61 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 	return s, nil
 }
 
+// capacity returns the most candidates the hours of the recruiters can hold:
+// every interview takes a recruiter's time, so the candidates, taken by
+// increasing total length, stop fitting once their lengths add up to more
+// than the hours available. It ignores the order of the interviews, which is
+// what makes it a bound and not a schedule, and it is the only bound that
+// says anything on a day where the demand is higher than the hours.
+func (s *searcher) capacity() int {
+	minutes := int(s.in.g.step / time.Minute)
+	free := 0
+
+	for h := range s.in.availR {
+		for t, ok := range s.in.availR[h] {
+			if ok && s.in.session[t] >= 0 {
+				free += minutes
+			}
+		}
+	}
+
+	costs := make([]int, 0, len(s.needMask))
+
+	for c, need := range s.needMask {
+		if need == 0 || s.possible[c]&need != need {
+			continue
+		}
+
+		// The time of one recruiter per request, which is the least a
+		// candidate can take: holding two requests at once takes both
+		// recruiters for as long as the longer of them.
+		cost := 0
+
+		for _, r := range s.in.requestsOf[c] {
+			if !s.in.p.Requests[r].Optional {
+				cost += int(s.in.p.length([]int{r}, s.in.o) / time.Minute)
+			}
+		}
+
+		costs = append(costs, cost)
+	}
+
+	slices.Sort(costs)
+
+	fit, used := 0, 0
+
+	for _, cost := range costs {
+		if used+cost > free {
+			break
+		}
+
+		used += cost
+		fit++
+	}
+
+	return fit
+}
+
 // indexOf returns the index of the first criterion of objective obj, or -1.
 func indexOf(crit []criterion, obj Objective) int {
 	return slices.IndexFunc(crit, func(cr criterion) bool { return cr.obj == obj })
@@ -423,8 +531,8 @@ func indexOf(crit []criterion, obj Objective) int {
 func (s *searcher) bounds() []int {
 	meetings := 0
 
-	for c, full := range s.fullMask {
-		if full != 0 && s.possible[c] == full {
+	for c, need := range s.needMask {
+		if need != 0 && s.possible[c]&need == need {
 			meetings += s.meetings(c, s.possible[c])
 		}
 	}
@@ -434,10 +542,17 @@ func (s *searcher) bounds() []int {
 	for i, cr := range s.crit {
 		switch cr.obj {
 		case MaxCompleteCandidates, MaxPriorities, MaxUrgency:
-			for c, full := range s.fullMask {
-				if full != 0 && s.possible[c] == full && cr.counts(s.in.p, c) {
+			for c, need := range s.needMask {
+				if need != 0 && s.possible[c]&need == need && cr.counts(s.in.p, c) {
 					b[i]--
 				}
+			}
+
+			// The recruiters only have so many hours: whatever the order of
+			// the interviews, no schedule serves more candidates than the
+			// shortest of them fit into the hours available.
+			if fit := s.capacity(); -b[i] > fit {
+				b[i] = -fit
 			}
 		case MaxMeetings:
 			b[i] = -meetings
@@ -554,6 +669,7 @@ func (s *searcher) greedy() {
 
 	slices.SortStableFunc(order, func(a, b int) int {
 		return cmp.Or(
+			needFirst(s.needed[a], s.needed[b]), // the day is built around them
 			s.in.p.rank(a, b),
 			bits.OnesCount64(s.fullMask[a])-bits.OnesCount64(s.fullMask[b]),
 		)
@@ -569,8 +685,8 @@ func (s *searcher) greedy() {
 // firstPlacement returns the first complete placement of candidate c found
 // by the exploration of bestPlacement, or nil.
 func (s *searcher) firstPlacement(c int) []placed {
-	full := s.fullMask[c]
-	if full == 0 || s.possible[c] != full {
+	need := s.needMask[c]
+	if need == 0 || s.possible[c]&need != need {
 		return nil
 	}
 
@@ -582,7 +698,7 @@ func (s *searcher) firstPlacement(c int) []placed {
 	var grow func(mask uint64, start, end int) bool
 
 	grow = func(mask uint64, start, end int) bool {
-		if mask == full {
+		if mask&need == need {
 			return true
 		}
 
@@ -1087,7 +1203,7 @@ func (s *searcher) fits(c int, plan []placed) string {
 		interviews = append(interviews, s.interview(pl))
 	}
 
-	if mask != s.fullMask[c] {
+	if mask&s.needMask[c] != s.needMask[c] {
 		return "not all the meetings of " + name + " would be kept, and they all take place in the period"
 	}
 
@@ -1142,6 +1258,11 @@ func (s *searcher) move() {
 		return
 	}
 
+	// How many of the needed ones are in before the move: the guard below
+	// compares, rather than demanding them all, so that a schedule holding
+	// none of them can still be built up one move at a time.
+	before := s.neededHeld()
+
 	pool := s.ruin()
 
 	var idle []int
@@ -1157,18 +1278,74 @@ func (s *searcher) move() {
 
 	s.rnd.Shuffle(len(pool), func(i, j int) { pool[i], pool[j] = pool[j], pool[i] })
 
+	// Whatever the order, a candidate the schedule cannot do without goes
+	// back first: the move is thrown away if one of them finds no place, so
+	// they must not be left the leftovers.
+	if s.needing {
+		slices.SortStableFunc(pool, func(a, b int) int { return needFirst(s.needed[a], s.needed[b]) })
+	}
+
 	switch s.rnd.IntN(3) {
 	case 1: // highest priority, most urgent, then fewest requests first
 		slices.SortStableFunc(pool, func(a, b int) int {
-			return cmp.Or(s.in.p.rank(a, b), bits.OnesCount64(s.fullMask[a])-bits.OnesCount64(s.fullMask[b]))
+			return cmp.Or(needFirst(s.needed[a], s.needed[b]), s.in.p.rank(a, b),
+				bits.OnesCount64(s.fullMask[a])-bits.OnesCount64(s.fullMask[b]))
 		})
 	case 2: // highest priority, most urgent, then most requests first
 		slices.SortStableFunc(pool, func(a, b int) int {
-			return cmp.Or(s.in.p.rank(a, b), bits.OnesCount64(s.fullMask[b])-bits.OnesCount64(s.fullMask[a]))
+			return cmp.Or(needFirst(s.needed[a], s.needed[b]), s.in.p.rank(a, b),
+				bits.OnesCount64(s.fullMask[b])-bits.OnesCount64(s.fullMask[a]))
 		})
 	}
 
 	s.recreate(pool, true)
+
+	// A move that drops what the day is built around is no move: it goes
+	// back rather than being weighed against the objectives. It is a
+	// comparison and not a requirement, because no single move can place
+	// every needed candidate at once: demanding them all would undo every
+	// move from a schedule that holds none, and the search could never
+	// build them up — it would depend on the opening greedy having placed
+	// them, with no way to recover if it had not.
+	if s.needing && s.neededHeld() < before {
+		s.undo()
+	}
+}
+
+// neededHeld counts the candidates the schedule cannot do without that are
+// in it, each with all their mandatory meetings.
+func (s *searcher) neededHeld() int {
+	n := 0
+
+	for c, needed := range s.needed {
+		if !needed {
+			continue
+		}
+
+		var mask uint64
+		for _, pl := range s.plans[c] {
+			mask |= s.optMask[pl.option]
+		}
+
+		if mask&s.needMask[c] == s.needMask[c] {
+			n++
+		}
+	}
+
+	return n
+}
+
+// needFirst orders a candidate the schedule cannot do without before one it
+// can, for slices.SortStableFunc.
+func needFirst(a, b bool) int {
+	switch {
+	case a == b:
+		return 0
+	case a:
+		return -1
+	default:
+		return 1
+	}
 }
 
 // recreate inserts the candidates of pool, in this order. When complete
@@ -1349,7 +1526,7 @@ func (s *searcher) eject(served []int) []int {
 	var idle []int
 
 	for c, plan := range s.plans {
-		if len(plan) == 0 && s.possible[c] != 0 && s.possible[c] == s.fullMask[c] {
+		if len(plan) == 0 && s.needMask[c] != 0 && s.possible[c]&s.needMask[c] == s.needMask[c] {
 			idle = append(idle, c)
 		}
 	}
@@ -1585,8 +1762,8 @@ func (s *searcher) then(n node, o, t int) node {
 // interviews. Every order and grouping of the requests is tried, within
 // maxNodes placements.
 func (s *searcher) bestPlacement(c int) []placed {
-	full := s.fullMask[c]
-	if full == 0 || s.possible[c] != full {
+	need := s.needMask[c]
+	if need == 0 || s.possible[c]&need != need {
 		return nil
 	}
 
@@ -1600,7 +1777,7 @@ func (s *searcher) bestPlacement(c int) []placed {
 	complete := 0
 
 	consider := func(n node) {
-		if n.mask != full {
+		if n.mask&need != need { // the guests may be there or not
 			return
 		}
 
@@ -1658,7 +1835,9 @@ func (s *searcher) bestPlacement(c int) []placed {
 	grow = func(n node) {
 		consider(n)
 
-		if n.mask == full || !s.reachable(c, n.mask, n.start, n.end) {
+		// A complete plan keeps growing while an optional request is left to
+		// hold: that is how a guest gets invited along.
+		if n.mask == s.fullMask[c] || !s.reachable(c, n.mask, n.start, n.end) {
 			return
 		}
 
@@ -1720,7 +1899,7 @@ func (s *searcher) bestPlacement(c int) []placed {
 // budget of the exploration (maxNodes).
 func (s *searcher) reachable(c int, mask uint64, start, end int) bool {
 	g, o := s.in.g, s.in.o
-	rest := s.fullMask[c] &^ mask
+	rest := s.needMask[c] &^ mask // only what the candidate cannot do without
 	day, left := g.day(start), bits.OnesCount64(rest)
 
 	from := end
@@ -2132,6 +2311,13 @@ func (s *searcher) evaluate(sched *Schedule, score []int) error {
 
 	for i, proven := range s.proven(score) {
 		scores[i].Proven = proven
+
+		if bound := s.bound[i]; bound != 0 {
+			scores[i].Bound = bound
+			if countsCandidates(s.crit[i].obj) || s.crit[i].obj == MaxMeetings {
+				scores[i].Bound = -bound // the maxima are counted downwards inside
+			}
+		}
 	}
 
 	sched.Scores = scores

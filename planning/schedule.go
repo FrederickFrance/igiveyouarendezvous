@@ -37,6 +37,12 @@ type Score struct {
 	// Proven tells whether Value is proven optimal, given the values reached
 	// on the previous objectives.
 	Proven bool
+	// Bound is a value no schedule can beat on this criterion, when one is
+	// known: the most candidates the recruiters have the hours for, say. It
+	// says how much room is left above a Value that is not proven — "147
+	// served, at most 154 possible" is of use, "147, not proven" is not.
+	// Zero when nothing better than the obvious is known.
+	Bound int
 }
 
 // Schedule is the plan of a period.
@@ -338,13 +344,23 @@ func checkGathering(p *Problem, o Options, iv Interview, recruiters []int, meeti
 
 	if p.Candidates[c].Together {
 		all := 0
+		// The guests are let off: an optional request may be absent, and
+		// the interview is still the one interview with everybody else.
 		for _, r := range p.Requests {
-			if r.Candidate == c {
+			if r.Candidate == c && !r.Optional {
 				all++
 			}
 		}
 
-		if len(iv.Requests) != all {
+		held := 0
+
+		for _, r := range iv.Requests {
+			if !p.Requests[r].Optional {
+				held++
+			}
+		}
+
+		if held != all {
 			return fmt.Errorf("%s meets everybody together, in one interview", candidate)
 		}
 	}
@@ -355,16 +371,24 @@ func checkGathering(p *Problem, o Options, iv Interview, recruiters []int, meeti
 // checkCandidates verifies "all or nothing", and the gaps and the order of
 // the interviews of each candidate.
 func checkCandidates(p *Problem, o Options, s *Schedule, held []int, breaks []Interval) error {
-	needed := make([]int, len(p.Candidates))
-	got := make([]int, len(p.Candidates))
+	needed := make([]int, len(p.Candidates)) // the requests that are not optional
+	got := make([]int, len(p.Candidates))    // every request held, guests included
+	kept := make([]int, len(p.Candidates))   // the ones that are not optional
 
 	for r, req := range p.Requests {
-		needed[req.Candidate]++
+		if !req.Optional { // a guest may be missing without the rest failing
+			needed[req.Candidate]++
+		}
+
 		got[req.Candidate] += held[r]
+
+		if !req.Optional {
+			kept[req.Candidate] += held[r]
+		}
 	}
 
 	for c := range p.Candidates {
-		if got[c] > 0 && got[c] < needed[c] {
+		if got[c] > 0 && kept[c] < needed[c] {
 			return fmt.Errorf("%s is only partly served", p.Candidates[c].Name)
 		}
 

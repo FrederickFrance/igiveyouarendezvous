@@ -619,3 +619,9 @@ button.primary.is-stop {
   flex-wrap: wrap;
   gap: 0.5rem 1.5rem;
 }
+
+.limits .release {
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}

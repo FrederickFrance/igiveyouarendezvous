@@ -23,7 +23,7 @@ func main() {
 
 	if err := run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
 		switch {
-		case errors.Is(err, errAlerts): // reported with the schedule
+		case errors.Is(err, errAlerts), errors.Is(err, errDoubts): // reported above
 			os.Exit(2)
 		case !errors.Is(err, flag.ErrHelp):
 			fmt.Fprintln(os.Stderr, "error:", err)

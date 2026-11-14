@@ -7,6 +7,88 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
+## [0.11.0] - 2026-11-14 "Jack Burton" 🚚
+
+Jack Burton drives the truck. He is not the hero, he understands none of
+what happens to him, and nothing holds together without him. This version
+is about the parts of a day that are nobody's goal and without which there
+is no day: the booked train, the keys to hand back, the friend who comes if
+she can — and about saying out loud what a file does not add up to.
+
+### Added
+
+- **`required: true` on a candidate.** A constraint and no longer an
+  objective: the program refuses to return a schedule without them and
+  names them instead, rather than quietly handing over a day that dropped
+  the booked train or the keys to hand back. They are inserted first, a
+  move that cannot put one of them back is thrown away, and they stay out
+  of the tallies of candidates served — a given is not an achievement.
+- **`optional: true` on a meeting.** It invites the recruiter without
+  needing them: the candidate is complete without them, the interview is
+  held with the guests who are free at that time and without the others,
+  and holding it is a bonus the search looks for. The guest who comes along
+  if they can — a friend on an outing, a second assessor if they are free,
+  a manager who sits in when their day allows. Written in the mapping form
+  of `meet`: `{Market: {}, Annick: {optional: true}}`.
+- **Journeys that do not hold are reported.** A journey through other places
+  counts when it is shorter, which surprises twice over. A default journey
+  links every pair of places, so with a default of ten minutes no two places
+  are ever more than twenty minutes apart, whatever the file says: a long
+  journey given to forbid a link is void. And a default of zero is not "no
+  link" but a free link, so every pair left out of the file becomes a way
+  through at no cost. A place named in the journeys counts as a place even
+  when nobody is met there, so a misspelt name opens a way nobody wanted.
+  The program now names every journey that a way through makes shorter than
+  it was given.
+- **`-check`: what looks wrong in a file, without planning anything.** It
+  counts what the file holds — a file meant for fifteen candidates and
+  holding fourteen is wrong in a way only its author can see — and then
+  names what looks like a slip of the pen without being one: a journey of
+  seventy-two hours where seventy-two minutes was meant, a place named and
+  never visited, two names one letter apart, an availability cut by the
+  hours of the day, one reduced to the exact length of the one visit it is
+  for, a person nobody meets, a priority nobody competes with. Each doubt
+  names the key it bears on, the value found and what makes that value look
+  wrong, so that a file can be corrected from the text alone — by a person
+  or by the model that wrote it. The command exits with code 2 when it has
+  something to say, and prints at most twenty doubts: a checker that cries
+  wolf is a checker nobody reads.
+- **How many candidates the hours allow.** Every interview takes a
+  recruiter's time, so no schedule serves more candidates than the shortest
+  of them fit into the hours available. The program now works that bound
+  out — a sort, nothing more — and prints it: `147/200, at most 154`
+  instead of `147/200 not proven`. On a day where the demand is higher than
+  the hours, it is the only thing that says whether an answer is good, and
+  on a campus day of two hundred students it matched, to the candidate, the
+  bound an exact solver took two minutes to find. It also proves an answer
+  outright where it is reached: three candidates of half an hour for one
+  recruiter for one hour are two at best, with nothing to enumerate.
+- `Score.Bound` carries it to a program, next to `Score.Proven`.
+- **The version in the demo**, in the footer and linked to its release
+  notes, and `-version` on the command. Somebody who only ever uses the
+  demo had no way of seeing that a new version was out. The page reads it
+  from the program, so the two cannot disagree, and a test compares it to
+  this file, so raising one and forgetting the other fails the build.
+- **An example of two days away** (`example/trip.yaml`), the only one that
+  exercises `required`, `optional` and places together: the model turned
+  around, where the party is a recruiter that can only be in one place at a
+  time, every place is a recruiter with opening hours, and every visit is a
+  candidate. Invented names.
+
+### Changed
+
+- **A move that does not yet hold every indispensable candidate stands.**
+  The guard undid any move that left one of them out, which protected them
+  once they were all in and forbade building them up: no single move places
+  them all at once. The schedule therefore depended on the opening greedy
+  having placed every one of them, with no way back if it had not. The guard
+  now compares — a move that holds fewer of them than before goes back, the
+  others stand. Nothing a user could reach, as far as could be shown; the
+  dependence was the point.
+- `.gitattributes` fixes the line endings of the repository (`* text=auto
+  eol=lf`), so that `gofmt -l .` on a clone made with `core.autocrlf=true`
+  no longer lists every file.
+
 ## [0.10.0] - 2026-11-12 "Thomas Anderson" 💊
 
 Thomas Anderson is Neo's name before he chooses. The red pill or the blue

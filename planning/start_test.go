@@ -337,8 +337,8 @@ func TestPriorities(t *testing.T) {
 	p.Candidates[0].Priority = 2
 
 	s := solve(t, p, planning.Options{Day: twoHours})
-	require.Equal(t, planning.Score{Objective: planning.MaxPriorities, Priority: 2, Value: 1, Proven: true}, s.Scores[0])
-	require.Equal(t, planning.Score{Objective: planning.MaxPriorities, Priority: 1, Value: 2, Proven: s.Scores[1].Proven}, s.Scores[1])
+	require.Equal(t, planning.Score{Objective: planning.MaxPriorities, Priority: 2, Value: 1, Proven: true, Bound: s.Scores[0].Bound}, s.Scores[0])
+	require.Equal(t, planning.Score{Objective: planning.MaxPriorities, Priority: 1, Value: 2, Proven: s.Scores[1].Proven, Bound: s.Scores[1].Bound}, s.Scores[1])
 
 	count := solve(t, p, planning.Options{Day: twoHours, Objectives: []planning.Objective{planning.MaxCompleteCandidates}})
 	require.Equal(t, 4, count.Scores[0].Value, "without priorities, more candidates")

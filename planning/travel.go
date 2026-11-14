@@ -164,3 +164,38 @@ func (j *journeys) between(a, b int) time.Duration {
 func (j *journeys) needed() bool {
 	return slices.ContainsFunc(j.longest, func(d time.Duration) bool { return d > 0 })
 }
+
+// Shortcut is a journey of Travel.Journeys that a way through other places
+// makes shorter than the time given for it. It is not an error: a journey
+// matrix has to hold together, and Paris to Dijon cannot take longer than
+// Paris to Lyon and then Lyon to Dijon. But it surprises, above all with
+// Travel.Default, which links every pair of places: with a default of ten
+// minutes, no two places are ever more than twenty minutes apart, whatever
+// the file says. A journey given to forbid a link is void that way.
+type Shortcut struct {
+	From, To string
+	Given    time.Duration // what the file says
+	Through  time.Duration // what a way through other places takes
+}
+
+// Shortcuts returns the journeys of the problem that a way through other
+// places makes shorter than they were given, in the order of the file.
+func (p *Problem) Shortcuts() []Shortcut {
+	trips := p.journeys()
+
+	index := map[string]int{}
+	for i, name := range trips.places {
+		index[name] = i
+	}
+
+	var out []Shortcut
+
+	for _, k := range p.Travel.Journeys {
+		a, b := index[k.From], index[k.To]
+		if through := trips.time[a][b]; through < k.Duration {
+			out = append(out, Shortcut{From: k.From, To: k.To, Given: k.Duration, Through: through})
+		}
+	}
+
+	return out
+}

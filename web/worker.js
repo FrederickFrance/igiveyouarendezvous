@@ -18,7 +18,9 @@ const ready = (async () => {
     result = await WebAssembly.instantiate(await response.arrayBuffer(), go.importObject);
   }
   go.run(result.instance); // returns once main waits for calls
-  postMessage({ type: "ready" });
+  // The release comes from the program, so that the footer of the page can
+  // never claim a version the planner is not.
+  postMessage({ type: "ready", release: self.igiveyouarendezvousRelease });
 })().catch((error) => postMessage({ type: "failed", message: String(error) }));
 
 onmessage = async (event) => {

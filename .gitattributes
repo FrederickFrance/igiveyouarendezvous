@@ -1,0 +1,7 @@
+# The working copy ends its lines the way the repository does, with a line
+# feed, on every machine. Without this, Git for Windows checks the files out
+# with carriage returns, gofmt sees a file it did not write and lists the
+# whole project, and golangci-lint says the same thing — while the committed
+# content was right all along. The confusion costs an evening; this line
+# costs nothing.
+* text=auto eol=lf

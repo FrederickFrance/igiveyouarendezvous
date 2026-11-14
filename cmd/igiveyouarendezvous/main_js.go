@@ -25,6 +25,11 @@ import (
 func main() {
 	js.Global().Set("igiveyouarendezvous", js.FuncOf(plan))
 
+	// The page shows it in its footer: somebody who only ever uses the demo
+	// has no other way of seeing that a new version is out. It comes from
+	// the program and not from the page so that the two can never disagree.
+	js.Global().Set("igiveyouarendezvousRelease", release())
+
 	select {} // serve the calls until the page closes
 }
 

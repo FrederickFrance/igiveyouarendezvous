@@ -119,6 +119,14 @@ type Candidate struct {
 	// journey (see Problem.Travel) comes on top of the recruiter's MinGap.
 	// Empty means no journey to or from the candidate, such as a call.
 	Place string
+	// Required makes the candidate a constraint and no longer an objective:
+	// a schedule without them is no answer at all, so Search refuses to
+	// return one and names them instead. It is for what a day is built
+	// around and what carries no interest of its own — the train that was
+	// booked, the keys handed back at the hotel, the room that has to be
+	// given back at six. A Priority ranks what one would rather have; this
+	// says there is nothing to rank.
+	Required bool
 }
 
 // Request states that a candidate must meet a recruiter.
@@ -142,6 +150,14 @@ type Request struct {
 	// with them and a guest. Zero: an interview with this recruiter alone,
 	// or jointly as JointGroups and Panels allow.
 	Meeting int
+	// Optional invites the recruiter without needing them: the candidate is
+	// complete without this request, and holding it is a bonus the search
+	// looks for. It is the guest who comes along if they can — a friend on
+	// an outing, a second assessor if they are free, a manager who sits in
+	// on the interview when their day allows. With a Meeting, the interview
+	// is held with the guests who are free at that time and without the
+	// others; alone, it is simply an interview that may not happen.
+	Optional bool
 }
 
 // Problem is what has to be planned.

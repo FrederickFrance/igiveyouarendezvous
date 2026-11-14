@@ -138,6 +138,9 @@ type Candidate struct {
 	// Place is where the candidate is met, such as the city of a shoot
 	// (see Travel); normalised (see NormalizeName).
 	Place string
+	// Required makes the candidate a constraint: the program refuses to
+	// return a schedule without them, and names them instead.
+	Required bool
 }
 
 // UnmarshalYAML implements yaml.Unmarshaler.
@@ -150,6 +153,7 @@ func (c *Candidate) UnmarshalYAML(n *yaml.Node) error {
 		Duration     Duration     `yaml:"duration"`
 		Together     bool         `yaml:"together"`
 		Place        string       `yaml:"place"`
+		Required     bool         `yaml:"required"`
 	}
 
 	if err := n.Decode(&raw); err != nil {
@@ -175,7 +179,7 @@ func (c *Candidate) UnmarshalYAML(n *yaml.Node) error {
 
 	*c = Candidate{
 		Meet: *raw.Meet, Meetings: raw.Meetings, Availability: raw.Availability, Duration: raw.Duration,
-		Together: raw.Together, Place: NormalizeName(raw.Place),
+		Together: raw.Together, Place: NormalizeName(raw.Place), Required: raw.Required,
 	}
 	if raw.Priority != nil {
 		c.Priority = *raw.Priority
@@ -239,7 +243,7 @@ var problemKeys = shape{
 	"day": nil, "breaks": nil, "duration": nil, "step": nil, "min-gap": nil, "max-gap": nil,
 	"recruiter-min-gap": nil, "joint-groups": nil, "panels": nil, "max-joint-size": nil, "objectives": nil,
 	"recruiters": {"*": {"duration": nil, "availability": nil, "min-gap": nil}},
-	"candidates": {"*": {"meet": nil, "meetings": nil, "priority": nil, "availability": nil, "duration": nil, "together": nil, "place": nil}},
+	"candidates": {"*": {"meet": nil, "meetings": nil, "priority": nil, "availability": nil, "duration": nil, "together": nil, "place": nil, "required": nil}},
 	"travel":     {"default": nil, "journeys": nil},
 }
 
@@ -492,7 +496,7 @@ func (f *File) Problem(from, to string) (*planning.Problem, planning.Options, er
 
 		cand := planning.Candidate{
 			Name: e.Name, Priority: e.Value.Priority, Duration: time.Duration(e.Value.Duration),
-			Together: e.Value.Together, Place: e.Value.Place,
+			Together: e.Value.Together, Place: e.Value.Place, Required: e.Value.Required,
 		}
 		if first != "" {
 			cand.DaysLeft = f.daysLeft(e.Value, first)
@@ -517,7 +521,7 @@ func (f *File) Problem(from, to string) (*planning.Problem, planning.Options, er
 			}
 
 			met[h] = true
-			p.Requests = append(p.Requests, planning.Request{Candidate: c, Recruiter: h, Rank: m.Rank, Duration: m.Duration})
+			p.Requests = append(p.Requests, planning.Request{Candidate: c, Recruiter: h, Rank: m.Rank, Duration: m.Duration, Optional: m.Optional})
 		}
 
 		if p.Requests, err = meetings(p.Requests, c, e, recruiters, o.Duration); err != nil {

@@ -194,7 +194,7 @@ func TestMeets(t *testing.T) {
 		"{R1: {rank: 0}}":        "a rank is expected",
 		"{R1: {duration: 30}}":   "a rank is expected",
 		"{R1: {duration: [1h]}}": "a rank is expected",
-		"{R1: {length: 1h}}":     `line 1: R1: unknown key "length" (known: duration, rank)`,
+		"{R1: {length: 1h}}":     `line 1: R1: unknown key "length" (known: duration, rank, optional)`,
 		"[[R1]]":                 "a recruiter name is expected",
 		"R1":                     "the recruiters to meet are expected",
 	} {
@@ -289,4 +289,21 @@ func TestAvailability(t *testing.T) {
 
 	_, err = decodeYAML[Availability](t, "2026-11-03: soon")
 	require.ErrorContains(t, err, "invalid time span")
+}
+
+// A guest is invited in the same mapping as the rank and the length.
+func TestAGuestIsReadFromTheMeeting(t *testing.T) {
+	t.Parallel()
+
+	meets, err := decodeYAML[Meets](t, "{Market: {duration: 1h}, Annick: {duration: 1h, optional: true}}")
+	require.NoError(t, err)
+	require.Len(t, meets, 2)
+
+	byName := map[string]Meet{}
+	for _, m := range meets {
+		byName[m.Recruiter] = m
+	}
+
+	require.False(t, byName["Market"].Optional)
+	require.True(t, byName["Annick"].Optional, "the guest who comes along if she can")
 }

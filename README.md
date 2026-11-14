@@ -476,6 +476,12 @@ Full examples ([in French](example/fr) too): [the recordings of a show](example/
 [role-playing games](example/roleplay.yaml) whose game master runs two
 tables.
 
+Not only interviews, and not only a working day: the same file plans [two
+days away by train](example/trip.yaml), where the hotel and the trains are
+`required` — the day falls apart without them and they are no achievement —
+and a friend joins two of the visits as a guest, `optional`, without the
+visits ever waiting for her.
+
 **A programme: one thing after the other.** For a colloquium in one room,
 the colloquium is the candidate and the speakers its recruiters: it is in one
 place at a time, so the talks follow each other. Each speaker's `duration` is
@@ -583,6 +589,41 @@ recruiters, `complete-candidates` first those who need few.
 
 ## Following, stopping and resuming
 
+- **How many candidates the hours allow.** Every interview takes a
+  recruiter's time, so no schedule serves more candidates than the shortest
+  of them fit into the hours available. The program works that out and
+  prints it next to the count: `147/200, at most 154`. It ignores the order
+  of the interviews, which is what makes it a bound and not a schedule, and
+  it is the only thing that says whether an answer is good on a day where
+  the demand is higher than the hours. Where the count reaches it, the
+  answer is proven with nothing to enumerate.
+- **`optional: true`** on one of the recruiters of `meet` invites them
+  without needing them: `meet: {Market: {}, Annick: {optional: true}}`. The
+  candidate is complete without them, the interview is held with the guests
+  who are free at that time and without the others, and holding it counts
+  in `meetings`. It is the guest who comes along if they can — a friend on
+  an outing, a second assessor if they are free, a manager who sits in on
+  an interview when their day allows. A guest never holds an interview
+  hostage: the hour that suits the others is kept even when the guest could
+  only come at another time.
+- **`required: true`** makes a candidate a constraint instead of an
+  objective: the program refuses to return a schedule without them and
+  names them instead. It is for what the day is built around and carries no
+  interest of its own — the train that was booked, the keys handed back at
+  the hotel, the room given back at six. A `priority` ranks what one would
+  rather have; this says there is nothing to rank, so a required candidate
+  stays out of the tallies of candidates served.
+- **Journeys hold together.** A journey through other places counts when it
+  is shorter, so the times you give have to be consistent: Paris to Dijon
+  cannot take longer than Paris to Lyon and then Lyon to Dijon. Two things
+  follow, and both surprise. A **default journey links every pair of
+  places**, so with a default of ten minutes no two places are ever more
+  than twenty minutes apart, whatever the file says — a long journey given
+  to forbid a link is void. And **a default of zero is not "no link", it is
+  a free link**: every pair you leave out of the file becomes a way through
+  at no cost. A place named in `journeys` is a place even when no candidate
+  is met there, so a misspelt name opens a way nobody wanted. The program
+  reports every journey a way through makes shorter than you gave it.
 - **Following**: `-progress` prints the objectives at every improvement, with
   the time elapsed. `-progress-json` prints the same thing as one JSON object
   per line, for a program: `{"seconds":4.7,"iterations":812345,"scores":
@@ -828,6 +869,21 @@ publishes it on GitHub Pages whenever `main` changes. Pages must be set to
 
 A distributed binary must come with their copyright and license notices
 (and the `NOTICE` of go.yaml.in/yaml).
+
+## Writing the file with a model on your own machine
+
+Nothing has to leave your computer. The program reads JSON as well as YAML —
+YAML is a superset of JSON, so a `.json` file loads as it is — and a model
+running locally (Ollama, llama.cpp) can be made to answer against a JSON
+schema, which the decoding then enforces: it cannot invent a key or forget
+a duration. Give it `schema/problem.schema.json` as the schema and
+`prompt/en.md` as the instructions, and feed its answer straight to the
+program.
+
+What a schema cannot check is the substance: a file that writes your own
+plan down instead of modelling it, a place spelt two ways, a priority the
+wrong way round. Read `prompt/en.md` yourself once — it is short, and it
+names the mistakes a model makes on this format.
 
 ## License
 

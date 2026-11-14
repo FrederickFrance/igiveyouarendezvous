@@ -222,6 +222,13 @@ func countsCandidates(obj Objective) bool {
 
 // counts tells whether criterion cr counts the complete candidate c.
 func (cr criterion) counts(p *Problem, c int) bool {
+	// A required candidate is a given and not an achievement: counting them
+	// among the candidates served would mix a constraint into the tally and
+	// make a mandatory train look like a candidate one is glad to have seen.
+	if p.Candidates[c].Required {
+		return false
+	}
+
 	switch cr.obj {
 	case MaxCompleteCandidates:
 		return true

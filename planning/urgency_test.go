@@ -29,10 +29,10 @@ func TestUrgencyChoosesTheLastChance(t *testing.T) {
 	require.Len(t, s.Interviews, 1)
 	require.Equal(t, 1, s.Interviews[0].Candidate, "A")
 	require.Equal(t, []planning.Score{
-		{Objective: planning.MaxPriorities, Priority: 1, Value: 1, Proven: s.Scores[0].Proven},
-		{Objective: planning.MaxUrgency, DaysLeft: 1, Value: 1, Proven: s.Scores[1].Proven},
-		{Objective: planning.MaxUrgency, DaysLeft: 3, Value: 0, Proven: s.Scores[2].Proven},
-		{Objective: planning.MaxMeetings, Value: 1, Proven: s.Scores[3].Proven},
+		{Objective: planning.MaxPriorities, Priority: 1, Value: 1, Proven: s.Scores[0].Proven, Bound: s.Scores[0].Bound},
+		{Objective: planning.MaxUrgency, DaysLeft: 1, Value: 1, Proven: s.Scores[1].Proven, Bound: s.Scores[1].Bound},
+		{Objective: planning.MaxUrgency, DaysLeft: 3, Value: 0, Proven: s.Scores[2].Proven, Bound: s.Scores[2].Bound},
+		{Objective: planning.MaxMeetings, Value: 1, Proven: s.Scores[3].Proven, Bound: s.Scores[3].Bound},
 	}, s.Scores)
 }
 
