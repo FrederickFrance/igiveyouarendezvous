@@ -65,10 +65,11 @@ a des valeurs par défaut) :
   n'est pas « pas de liaison » mais une liaison gratuite, donc tout couple
   oublié devient une téléportation. La règle est courte : **un défaut n'est
   sûr que si tous les trajets écrits sont plus courts que lui.** Un seul
-  plus long et le défaut le défait. Donc soit vous écrivez tous les couples
-  et pas de défaut du tout — c'est aussi ce qui fait d'un couple manquant
-  une erreur et non une supposition —, soit vous gardez le défaut pour une
-  zone où les distances se ressemblent vraiment et restent en dessous. Un
+  plus long et le défaut le défait. Donc soit vous n'en mettez aucun — les
+  trajets donnés suffisent alors, puisqu'une paire atteinte par d'autres
+  lieux coûte ce passage, et une paire que rien ne relie est refusée au
+  lieu d'être devinée —, soit vous gardez le défaut pour une zone où les
+  distances se ressemblent vraiment et restent en dessous. Un
   défaut à côté d'une liste complète n'est jamais consulté : retirez-le, ou
   le prochain lieu ajouté sans ses trajets prendra sans bruit une valeur que
   rien ne vérifie. Écrivez chaque lieu exactement de la même façon dans
@@ -103,8 +104,10 @@ a des valeurs par défaut) :
   trajets, `default` pour toute paire non listée, et `journeys`, une liste de
   `[Paris, Lyon, 2h30]`, dans les deux sens. Donne des estimations hautes, de
   porte à porte, avec un commentaire sur ce qui fonde chacune
-  (`# train 2h + 30 min jusqu'à la gare`) ; sans `default`, liste chaque
-  paire de lieux.
+  (`# train 2h + 30 min jusqu'à la gare`). Sans `default`, tu n'as pas à
+  lister chaque paire : une paire atteinte par d'autres lieux coûte ce
+  passage, donc donne les trajets vraiment directs et laisse le reste
+  suivre. Deux lieux que rien ne relie sont refusés.
 - `candidates.<nom>.priority` : `1` par défaut ; plus il est grand, plus le
   candidat compte quand tout le monde ne tient pas.
 - `joint-groups` : des listes de recruteurs qui PEUVENT recevoir un candidat

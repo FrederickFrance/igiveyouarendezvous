@@ -22,7 +22,7 @@ func TestShortcutsReportTheJourneysThatDoNotHold(t *testing.T) {
 	}
 
 	p.Travel = planning.Travel{
-		Default: 10 * time.Minute,
+		Default: new(10 * time.Minute),
 		Journeys: []planning.Journey{
 			{From: "Ici", To: "Loin", Duration: 72 * time.Hour}, // meant to forbid the link
 			{From: "Ici", To: "Ailleurs", Duration: 15 * time.Minute},
@@ -37,8 +37,9 @@ func TestShortcutsReportTheJourneysThatDoNotHold(t *testing.T) {
 	require.Equal(t, 25*time.Minute, cuts[0].Through, "Ici to Ailleurs, 15 min, then Ailleurs to Loin at the default")
 
 	// A default of zero is not "no link": it is a free link. Every pair
-	// left out of the file becomes a way through, at no cost.
-	p.Travel.Default = 0
+	// left out of the file becomes a way through, at no cost. Leaving
+	// Default nil is the other thing, and refuses such a pair outright.
+	p.Travel.Default = new(time.Duration(0))
 	cuts = p.Shortcuts()
 	require.Len(t, cuts, 1)
 	require.Equal(t, 15*time.Minute, cuts[0].Through, "Ici to Ailleurs, then Ailleurs to Loin for free")

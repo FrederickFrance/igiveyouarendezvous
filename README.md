@@ -396,9 +396,15 @@ journey written to forbid a link does not forbid it. **A default is safe
 only when every journey listed is shorter than it** — as the `5h` above is.
 Beside a complete list it is never consulted at all, and `-check` says so:
 take it out, so that a place added later without its journeys is refused
-rather than given a value nothing checks. Without `default`, every two
-places of the candidates must be listed; with it, the command notes a place
-that no journey names, which may be a typo. A candidate without place takes
+rather than given a value nothing checks. Without `default`, the journeys
+need not list every pair: a pair reached through other places costs that
+way, so Paris to Marseille needs no line once Paris to Lyon and Lyon to
+Marseille are given. `-check` shows the times worked out that way, with the
+way through, so they can be looked over before they are trusted. Two places
+that nothing links at all are refused: there is no time to plan with, and
+holding them to be the same place is how a schedule comes out impossible on
+the day. With a `default`, the command notes a place that no journey names,
+which may be a typo. A candidate without place takes
 no journey, but a recruiter still travels from Paris to Lyon around them.
 On the time grid, the journeys are rounded up to 5 minutes: `2h07` counts
 as `2h10`, rather than making a grid of one minute. Full example: [a

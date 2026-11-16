@@ -68,7 +68,7 @@ func TestTravelThroughAnotherPlace(t *testing.T) {
 	t.Parallel()
 
 	p, o := shows(t, "Paris", "Dijon")
-	p.Travel = planning.Travel{Default: 12 * time.Hour, Journeys: []planning.Journey{
+	p.Travel = planning.Travel{Default: new(12 * time.Hour), Journeys: []planning.Journey{
 		{From: "Paris", To: "Lyon", Duration: 2 * time.Hour},
 		{From: "Dijon", To: "Lyon", Duration: 2 * time.Hour},
 	}}
@@ -112,7 +112,7 @@ func TestTravelRemains(t *testing.T) {
 	t.Parallel()
 
 	p, _ := shows(t, "Paris", "Lyon")
-	p.Travel = planning.Travel{Default: time.Hour}
+	p.Travel = planning.Travel{Default: new(time.Hour)}
 
 	require.Equal(t, p.Travel, (&planning.Schedule{Unscheduled: []int{0, 1}}).Remaining(p).Travel)
 }
@@ -121,7 +121,7 @@ func TestTravelErrors(t *testing.T) {
 	t.Parallel()
 
 	for travel, want := range map[*planning.Travel]string{
-		{Default: -time.Hour}: "planning: travel: negative default journey",
+		{Default: new(-time.Hour)}: "planning: travel: negative default journey",
 		{Journeys: []planning.Journey{{From: "Paris", Duration: time.Hour}}}:                     "planning: travel: a journey without a place",
 		{Journeys: []planning.Journey{{From: "Paris", To: "Paris", Duration: time.Hour}}}:        "planning: travel: a journey from Paris to itself",
 		{Journeys: []planning.Journey{{From: "Paris", To: "Lyon", Duration: -time.Hour}}}:        "planning: travel: Paris to Lyon: negative journey",

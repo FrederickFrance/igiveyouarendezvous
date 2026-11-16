@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -81,6 +82,15 @@ func (p *Problem) Validate(o Options) error {
 // other places undoes, the places left unlinked, the places named and never
 // visited, the names a letter apart and the journeys out of scale.
 func (p *Problem) travelDoubts() []Doubt {
+	// A default of zero undoes the whole of travel at once: every pair of
+	// places is free, so every journey written is void and every place is
+	// a way through to everywhere. Said pair by pair that is one doubt per
+	// line of the file, all of them the same fact; said once it is the
+	// fact. A checker that cries wolf is a checker nobody reads.
+	if free := p.freeDefaultDoubt(); free != nil {
+		return free
+	}
+
 	var out []Doubt
 
 	for _, c := range p.Shortcuts() {
@@ -92,7 +102,6 @@ func (p *Problem) travelDoubts() []Doubt {
 		})
 	}
 
-	out = append(out, p.unlinkedDoubts()...)
 	out = append(out, p.unvisitedDoubts()...)
 	out = append(out, nearNames("place", p.placeNames())...)
 
@@ -105,12 +114,20 @@ func (p *Problem) placeNames() []string {
 	return p.journeys().places
 }
 
-// unlinkedDoubts reports pairs of visited places that no chain of journeys
-// links, which the program then takes to be at no distance from each other:
-// Travel.Default is zero, so the pair is free. It names one pair per place,
-// not the whole product.
-func (p *Problem) unlinkedDoubts() []Doubt {
-	if p.Travel.Default > 0 {
+// freeDefaultDoubt reports a travel.default of zero that leaves pairs of
+// visited places costing nothing. A default of zero is not "no link": it is
+// a free link between every pair the journeys do not give, and because a
+// free link is also a free way through, it undoes the journeys that are
+// given as well. The places then change nothing at all, and the file would
+// plan the same with none of them.
+//
+// Only a default of zero reaches this. A default that takes time links the
+// pairs honestly, and no default at all refuses them outright (see
+// unlinked): a pair nothing links is an error and not a doubt, because
+// there is no time to plan with and inventing one is how a schedule comes
+// out impossible on the day.
+func (p *Problem) freeDefaultDoubt() []Doubt {
+	if p.Travel.Default == nil || *p.Travel.Default != 0 {
 		return nil
 	}
 
@@ -127,30 +144,57 @@ func (p *Problem) unlinkedDoubts() []Doubt {
 		return nil
 	}
 
-	var out []Doubt
+	var free []string
 
 	for _, a := range slices.Sorted(maps.Keys(visited)) {
 		for _, b := range slices.Sorted(maps.Keys(visited)) {
-			if a >= b || trips.time[a][b] > 0 {
-				continue
+			if a < b && trips.time[a][b] == 0 {
+				free = append(free, trips.places[a]+" to "+trips.places[b])
 			}
-
-			out = append(out, Doubt{
-				About: trips.places[a] + " to " + trips.places[b],
-				Text: "no journey, and no default: the program holds the two places to be the same one, " +
-					"and moves between them for nothing — give the journey, or a realistic travel.default",
-			})
-
-			break // one pair per place is enough to point at the hole
 		}
 	}
 
-	return out
+	if len(free) == 0 {
+		return nil
+	}
+
+	return []Doubt{{
+		About: "travel.default",
+		Text: fmt.Sprintf("zero, which is a free link and not the absence of one: that makes %s of "+
+			"places free (%s), so people move between them for nothing and the places change "+
+			"nothing — take travel out, or give a default that takes time",
+			plural(len(free), "pair"), abbreviate(free, 3)),
+	}}
 }
 
-// unvisitedDoubts reports the places that journeys names and no candidate is
-// at: a way through other places, which is a use of its own, or a name
-// spelt differently from the candidate's.
+// plural writes a number and its noun: "1 pair", "5 pairs".
+func plural(n int, noun string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, noun)
+	}
+
+	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+// abbreviate joins up to most of the items, and says how many are left.
+func abbreviate(items []string, most int) string {
+	if len(items) <= most {
+		return strings.Join(items, ", ")
+	}
+
+	return fmt.Sprintf("%s and %d more", strings.Join(items[:most], ", "), len(items)-most)
+}
+
+// unvisitedDoubts reports the places that journeys names, that no candidate
+// is at, and that no way through uses: a name spelt differently from the
+// candidate's, which opens a door nobody wanted, or a line left over from
+// an earlier version of the file.
+//
+// A place that a way through does use is left alone, because that is a use
+// of its own and a good one: a station nobody is met at is how the hotel
+// comes to be an hour and a quarter from the next town without a line
+// saying so. Reporting those would make the checker complain about the very
+// thing the journeys are for.
 func (p *Problem) unvisitedDoubts() []Doubt {
 	trips := p.journeys()
 	visited := map[string]bool{}
@@ -158,6 +202,12 @@ func (p *Problem) unvisitedDoubts() []Doubt {
 	for c, a := range trips.placeOf {
 		if a >= 0 {
 			visited[p.Candidates[c].Place] = true
+		}
+	}
+
+	for _, chain := range p.Chains() {
+		for _, name := range chain.Through {
+			visited[name] = true
 		}
 	}
 

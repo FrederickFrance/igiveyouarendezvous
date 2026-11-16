@@ -7,6 +7,53 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
+## [0.13.0] - 2026-11-16 "Allied Mastercomputer" 🤐
+
+AM allows no choice it did not allow. This version is about what the
+journeys already say: a hotel twenty minutes from the station and a station
+fifty-five minutes from the next town say what the hotel to the next town
+costs, and until now the file had to repeat it. It no longer does — and
+what nothing links at all is refused outright rather than crossed for free.
+
+### Changed
+
+- **The journeys no longer have to list every pair.** A pair of places that
+  a way through other places reaches costs that way: four journeys between
+  four places are enough, and the fifteen that a hand-written matrix of six
+  places needs are now four or five. Repeating what the journeys already
+  said is how `example/fr/trip.yaml` came to carry `72h` twice.
+- **Two places that nothing links are refused.** Until now, with no
+  `travel.default`, a pair the journeys left out was crossed in no time at
+  all: the program held the two to be the same place and sent people
+  between them for free, which is how a schedule comes out impossible on
+  the day. There is no time to plan with and no honest number to invent, so
+  the program says which pair is missing and stops. Give the journey, a
+  journey to a place between them, or a `travel.default`.
+- **`planning.Travel.Default` is now a `*time.Duration`** (`nil` for none,
+  `new(d)` to set one). A default of zero is a free link and
+  the absence of a default refuses the pair: they are not the same thing,
+  and the library could not tell them apart. Files are unaffected.
+
+### Added
+
+- **`-check` shows the journeys it worked out**, with the way through:
+  `Hotel to Next town: 1h15 through Station`. The search plans with these
+  times, and a way through is only as good as the journeys under it — one
+  wrong journey spreads quietly into every pair it is part of — so they are
+  put in front of the author rather than used behind their back.
+
+### Fixed
+
+- **`-check` no longer calls a station a slip of the pen.** A place nobody
+  is met at, that a way through uses, is what the journeys are for. One
+  that carries nothing is still reported, since that is what a misspelt
+  name looks like.
+- **A `travel.default` of zero is reported once, not once per line.** It
+  makes every pair of places free, which undoes every journey in the file
+  at the same time; the report said so pair by pair, and on a small example
+  that was eight doubts for one fact — one of them naming a pair the file
+  did give.
+
 ## [0.12.0] - 2026-11-16 "Columbo" 🕵️
 
 Columbo already knows. He comes back to the door for one more small
