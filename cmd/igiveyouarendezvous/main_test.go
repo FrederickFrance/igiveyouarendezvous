@@ -542,6 +542,38 @@ func TestRunEveryExample(t *testing.T) {
 	}
 }
 
+// Every example passes -check with nothing to look into. The examples are
+// what a reader copies, so a slip of the pen in one of them teaches the slip
+// — and -check is the program's own opinion of what a slip looks like, so
+// an example it complains about is either a bad example or a bad complaint.
+// Either way it is a bug. This is not hypothetical: example/fr/trip.yaml
+// shipped in v0.11.0 with two journeys written as 72h to forbid a link,
+// which is exactly the mistake -check was written to catch, and no test
+// looked.
+func TestEveryExamplePassesTheCheck(t *testing.T) {
+	t.Parallel()
+
+	names, err := filepath.Glob(filepath.Join("..", "..", "example", "*.*"))
+	require.NoError(t, err)
+
+	french, err := filepath.Glob(filepath.Join("..", "..", "example", "fr", "*.yaml"))
+	require.NoError(t, err)
+
+	for _, name := range append(names, french...) {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var out bytes.Buffer
+
+			// No error at all: -check answers with errDoubts as soon as it has
+			// anything to report, so NoError is the whole assertion. The report
+			// goes in the failure message, since that is what has to be read.
+			require.NoError(t, run(t.Context(), []string{"-check", name}, nil, &out, &out), out.String())
+			require.Contains(t, out.String(), "nothing in it looks like a slip of the pen")
+		})
+	}
+}
+
 // The examples of other uses (README): meetings with everybody at once, and
 // the programme of a colloquium.
 func TestRunOtherUses(t *testing.T) {

@@ -1,30 +1,80 @@
 # yaml-language-server: $schema=../../schema/problem.schema.json
 #
-# Une tournée : cinq épisodes tournés dans cinq villes, chacun avec un invité
-# du coin. L'animatrice et le cadreur vont d'un tournage au suivant. Chaque
-# épisode est un « candidat », à son lieu (place), avec ses rencontres :
-# deux scènes en ville avec l'animatrice et le cadreur, une heure chacune, et
-# l'entretien avec l'invité, deux heures, dans n'importe quel ordre. Entre deux tournages
-# dans des villes différentes, l'équipe a besoin du trajet : des estimations
-# hautes, de porte à porte, rangement du matériel compris ; le programme ne
-# calcule aucun itinéraire.
+# Une tournée de tournages : des épisodes enregistrés dans plusieurs villes,
+# chacun avec un invité local. Ce ne sont pas des entretiens, et les mots du
+# fichier se traduisent ainsi :
+#
+#   - un « recruteur » est une personne — l'animateur, le caméraman, chaque
+#     invité ;
+#   - un « candidat » est un épisode, à son lieu ;
+#   - une « rencontre » est une scène ou une interview à enregistrer.
+#
+# L'équipe conduit elle-même d'un tournage à l'autre et ne peut être que
+# dans une ville à la fois. Trois choses portent la tournée, et chacune a sa
+# clé :
+#
+#   - « required » : l'épisode autour duquel la saison est construite. Ce
+#     n'est pas une réussite et il n'y a pas de tournée sans lui, donc le
+#     programme refuse un planning qui le laisse tomber au lieu de livrer
+#     discrètement un plan sans lui.
+#   - « priority » : les épisodes qu'on préfère avoir, et le segment qui est
+#     un bonus s'il reste de la place.
+#   - « travel » : les trajets en voiture entre les villes, chacun écrit
+#     assez long pour que celui qui a conduit soit en état d'enregistrer à
+#     l'arrivée.
 
 from: 2026-11-16
-to: 2026-11-20
+to: 2026-11-22
 day: 08:00-20:00
-objectives: [complete-candidates, recruiters, day-end]   # tous les épisodes, puis le moins de jours
+
+# Les sept jours, et non les cinq de la semaine par défaut : une tournée ne
+# s'arrête pas le vendredi soir, et les invités d'un week-end sont souvent
+# plus disponibles que ceux d'un mardi.
+weekdays: [mon, tue, wed, thu, fri, sat, sun]
+
+# Tous les épisodes d'abord ; puis le moins de personnes sur le moins de
+# jours, ce qui est le coût d'une tournée ; puis en avoir fini au plus tôt ;
+# puis rentrer tôt. Il n'existe pas d'objectif « le moins de jours » à lui
+# seul : recruiters compte les personnes qui travaillent chaque jour, ce qui
+# est plus proche de ce qui est payé.
+objectives: [priorities, recruiters, span, day-end]
 
 travel:
-  default: 6h           # tout trajet qui n'est pas listé dessous
+  # En voiture, conduite par l'équipe elle-même. Chaque valeur est le trajet
+  # plus une pause : de porte à porte, matériel chargé, et assez longue pour
+  # que personne n'enregistre au sortir de l'autoroute. C'est pourquoi rien
+  # ici n'est un temps de conduite brut — les 4h30 de Paris à Lyon sont
+  # écrites 5h30. Un trajet plus long que ce qui reste de la journée repousse
+  # simplement le tournage suivant au lendemain matin, et c'est alors la nuit
+  # qui paie le repos.
+  #
+  # Les dix paires des cinq villes sont listées, et il n'y a volontairement
+  # pas de « default » : un défaut relie toutes les paires, donc deux villes
+  # ne seraient jamais plus éloignées que le double de celui-ci, quoi que
+  # dise le fichier. Sur cinq villes cela fait dix lignes, et dix lignes
+  # coûtent moins cher qu'une surprise.
   journeys:
-    - [Paris, Lille, 2h30]
-    - [Paris, Lyon, 3h30]
-    - [Paris, Bordeaux, 3h30]
-    - [Lyon, Marseille, 3h]
+    - [Paris, Lille, 3h]
+    - [Paris, Lyon, 5h30]
+    - [Paris, Marseille, 9h]
+    - [Paris, Bordeaux, 7h]
+    - [Lille, Lyon, 8h]
+    - [Lille, Marseille, 11h30]
+    - [Lille, Bordeaux, 9h]
+    - [Lyon, Marseille, 3h45]
+    - [Lyon, Bordeaux, 6h45]
+    - [Marseille, Bordeaux, 7h15]
 
-recruiters:             # les personnes : l'équipe et les invités
-  Animatrice:
-  Cadreur:
+recruiters: # les personnes : l'équipe, et les invités
+  Animateur:
+  Caméra:
+
+  # L'autorisation pour les catacombes est accordée pour une matinée, et
+  # pour celle-là seulement : une contrainte du lieu, pas un souhait de
+  # l'équipe.
+  Autorisation catacombes:
+    availability: {2026-11-18: 08:00-13:00}
+
   Invité Lille:
     availability:
       2026-11-16: 14:00-20:00
@@ -32,39 +82,61 @@ recruiters:             # les personnes : l'équipe et les invités
   Invité Paris:
   Invité Lyon:
     availability:
-      2026-11-18: 08:00-20:00
       2026-11-19: 08:00-20:00
+      2026-11-20: 08:00-20:00
   Invité Marseille:
     availability:
-      2026-11-19: 08:00-20:00
+      2026-11-21: 08:00-20:00
+      2026-11-22: 08:00-20:00
   Invité Bordeaux:
     availability:
       2026-11-16: 08:00-13:00
-      2026-11-20: 08:00-20:00
+      2026-11-22: 08:00-20:00
 
-candidates:             # les épisodes, chacun à son lieu, tourné d'une traite
-  les archives de Lille:
-    meetings:
-      - {with: [Animatrice, Cadreur], duration: 1h, times: 2}   # deux scènes en ville
-      - {with: [Animatrice, Cadreur, Invité Lille], duration: 2h}
-    place: Lille
+  # Quelqu'un qu'on aimerait enregistrer si la tournée passe quand elle est
+  # libre. Son segment est un épisode à part entière parce qu'il coûte son
+  # propre créneau : « optional » dirait qu'elle assiste à une scène sans
+  # rien coûter, ce qui n'est pas la même chose.
+  Collectionneuse Lyon:
+    availability: {2026-11-19: 14:00-20:00}
+
+candidates: # les épisodes, chacun à son lieu
+  # Celui autour duquel la saison est construite, et l'autorisation décide
+  # de sa matinée.
   les catacombes de Paris:
     meetings:
-      - {with: [Animatrice, Cadreur], duration: 1h, times: 2}   # deux scènes en ville
-      - {with: [Animatrice, Cadreur, Invité Paris], duration: 2h}
+      - {with: [Animateur, Caméra, Autorisation catacombes], duration: 2h}
+      - {with: [Animateur, Caméra, Invité Paris], duration: 2h}
+    required: true
     place: Paris
+
+  les archives de Lille:
+    meetings:
+      - {with: [Animateur, Caméra], duration: 1h, times: 2} # deux scènes en ville
+      - {with: [Animateur, Caméra, Invité Lille], duration: 2h}
+    priority: 2
+    place: Lille
   les canuts de Lyon:
     meetings:
-      - {with: [Animatrice, Cadreur], duration: 1h, times: 2}   # deux scènes en ville
-      - {with: [Animatrice, Cadreur, Invité Lyon], duration: 2h}
+      - {with: [Animateur, Caméra], duration: 1h, times: 2}
+      - {with: [Animateur, Caméra, Invité Lyon], duration: 2h}
+    priority: 2
     place: Lyon
   le vieux port de Marseille:
     meetings:
-      - {with: [Animatrice, Cadreur], duration: 1h, times: 2}   # deux scènes en ville
-      - {with: [Animatrice, Cadreur, Invité Marseille], duration: 2h}
+      - {with: [Animateur, Caméra], duration: 1h, times: 2}
+      - {with: [Animateur, Caméra, Invité Marseille], duration: 2h}
+    priority: 2
     place: Marseille
   les chais de Bordeaux:
     meetings:
-      - {with: [Animatrice, Cadreur], duration: 1h, times: 2}   # deux scènes en ville
-      - {with: [Animatrice, Cadreur, Invité Bordeaux], duration: 2h}
+      - {with: [Animateur, Caméra], duration: 1h, times: 2}
+      - {with: [Animateur, Caméra, Invité Bordeaux], duration: 2h}
+    priority: 2
     place: Bordeaux
+
+  # Priorité 1 : pris seulement si le reste tient sans lui.
+  la collectionneuse de Lyon:
+    meetings:
+      - {with: [Animateur, Caméra, Collectionneuse Lyon], duration: 1h30}
+    place: Lyon

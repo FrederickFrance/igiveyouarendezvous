@@ -7,6 +7,82 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
+## [0.12.0] - 2026-11-16 "Columbo" 🕵️
+
+Columbo already knows. He comes back to the door for one more small
+question, about the detail that does not fit. This version is about `-check`
+learning which details actually do not fit: it cried wolf on conventions
+that are not mistakes, and it had no say over the examples it was written
+to guard — which is how an example shipped carrying the exact mistake the
+previous version added `-check` to catch.
+
+### Added
+
+- **`-check` in the demo.** A second button beside the one that plans. It
+  reads the file and says what looks wrong in it without scheduling
+  anything, so a file written by hand or by a model can be looked over
+  before it is run.
+- **Every example is checked by the tests.** The examples are what a reader
+  copies, so a slip of the pen in one of them teaches the slip. `-check` is
+  the program's own opinion of what a slip looks like, so an example it
+  complains about is either a bad example or a bad complaint; the suite now
+  refuses both.
+- **`-check` reports the hours it never sees.** An availability given for a
+  date that has no interviews is read, found to be on no day of the period,
+  and dropped, so the file says something that has no effect. The report
+  names the day of the week, which key closed it — `weekdays`, `closed`, or
+  the period itself — and what to write instead, because the correction is
+  not the same in the three cases. A file that never mentions `weekdays`
+  closes Saturday and Sunday without a word about it, and the report now
+  says so rather than leaving it to be found.
+- **`-check` reports a `travel.default` that nothing can reach.** A default
+  beside a complete matrix is never consulted, and that is the trouble with
+  it: it reads as a safety net, so a place added later without its journeys
+  takes a value that was already dead. A default of `0` is reported too — a
+  free link between every pair is not the absence of a link.
+
+### Fixed
+
+- **`-check` no longer calls a convention a slip.** Names a letter apart
+  were all reported as possible duplicates, which made `candidate A`,
+  `candidate B`, `candidate C` look like three mistakes instead of a
+  convention. Three names sharing a shape are now a series and stay quiet,
+  while two — `Dupond` and `Dupont`, or one name written twice — are still
+  a question worth asking.
+- **`-check` no longer doubts a fixed appointment.** A candidate free for
+  exactly as long as what they are asked to attend leaves the search nothing
+  to choose, which is a slip of the pen on an ordinary candidate and the
+  whole point on a `required` one: the booked train leaves at 09:10 and the
+  ride takes an hour. It is no longer reported for a required candidate —
+  but a required candidate who cannot be served at all still is, since
+  required makes that worse and not better.
+- **`-check` no longer doubts an availability that a closed day trims.** An
+  availability given without a date is a pattern for every day, and it is
+  no mistake for a pattern not to apply on a day the file closes. Only the
+  hours lost inside an open day are reported now.
+- **The demo reads on a phone.** A `-check` report is prose and was shown
+  in the box built for a schedule, which keeps its columns and scrolls
+  sideways: on a narrow screen the end of every line was off the edge, and
+  a line nobody scrolls to is a line nobody reads. The report wraps now; a
+  schedule still scrolls.
+- **The demo no longer runs two sentences together.** An error ending
+  without a full stop was followed by "The line is selected in the editor."
+  with nothing between them.
+- **The vulnerability scan no longer builds the scanner.** It installed
+  `osv-scanner@latest` from source on every run, and so downloaded the whole
+  of the scanner's dependency tree — none of it ours. A flaky download deep
+  inside that tree failed the job with an HTTP/2 stream error, over a module
+  the project does not depend on. The official reusable workflow runs a
+  scanner that is already built, at a pinned version, and reports to the
+  Security tab.
+- **The travel in both `trip.yaml` examples.** The French one gave two
+  journeys as `72h` to forbid a link, which is exactly what the previous
+  version added `-check` to report, and no test looked. Both now have three
+  places and no default — a default of twelve minutes made the hotel 24
+  minutes from the next town instead of the 1h15 given — and the two trains
+  carry no place, so the ride costs its own time once instead of being
+  charged again in the journey out of the station.
+
 ## [0.11.0] - 2026-11-14 "Jack Burton" 🚚
 
 Jack Burton drives the truck. He is not the hero, he understands none of

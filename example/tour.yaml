@@ -1,29 +1,72 @@
 # yaml-language-server: $schema=../schema/problem.schema.json
 #
-# A tour: five episodes shot in five cities, each with a local guest. The
-# host and the camera operator travel from one shoot to the next. Each
-# episode is a "candidate" at its place, with its meetings: two scenes in
-# the city with the host and the camera operator, an hour each, and the
-# interview of the guest, two hours, in any order. Between two shoots in different cities,
-# the team needs the journey: upper estimates, door to door, packing the
-# gear included; the program computes no route.
+# A shooting tour: episodes recorded in several cities, each with a local
+# guest. Not interviews, and the words of the file map onto it like this:
+#
+#   - a "recruiter" is a person — the host, the camera operator, each guest;
+#   - a "candidate" is an episode, at its place;
+#   - a "meeting" is a scene or an interview to record.
+#
+# The team drives itself from one shoot to the next, and can only be in one
+# city at a time. Three things carry the tour, and each has a key of its own:
+#
+#   - "required": the episode the season is built around. It is no
+#     achievement and there is no tour without it, so the program refuses a
+#     schedule that drops it instead of quietly handing over a plan without
+#     it.
+#   - "priority": the episodes one would rather have, and the segment that
+#     is a bonus if there is room.
+#   - "travel": the drives between cities, each written long enough that
+#     whoever drove is fit to record at the other end.
 
 from: 2026-11-16
-to: 2026-11-20
+to: 2026-11-22
 day: 08:00-20:00
-objectives: [complete-candidates, recruiters, day-end]   # every episode, then the fewest days
+
+# All seven days, not the five of the working week that are the default: a
+# tour does not stop on Friday evening, and a guest of a weekend is often
+# freer than one of a Tuesday.
+weekdays: [mon, tue, wed, thu, fri, sat, sun]
+
+# Every episode first; then the fewest people on the fewest days, which is
+# what a tour costs; then be over as soon as possible; then home early.
+# There is no objective for "the fewest days" on its own: recruiters counts
+# the people who work each day, which is closer to what is paid for.
+objectives: [priorities, recruiters, span, day-end]
 
 travel:
-  default: 6h           # any journey not listed below
+  # By car, driven by the team itself. Each figure is the drive plus a
+  # break: door to door, gear loaded, and long enough that nobody records
+  # straight after the motorway. That is why nothing here is a bare driving
+  # time — the 4h30 run from Paris to Lyon is written 5h30. A drive longer
+  # than what is left of a day simply moves the next shoot to the morning
+  # after, and the night then pays for the rest.
+  #
+  # Every pair of the five cities is listed, and there is no "default" on
+  # purpose: a default links every pair, so no two cities would ever be
+  # further apart than twice it, whatever the file said. On five cities that
+  # is ten lines, and ten lines are cheaper than a surprise.
   journeys:
-    - [Paris, Lille, 2h30]
-    - [Paris, Lyon, 3h30]
-    - [Paris, Bordeaux, 3h30]
-    - [Lyon, Marseille, 3h]
+    - [Paris, Lille, 3h]
+    - [Paris, Lyon, 5h30]
+    - [Paris, Marseille, 9h]
+    - [Paris, Bordeaux, 7h]
+    - [Lille, Lyon, 8h]
+    - [Lille, Marseille, 11h30]
+    - [Lille, Bordeaux, 9h]
+    - [Lyon, Marseille, 3h45]
+    - [Lyon, Bordeaux, 6h45]
+    - [Marseille, Bordeaux, 7h15]
 
-recruiters:             # the people: the team, and the guests
+recruiters: # the people: the team, and the guests
   Host:
   Camera:
+
+  # The permit for the catacombs is granted for one morning, and for that
+  # morning only: a constraint of the place, not a wish of the team.
+  Catacombs permit:
+    availability: {2026-11-18: 08:00-13:00}
+
   Guest Lille:
     availability:
       2026-11-16: 14:00-20:00
@@ -31,39 +74,60 @@ recruiters:             # the people: the team, and the guests
   Guest Paris:
   Guest Lyon:
     availability:
-      2026-11-18: 08:00-20:00
       2026-11-19: 08:00-20:00
+      2026-11-20: 08:00-20:00
   Guest Marseille:
     availability:
-      2026-11-19: 08:00-20:00
+      2026-11-21: 08:00-20:00
+      2026-11-22: 08:00-20:00
   Guest Bordeaux:
     availability:
       2026-11-16: 08:00-13:00
-      2026-11-20: 08:00-20:00
+      2026-11-22: 08:00-20:00
 
-candidates:             # the episodes, each at its place, shot in one go
-  the archives of Lille:
-    meetings:
-      - {with: [Host, Camera], duration: 1h, times: 2}   # two scenes in the city
-      - {with: [Host, Camera, Guest Lille], duration: 2h}
-    place: Lille
+  # Somebody one would like to record if the tour passes while she is free.
+  # Her segment is an episode of its own because it costs its own slot:
+  # "optional" would say she sits in on a scene at no cost, which is not the
+  # same thing.
+  Collector Lyon:
+    availability: {2026-11-19: 14:00-20:00}
+
+candidates: # the episodes, each at its place
+  # The one the season is built around, and the permit decides its morning.
   the Paris catacombs:
     meetings:
-      - {with: [Host, Camera], duration: 1h, times: 2}   # two scenes in the city
+      - {with: [Host, Camera, Catacombs permit], duration: 2h}
       - {with: [Host, Camera, Guest Paris], duration: 2h}
+    required: true
     place: Paris
+
+  the archives of Lille:
+    meetings:
+      - {with: [Host, Camera], duration: 1h, times: 2} # two scenes in the city
+      - {with: [Host, Camera, Guest Lille], duration: 2h}
+    priority: 2
+    place: Lille
   the silk workers of Lyon:
     meetings:
-      - {with: [Host, Camera], duration: 1h, times: 2}   # two scenes in the city
+      - {with: [Host, Camera], duration: 1h, times: 2}
       - {with: [Host, Camera, Guest Lyon], duration: 2h}
+    priority: 2
     place: Lyon
   the old port of Marseille:
     meetings:
-      - {with: [Host, Camera], duration: 1h, times: 2}   # two scenes in the city
+      - {with: [Host, Camera], duration: 1h, times: 2}
       - {with: [Host, Camera, Guest Marseille], duration: 2h}
+    priority: 2
     place: Marseille
   the wine cellars of Bordeaux:
     meetings:
-      - {with: [Host, Camera], duration: 1h, times: 2}   # two scenes in the city
+      - {with: [Host, Camera], duration: 1h, times: 2}
       - {with: [Host, Camera, Guest Bordeaux], duration: 2h}
+    priority: 2
     place: Bordeaux
+
+  # Priority 1: taken only if the rest fits without it.
+  the collector of Lyon:
+    meetings:
+      - {with: [Host, Camera, Collector Lyon], duration: 1h30}
+    place: Lyon

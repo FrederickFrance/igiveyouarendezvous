@@ -61,11 +61,23 @@ has defaults):
   `default: 10m` no two places are ever more than twenty minutes apart,
   whatever you write, and a long journey meant to forbid a link does not
   forbid it. A `default: 0` is worse: it is not "no link" but a free link,
-  so every pair you leave out becomes free teleportation. Either give the
-  journeys that really matter and no default, or give a default that is
-  realistic for the area. Spell every place exactly the same way in
-  `journeys` and in the candidates: a place named only in `journeys` is
-  still a way through.
+  so every pair you leave out becomes free teleportation. The rule is
+  short: **a default is safe only when every journey you write is shorter
+  than it.** One longer journey and the default undoes it. So either write
+  every pair and no default at all — which is also what makes a missing
+  pair an error instead of a guess — or keep the default for an area where
+  the distances really are alike and under it. A default beside a complete
+  list is never consulted: take it out, or the next place added without its
+  journeys will quietly take a value nothing checks. Spell every place
+  exactly the same way in `journeys` and in the candidates: a place named
+  only in `journeys` is still a way through.
+- **Something that happens on the way has no `place`.** A train, a flight,
+  a call in the car: leave `place` out, and the journey between the places
+  on either side is still counted across it. Giving the train the station
+  instead charges the ride twice, once in its own length and once again in
+  the journey out of the station. Keep its window as its timetable
+  (`availability: {2026-12-22: 09:10-10:15}` for a 1h05 ride, which pins
+  it) and mark it `required: true`.
 - **An availability is a constraint, not a decision.** Give a person or a
   place the hours they are really open, and let the search choose the day and
   the time. Writing one date and a window just wide enough for the length

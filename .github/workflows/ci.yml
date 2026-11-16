@@ -60,17 +60,26 @@ jobs:
         with:
           version: v2.15.0 # 2.13 cannot read the export data of Go 1.27
 
+  # osv-scanner, which runs govulncheck on Go code. The official reusable
+  # workflow runs a scanner that is already built, which matters more than it
+  # sounds: "go install osv-scanner@latest" compiled the scanner here on
+  # every run, and so pulled the whole of its dependency tree — none of it
+  # ours. A flaky download of one of those, deep in a tree we do not depend
+  # on, failed this job on 16 November with an HTTP/2 stream error. Nothing
+  # we can fix, and nothing we should have been downloading.
+  #
+  # The version is pinned for the same reason it is pinned everywhere else:
+  # at @latest the scanner changes under us, and the build breaks for a
+  # reason that has nothing to do with the commit that broke it.
+  #
+  # security-events: write uploads the findings to the Security tab, which is
+  # free on a public repository. The default arguments are --recursive ./.
   security:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-      - name: osv-scanner (runs govulncheck on Go code)
-        run: |
-          go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest
-          osv-scanner scan source -r .
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.7.1"
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
 
   # The online demo (web/) runs the program compiled to WebAssembly: its
   # tests run the same way, by Node.js, and the demo must build.
