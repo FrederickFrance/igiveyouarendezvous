@@ -65,6 +65,12 @@ func plan(_ js.Value, a []js.Value) any {
 			result := map[string]any{"output": output, "files": produced}
 
 			switch {
+			// -check prints its report and then says, by its error, that
+			// it found something. The report is the answer, not a failure:
+			// the page shows it as a report and the exit code stays for
+			// whoever drives the command from a script.
+			case errors.Is(err, errDoubts):
+				result["doubts"] = true
 			case errors.Is(err, errAlerts): // reported with the schedule
 				result["alerts"] = true
 			case err != nil && !errors.Is(err, flag.ErrHelp):

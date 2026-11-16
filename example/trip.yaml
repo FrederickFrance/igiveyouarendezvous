@@ -25,19 +25,23 @@ day: 08:00-21:00
 max-gap: unlimited
 objectives: [priorities, recruiter-span, day-end]
 
-# Walking inside the town, and the tram out to the hotel. Beware: a default
-# journey links every pair of places, so no two places would ever be more
-# than twice the default apart. Here every pair is given.
+# Three places, and every pair of them written out. No default here, and
+# that is the point: a default journey links every pair of places, so two
+# places are never more than twice the default apart. A default of 12m
+# would quietly make the hotel 24 min from the next town instead of the
+# 1h15 given. A default is only safe when every journey written below is
+# shorter than it; here they are longer, so there is no default. Writing
+# all three is not a free choice either — a pair with neither a line nor a
+# default is refused.
+#
+# The two to the next town are the walk or the tram plus the train. The
+# station is not a place of its own: nobody is ever there for its own sake,
+# and a place nobody visits only widens the file.
 travel:
-  default: 12m
   journeys:
     - [Hotel, Old town, 25m]
-    - [Hotel, Station, 20m]
-    - [Station, Old town, 12m]
-    # The next town is reached by train, and nothing says so: the journeys
-    # hold together, so the old town to the next town costs the walk to the
-    # station and the train, 1h07, without a line of its own.
-    - [Station, Next town, 55m]
+    - [Hotel, Next town, 1h15] # the tram to the station, then the train
+    - [Old town, Next town, 1h07] # the walk to the station, then the train
 
 recruiters:
   Us:
@@ -103,18 +107,22 @@ candidates:
     required: true
     place: Hotel
     availability: {2026-12-22: 08:00-09:00}
+  # The two trains have no place, and that is deliberate: a candidate
+  # without one happens on the way. The journey between the places on
+  # either side of it is still counted — the hotel is 1h15 from the next
+  # town whatever sits between them — so the train costs its own time and
+  # not the ride twice. Giving it the station instead would charge the ride
+  # once in the duration and once again in the journey out of the station.
   Train to the next town:
     meet: [Us, Train out]
     together: true
     duration: 1h05 # ten minutes early, then the journey
     required: true
-    place: Station
   Train home:
     meet: [Us, Train back]
     together: true
     duration: 1h10
     required: true
-    place: Station
 
   # ---- the visits. The friend comes along to two of them if she can.
   The Christmas market:

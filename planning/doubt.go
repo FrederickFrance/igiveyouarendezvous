@@ -234,10 +234,16 @@ func (p *Problem) availabilityDoubts(o Options) []Doubt {
 	return out
 }
 
-// cutDoubt reports an availability the hours of the day or a closed day cut:
-// somebody said to be free until ten on a day that ends at half past nine is
-// free until half past nine, and the file does not say what it looks like it
-// says.
+// cutDoubt reports an availability the hours of the day cut: somebody said
+// to be free until ten on a day that ends at half past nine is free until
+// half past nine, and the file does not say what it looks like it says.
+//
+// The closed days are left out of the comparison, because an availability
+// written without a date is a daily pattern and it is no mistake for a
+// pattern not to apply on a day that does not exist. Counting them made the
+// flagship example of this repository report two doubts about a file that
+// was right: three hours a day over five days, one of which is a holiday,
+// is twelve hours and not a slip of the pen.
 func cutDoubt(name string, own []Interval, o Options) []Doubt {
 	if own == nil {
 		return nil
@@ -248,21 +254,29 @@ func cutDoubt(name string, own []Interval, o Options) []Doubt {
 		return nil // an invalid interval is an error, not a doubt
 	}
 
-	given, kept := total(merged), total(availability(own, o))
+	open := slices.DeleteFunc(slices.Clone(merged), func(iv Interval) bool { return !o.open(iv.Day()) })
+
+	given, kept := total(open), total(availability(own, o))
 	if kept >= given {
 		return nil
 	}
 
 	return []Doubt{{
 		About: name,
-		Text: fmt.Sprintf("free for %s in the file and for %s once the hours of the day and the closed days "+
-			"are taken out: widen day, or move the availability inside it", Length(given), Length(kept)),
+		Text: fmt.Sprintf("free for %s on the open days and for %s once the hours of the day are taken out: "+
+			"widen day, or move the availability inside it", Length(given), Length(kept)),
 	}}
 }
 
 // roomDoubt reports a candidate whose availability cannot hold their longest
 // interview, and one whose availability is exactly as long as everything
 // they are asked to attend.
+//
+// The second is not reported for a Required candidate, where a window of
+// exactly the right length is the point and not a slip: the booked train
+// leaves at 09:10 and the ride takes an hour, so its window is an hour from
+// 09:10 and the search has nothing to choose — which is how one pins an
+// appointment that is already fixed.
 func (p *Problem) roomDoubt(c int, o Options) []Doubt {
 	lengths := p.interviews(c, o)
 	if len(lengths) == 0 {
@@ -286,7 +300,7 @@ func (p *Problem) roomDoubt(c int, o Options) []Doubt {
 			Text: fmt.Sprintf("never free for %s in a row, the length of their longest interview, "+
 				"but for %s at most: they cannot be served at all", Length(longest), Length(room)),
 		}}
-	case p.Candidates[c].Availability != nil && total(free) == whole:
+	case p.Candidates[c].Availability != nil && total(free) == whole && !p.Candidates[c].Required:
 		return []Doubt{{
 			About: name,
 			Text: fmt.Sprintf("free for %s and asked to attend %s: the file leaves the search nothing to "+
@@ -418,13 +432,15 @@ func (p *Problem) priorityDoubts() []Doubt {
 func nearNames(kind string, names []string) []Doubt {
 	var out []Doubt
 
+	families := families(names)
+
 	for i, a := range names {
 		for _, b := range names[:i] {
 			if a == b || len([]rune(a)) < shortNames || len([]rune(b)) < shortNames {
 				continue
 			}
 
-			if numbered(a, b) {
+			if numbered(a, b) || sameFamily(a, b, families) {
 				continue
 			}
 
@@ -440,6 +456,72 @@ func nearNames(kind string, names []string) []Doubt {
 	return out
 }
 
+// family is how many names must share a shape before it is a series and not
+// a coincidence. Two names a letter apart are a question worth asking —
+// Dupond and Dupont, or one name written twice. Three are a convention.
+const family = 3
+
+// families counts, for each shape of name, how many names have it: a shape
+// is a name with one of its characters blanked out, so candidate A,
+// candidate B and candidate C all share the shape "candidate \x00".
+//
+// It catches what numbered cannot: a series lettered rather than numbered,
+// which is what the examples of this very repository use. Six of the eight
+// doubts on its own flagship example were candidate A against candidate B.
+func families(names []string) map[string]int {
+	seen := map[string]map[string]bool{}
+
+	for _, name := range names {
+		runes := []rune(name)
+		for i := range runes {
+			shape := string(runes[:i]) + "\x00" + string(runes[i+1:])
+
+			if seen[shape] == nil {
+				seen[shape] = map[string]bool{}
+			}
+
+			seen[shape][name] = true
+		}
+	}
+
+	out := make(map[string]int, len(seen))
+	for shape, names := range seen {
+		out[shape] = len(names)
+	}
+
+	return out
+}
+
+// sameFamily tells whether two names of the same length differ at one place
+// only, and whether enough other names share that shape to make it a
+// convention rather than a slip.
+func sameFamily(a, b string, families map[string]int) bool {
+	x, y := []rune(a), []rune(b)
+	if len(x) != len(y) {
+		return false // an insertion or a deletion, not a numbering
+	}
+
+	at := -1
+
+	for i := range x {
+		if x[i] == y[i] {
+			continue
+		}
+
+		if at >= 0 {
+			return false // more than one place apart
+		}
+
+		at = i
+	}
+
+	if at < 0 {
+		return false
+	}
+
+	return families[string(x[:at])+"\x00"+string(x[at+1:])] >= family
+}
+
 // numbered tells whether two names are one series rather than one name
 // written twice: Sight 1 and Sight 2, R11 and R12, Candidate 7 and Candidate
 // 8. They differ by one letter, and that letter is a digit, which is how
@@ -447,6 +529,10 @@ func nearNames(kind string, names []string) []Doubt {
 // this, a file of forty numbered sights reports eight hundred misspellings
 // and buries the one real doubt: a checker that cries wolf is a checker
 // nobody reads.
+//
+// It stands beside families because it needs no third name: two numbered
+// places are already a series, and "Sight 9" against "Sight 10" differ in
+// length, which no shape can pair.
 func numbered(a, b string) bool {
 	strip := func(s string) (string, bool) {
 		var out []rune

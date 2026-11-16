@@ -389,7 +389,14 @@ candidates:
 ```
 
 A journey through other places counts when it is shorter: Paris to
-Marseille takes at most 2h30 plus 2h here. Without `default`, every two
+Marseille takes at most 2h30 plus 2h here. That is what makes a default
+dangerous, since it links every pair: with `default: 10m`, no two places
+are ever more than twenty minutes apart, whatever the file says, and a long
+journey written to forbid a link does not forbid it. **A default is safe
+only when every journey listed is shorter than it** — as the `5h` above is.
+Beside a complete list it is never consulted at all, and `-check` says so:
+take it out, so that a place added later without its journeys is refused
+rather than given a value nothing checks. Without `default`, every two
 places of the candidates must be listed; with it, the command notes a place
 that no journey names, which may be a typo. A candidate without place takes
 no journey, but a recruiter still travels from Paris to Lyon around them.

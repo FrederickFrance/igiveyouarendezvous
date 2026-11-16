@@ -55,6 +55,11 @@ const texts = {
     timeLimit: "Search for at most",
     periodHelp: "Leave the dates empty to plan the period of the file. The search also stops when it no longer improves.",
     plan: "Plan",
+    check: "Check the file",
+    checkHelp: "Check reads the file without planning anything: it counts what the file holds and names what looks like a slip of the pen. Nothing is sent anywhere, here as everywhere on this page.",
+    checking: "Checking…",
+    checkClean: "Nothing in the file looks like a slip of the pen.",
+    checkDoubts: "The file holds together, and something in it is worth a look.",
     objectivesSummary: "Choose what counts",
     objectivesHelp: "Tick the objectives and order them: the first one decides, the next one only breaks ties, and so on. Nothing ticked leaves the objectives of the file, which is what you want in most cases; this is here for the cases of the literature, where the criterion is set by the problem.",
     objectivesReset: "Back to the file",
@@ -132,6 +137,11 @@ const texts = {
     timeLimit: "Chercher au plus",
     periodHelp: "Laissez les dates vides pour planifier la période du fichier. La recherche s'arrête aussi quand elle ne s'améliore plus.",
     plan: "Planifier",
+    check: "Vérifier le fichier",
+    checkHelp: "La vérification lit le fichier sans rien planifier : elle compte ce qu'il contient et nomme ce qui ressemble à une faute de frappe. Rien n'est envoyé nulle part, ici comme ailleurs sur cette page.",
+    checking: "Vérification…",
+    checkClean: "Rien dans le fichier ne ressemble à une faute de frappe.",
+    checkDoubts: "Le fichier tient debout, et quelque chose dedans mérite un coup d'œil.",
     objectivesSummary: "Choisir ce qui compte",
     objectivesHelp: "Cochez les objectifs et ordonnez-les : le premier décide, le suivant ne sert qu'à départager, et ainsi de suite. Rien de coché laisse les objectifs du fichier, ce qui convient dans presque tous les cas ; ceci est là pour les cas de la littérature, où le critère est imposé par le problème.",
     objectivesReset: "Revenir au fichier",
@@ -220,6 +230,7 @@ function t(key, ...args) {
 let worker = null;
 let ready = false;
 let running = false;
+let checking = false; // the run in flight is a -check, which returns a report and no schedule
 let startedAt = 0;
 let ticker = 0;
 let status = { key: "loading", args: [] };
@@ -652,13 +663,64 @@ function plan() {
   updateButtons();
 }
 
+// check runs the program's own -check: it reads the file, counts what it
+// holds and names what looks like a slip of the pen, without planning
+// anything. It is the same flag the command takes, so the page and the
+// command can never disagree on what counts as suspect.
+function check() {
+  if (!ready || running) {
+    return;
+  }
+
+  clearResult();
+  clearSchedule();
+  running = true;
+  checking = true;
+  curve = [];
+  ranFor = 0;
+  renderCharts();
+
+  worker.postMessage({ problem: $("problem").value, args: ["-check"], inputs: {} });
+
+  setStatus("checking");
+  updateButtons();
+}
+
+function finishCheck(result) {
+  running = false;
+  checking = false;
+
+  if (result.error) { // the file does not hold together: that is an error
+    showError(result.error);
+    setStatus("idle");
+    updateButtons();
+
+    return;
+  }
+
+  $("output").textContent = result.output;
+  $("output").classList.add("prose");
+  $("output-box").hidden = false;
+  $("output-box").open = true;
+  addNote(t(result.doubts ? "checkDoubts" : "checkClean"));
+  setStatus("idle");
+  updateButtons();
+}
+
 function elapsed() {
   return ((performance.now() - startedAt) / 1000).toFixed(0);
 }
 
 function finish(result) {
-  running = false;
   clearInterval(ticker);
+
+  if (checking) {
+    finishCheck(result);
+
+    return;
+  }
+
+  running = false;
 
   if (result.error) {
     best = null;
@@ -725,6 +787,7 @@ function updateButtons() {
   button.textContent = running ? t("stop") : t("plan");
   button.classList.toggle("is-stop", running);
   $("use-last").disabled = running || lastPlan === "";
+  $("check").disabled = !ready || running;
 }
 
 function clearResult() {
@@ -749,8 +812,11 @@ function showError(message) {
   box.replaceChildren();
   const title = document.createElement("strong");
   title.textContent = t("error");
+  // The messages come from the program, which ends none of them with a full
+  // stop: without one, the hint below runs into the message and the two read
+  // as one broken sentence.
   const text = document.createElement("span");
-  text.textContent = ` ${message}`;
+  text.textContent = /[.!?]$/.test(message) ? ` ${message}` : ` ${message}.`;
   box.append(title, text);
 
   if (line) {
@@ -800,6 +866,7 @@ function showSchedule(result) {
   $("summary").hidden = summary === "";
 
   $("output").textContent = text;
+  $("output").classList.remove("prose"); // a schedule keeps its columns
   $("output-box").hidden = false;
 
   renderDownloads(result);
@@ -1128,6 +1195,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   $("plan").addEventListener("click", () => (running ? stop() : plan()));
+  $("check").addEventListener("click", check);
   $("use-last").addEventListener("click", () => {
     $("start-plan").value = lastPlan;
   });

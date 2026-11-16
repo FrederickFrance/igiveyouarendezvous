@@ -183,7 +183,7 @@ func runOn(ctx context.Context, fsys files, args []string, stdin io.Reader, stdo
 	}
 
 	if o.check {
-		return checkProblem(stdout, p, opts, pe)
+		return checkProblem(stdout, f, p, opts, pe)
 	}
 
 	start, rejected, err := loadStart(o, p, opts, pe, stderr)

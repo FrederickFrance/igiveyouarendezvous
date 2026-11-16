@@ -63,10 +63,24 @@ a des valeurs par défaut) :
   minutes l'un de l'autre, quoi que vous écriviez, et un trajet long censé
   interdire une liaison ne l'interdit pas. Un `default: 0` est pire : ce
   n'est pas « pas de liaison » mais une liaison gratuite, donc tout couple
-  oublié devient une téléportation. Donnez soit les trajets qui comptent
-  vraiment sans défaut, soit un défaut réaliste pour la zone. Écrivez chaque
-  lieu exactement de la même façon dans `journeys` et dans les candidats :
-  un lieu cité seulement dans `journeys` reste un lieu de passage.
+  oublié devient une téléportation. La règle est courte : **un défaut n'est
+  sûr que si tous les trajets écrits sont plus courts que lui.** Un seul
+  plus long et le défaut le défait. Donc soit vous écrivez tous les couples
+  et pas de défaut du tout — c'est aussi ce qui fait d'un couple manquant
+  une erreur et non une supposition —, soit vous gardez le défaut pour une
+  zone où les distances se ressemblent vraiment et restent en dessous. Un
+  défaut à côté d'une liste complète n'est jamais consulté : retirez-le, ou
+  le prochain lieu ajouté sans ses trajets prendra sans bruit une valeur que
+  rien ne vérifie. Écrivez chaque lieu exactement de la même façon dans
+  `journeys` et dans les candidats : un lieu cité seulement dans `journeys`
+  reste un lieu de passage.
+- **Ce qui se passe en route n'a pas de `place`.** Un train, un avion, un
+  appel en voiture : n'écrivez pas `place`, et le trajet entre les lieux de
+  part et d'autre est quand même compté à travers. Donner la gare au train
+  facture le voyage deux fois, une fois dans sa durée et une fois dans le
+  trajet au départ de la gare. Gardez sa fenêtre comme horaire
+  (`availability: {2026-12-22: 09:10-10:15}` pour un trajet de 1h05, ce qui
+  l'épingle) et mettez `required: true`.
 - **Une disponibilité est une contrainte, pas une décision.** Donne à une
   personne ou à un lieu ses horaires réels, et laisse la recherche choisir le
   jour et l'heure. Écrire une seule date et une fenêtre juste assez large pour

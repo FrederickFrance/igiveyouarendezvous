@@ -373,6 +373,13 @@ button.move {
   margin-top: 0.5rem;
 }
 
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
 button.primary {
   display: block;
   width: 100%;
@@ -571,6 +578,14 @@ button.primary.is-stop {
   overflow-x: auto;
   background: var(--paper);
   border-radius: 8px;
+}
+
+/* A schedule is a table and must keep its columns, so it scrolls sideways.
+   A -check report is prose, and sideways is where a phone loses it: a line
+   nobody scrolls to is a line nobody reads, so the report wraps instead. */
+.output pre.prose {
+  overflow-x: visible;
+  white-space: pre-wrap;
 }
 
 /* ---------- a problem, an idea */

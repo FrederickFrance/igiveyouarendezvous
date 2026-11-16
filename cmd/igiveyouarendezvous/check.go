@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/FrederickFrance/igiveyouarendezvous/config"
 	"github.com/FrederickFrance/igiveyouarendezvous/planning"
 )
 
@@ -23,7 +24,7 @@ const maxDoubts = 20
 // The counts come first because they catch what no rule can: a file meant
 // to hold fifteen candidates and holding fourteen is wrong in a way only
 // the person who wrote it can see.
-func checkProblem(w io.Writer, p *planning.Problem, o planning.Options, pe period) error {
+func checkProblem(w io.Writer, f *config.File, p *planning.Problem, o planning.Options, pe period) error {
 	if err := p.Validate(o); err != nil {
 		return err
 	}
@@ -38,7 +39,9 @@ func checkProblem(w io.Writer, p *planning.Problem, o planning.Options, pe perio
 
 	fmt.Fprintln(w, ".")
 
-	doubts := p.Doubts(o)
+	// The general check first, then what only the file still knows: the
+	// dates, the days of the week and the keys that closed them.
+	doubts := append(p.Doubts(o), f.Doubts(pe.dates)...)
 	if len(doubts) == 0 {
 		fmt.Fprintln(w, "\nThe file holds together and nothing in it looks like a slip of the pen.")
 

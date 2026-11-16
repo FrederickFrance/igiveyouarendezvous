@@ -404,7 +404,15 @@ candidates:
 ```
 
 Un trajet par d'autres lieux compte quand il est plus court : Paris à
-Marseille prend au plus 2h30 plus 2h ici. Sans `default`, chaque paire de
+Marseille prend au plus 2h30 plus 2h ici. C'est ce qui rend un défaut
+dangereux, puisqu'il relie tous les couples : avec `default: 10m`, deux
+lieux ne sont jamais à plus de vingt minutes l'un de l'autre, quoi que dise
+le fichier, et un trajet long écrit pour interdire une liaison ne
+l'interdit pas. **Un défaut n'est sûr que si tous les trajets listés sont
+plus courts que lui** — comme les `5h` ci-dessus. À côté d'une liste
+complète il n'est jamais consulté, et `-check` le dit : retirez-le, pour
+qu'un lieu ajouté plus tard sans ses trajets soit refusé plutôt que doté
+d'une valeur que rien ne vérifie. Sans `default`, chaque paire de
 lieux des candidats doit être listée ; avec, la commande signale un lieu
 qu'aucun trajet ne nomme, peut-être une faute de frappe. Un candidat sans
 lieu ne demande aucun trajet, mais un recruteur doit quand même aller de

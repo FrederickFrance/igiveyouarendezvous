@@ -25,18 +25,23 @@ day: 08:00-21:00
 max-gap: unlimited
 objectives: [priorities, recruiter-span, day-end]
 
-# La marche dans la ville, et le tram jusqu'à l'hôtel. Attention : un trajet
-# par défaut relie tous les couples de lieux, donc deux lieux ne seraient
-# jamais à plus de deux fois le défaut. Ici tous les couples sont donnés.
+# Trois lieux, et tous leurs couples écrits. Pas de défaut ici, et c'est
+# tout l'intérêt : un trajet par défaut relie tous les couples de lieux,
+# donc deux lieux ne sont jamais à plus de deux fois le défaut. Un défaut de
+# 12m mettrait l'hôtel à 24 min de la ville voisine au lieu des 1h15 donnés.
+# Un défaut n'est sûr que si tous les trajets écrits en dessous sont plus
+# courts que lui ; ici ils sont plus longs, donc pas de défaut. Écrire les
+# trois n'est pas un choix non plus — un couple sans ligne et sans défaut
+# est refusé.
+#
+# Les deux vers la ville voisine valent la marche ou le tram plus le train.
+# La gare n'est pas un lieu à part entière : personne n'y est jamais pour
+# elle-même, et un lieu que personne ne visite ne fait qu'alourdir le fichier.
 travel:
-  default: 12m
   journeys:
     - [Hôtel, Vieille ville, 25m]
-    - [Hôtel, Gare, 20m]
-    - [Gare, Vieille ville, 12m]
-    - [Vieille ville, Ville voisine, 72h] # jamais à pied : c'est le train qui traverse
-    - [Hôtel, Ville voisine, 72h]
-    - [Gare, Ville voisine, 55m]
+    - [Hôtel, Ville voisine, 1h15] # le tram jusqu'à la gare, puis le train
+    - [Vieille ville, Ville voisine, 1h07] # la marche jusqu'à la gare, puis le train
 
 recruiters:
   Nous:
@@ -102,18 +107,22 @@ candidates:
     required: true
     place: Hôtel
     availability: {2026-12-22: 08:00-09:00}
+  # Les deux trains n'ont pas de lieu, et c'est volontaire : un candidat
+  # sans lieu se passe en route. Le trajet entre les lieux de part et
+  # d'autre est quand même compté — l'hôtel est à 1h15 de la ville voisine
+  # quoi qu'il y ait entre les deux — donc le train coûte son temps à lui et
+  # pas le voyage deux fois. Lui donner la gare facturerait le voyage une
+  # fois dans la durée, puis encore une fois dans le trajet au départ de la gare.
   Train vers la ville voisine:
     meet: [Nous, Train aller]
     together: true
     duration: 1h05 # dix minutes d'avance, puis le trajet
     required: true
-    place: Gare
   Train du retour:
     meet: [Nous, Train retour]
     together: true
     duration: 1h10
     required: true
-    place: Gare
 
   # ---- les visites. L'amie se joint à deux d'entre elles si elle peut.
   Le marché de Noël:
