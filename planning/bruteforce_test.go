@@ -183,7 +183,7 @@ func randomProblem(rnd *rand.Rand) (*planning.Problem, planning.Options) {
 			p.Candidates[c].Place = []string{"", "Lyon", "Paris", "Nice"}[rnd.IntN(4)]
 		}
 
-		p.Travel = planning.Travel{Default: time.Hour, Journeys: []planning.Journey{{From: "Lyon", To: "Paris", Duration: 30 * time.Minute}}}
+		p.Travel = planning.Travel{Default: new(time.Hour), Journeys: []planning.Journey{{From: "Lyon", To: "Paris", Duration: 30 * time.Minute}}}
 	}
 
 	if rnd.IntN(4) == 0 { // A meets a recruiter twice: with another one, then alone

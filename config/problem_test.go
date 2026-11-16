@@ -525,24 +525,40 @@ func TestTravelOfTheFile(t *testing.T) {
 	p, _, err := f.Problem("", "")
 	require.NoError(t, err)
 	require.Equal(t, []string{"Paris", "Lyon", ""}, []string{p.Candidates[0].Place, p.Candidates[1].Place, p.Candidates[2].Place})
-	require.Equal(t, planning.Travel{Default: 3 * time.Hour, Journeys: []planning.Journey{
+	require.Equal(t, planning.Travel{Default: new(3 * time.Hour), Journeys: []planning.Journey{
 		{From: "Paris", To: "Lyon", Duration: 2 * time.Hour},
 		{From: "Lyon", To: "Saint-Étienne", Duration: 45 * time.Minute},
 	}}, p.Travel)
 	require.Nil(t, f.PlacesWithoutJourney())
 
-	// Without a default, every two places of the candidates are listed.
+	// Without a default, two places need a journey or a chain of them, and
+	// the chain is enough: Paris to Nice is Paris to Lyon and Lyon to Nice,
+	// and the file does not have to repeat the sum. The file alone cannot
+	// tell a pair that is missing from one that is merely not written down
+	// — only the chains say which — so this is planning's error and not a
+	// refusal to read the file.
 	f, err = Parse([]byte(shoots + "travel:\n  journeys: [[Lyon, Paris, 2h]]\n"))
 	require.NoError(t, err)
 
 	_, _, err = f.Problem("", "")
 	require.NoError(t, err)
 
+	f, err = Parse([]byte(shoots + "  S4: {meet: [Host], place: Nice}\ntravel:\n  journeys:\n    - [Lyon, Paris, 2h]\n    - [Lyon, Nice, 5h]\n"))
+	require.NoError(t, err)
+
+	p, o, err := f.Problem("", "")
+	require.NoError(t, err)
+	require.NoError(t, p.Validate(o), "Paris to Nice is reached through Lyon")
+
+	// Nothing at all links Nice, and there is no default: refused.
 	f, err = Parse([]byte(shoots + "  S4: {meet: [Host], place: Nice}\ntravel:\n  journeys: [[Lyon, Paris, 2h]]\n"))
 	require.NoError(t, err)
 
-	_, _, err = f.Problem("", "")
-	require.EqualError(t, err, "travel: no journey between Paris and Nice: list it, such as [Paris, Nice, 2h], or give a default")
+	p, o, err = f.Problem("", "")
+	require.NoError(t, err)
+	require.EqualError(t, p.Validate(o),
+		"planning: travel: nothing links Paris and Nice: give the journey, such as [Paris, Nice, 2h], "+
+			"or a journey to a place between them, or a travel.default")
 
 	// With journeys and a default, a place that no journey names may be a typo.
 	f, err = Parse([]byte(shoots + "  S4: {meet: [Host], place: Lyonn}\ntravel:\n  default: 3h\n  journeys: [[Lyon, Paris, 2h]]\n"))

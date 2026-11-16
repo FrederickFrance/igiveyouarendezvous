@@ -63,10 +63,11 @@ has defaults):
   forbid it. A `default: 0` is worse: it is not "no link" but a free link,
   so every pair you leave out becomes free teleportation. The rule is
   short: **a default is safe only when every journey you write is shorter
-  than it.** One longer journey and the default undoes it. So either write
-  every pair and no default at all — which is also what makes a missing
-  pair an error instead of a guess — or keep the default for an area where
-  the distances really are alike and under it. A default beside a complete
+  than it.** One longer journey and the default undoes it. So either give
+  no default at all — the journeys you write then suffice, since a pair
+  reached through other places costs that way, and a pair nothing links is
+  refused instead of guessed — or keep the default for an area where the
+  distances really are alike and under it. A default beside a complete
   list is never consulted: take it out, or the next place added without its
   journeys will quietly take a value nothing checks. Spell every place
   exactly the same way in `journeys` and in the candidates: a place named
@@ -98,8 +99,10 @@ has defaults):
   of a shoot; the recruiters travel between places. `travel`: the journeys,
   `default` for any pair not listed, and `journeys`, a list of
   `[Paris, Lyon, 2h30]`, both ways. Give upper estimates, door to door, with
-  a comment on what each rests on (`# train 2h + 30 min to the station`);
-  without `default`, list every two places.
+  a comment on what each rests on (`# train 2h + 30 min to the station`).
+  Without `default` you need not list every pair: one reached through other
+  places costs that way, so give the journeys that are really direct and
+  let the rest follow. Two places that nothing links are refused.
 - `candidates.<name>.priority`: `1` by default; the higher, the more
   important when not everybody fits.
 - `joint-groups`: lists of recruiters who MAY interview a candidate together,

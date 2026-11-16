@@ -3,6 +3,7 @@ package planning
 import (
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"time"
 )
@@ -14,12 +15,25 @@ import (
 // A journey through other places counts when it is shorter: Paris to Dijon
 // takes at most Paris to Lyon and Lyon to Dijon.
 type Travel struct {
-	// Default is the journey between two places that Journeys does not
-	// list; zero means none.
-	Default time.Duration
-	// Journeys lists the times between pairs of places, both ways.
+	// Default is the journey between two places that no chain of Journeys
+	// links. A nil Default refuses such a pair instead of inventing a time
+	// for it, which is what a file without travel.default asks for; a
+	// Default of zero is a free link between them, not the absence of one.
+	// The two are not the same thing, and telling them apart is the whole
+	// reason this is a pointer. Set it with new: new(10 * time.Minute).
+	Default *time.Duration
+	// Journeys lists the times between pairs of places, both ways. They do
+	// not have to list every pair: a pair reached through other places
+	// costs the way through, so Paris to Dijon needs no line of its own
+	// once Paris to Lyon and Lyon to Dijon are given.
 	Journeys []Journey
 }
+
+// unreachable is the journey between two places that no chain of journeys
+// links, while the matrix is being built without a Default. It is finite,
+// so that adding two of them cannot overflow, and far longer than any
+// journey anybody will write, so that any real chain wins: about 73 years.
+const unreachable = time.Duration(math.MaxInt64 / 4)
 
 // Journey is the time between two places, both ways.
 type Journey struct {
@@ -36,8 +50,8 @@ func (p *Problem) HasPlaces() bool {
 func (t Travel) durations() []time.Duration {
 	var out []time.Duration
 
-	if t.Default > 0 {
-		out = append(out, t.Default)
+	if t.Default != nil && *t.Default > 0 {
+		out = append(out, *t.Default)
 	}
 
 	for _, j := range t.Journeys {
@@ -51,7 +65,7 @@ func (t Travel) durations() []time.Duration {
 
 // check validates the journeys.
 func (t Travel) check() error {
-	if t.Default < 0 {
+	if t.Default != nil && *t.Default < 0 {
 		return errors.New("planning: travel: negative default journey")
 	}
 
@@ -118,11 +132,20 @@ func (p *Problem) journeys() journeys {
 	n := len(j.places)
 	j.time = make([][]time.Duration, n)
 
+	// Without a default, a pair the journeys do not link starts out of
+	// reach rather than at zero: zero would win against every chain, and
+	// the program would move between two places for nothing. What is left
+	// out of reach once the chains are followed is refused by unlinked.
+	apart := unreachable
+	if p.Travel.Default != nil {
+		apart = *p.Travel.Default
+	}
+
 	for a := range n {
 		j.time[a] = make([]time.Duration, n)
 		for b := range n {
 			if a != b {
-				j.time[a][b] = p.Travel.Default
+				j.time[a][b] = apart
 			}
 		}
 	}
@@ -148,6 +171,143 @@ func (p *Problem) journeys() journeys {
 	}
 
 	return j
+}
+
+// unlinked names two places of the candidates that no journey links, and
+// that no chain of journeys through other places links either, while the
+// file gives no default. There is then no time to plan with, and the two
+// choices the program could make on its own are both wrong: holding them
+// to be the same place moves people between them for nothing, and picking
+// a number invents a fact. So it refuses, and says which pair is missing.
+//
+// It returns the first such pair in the order of the places, so that the
+// message is the same from one run to the next.
+func (j *journeys) unlinked() (string, string, bool) {
+	visited := map[int]bool{}
+
+	for _, a := range j.placeOf {
+		if a >= 0 {
+			visited[a] = true
+		}
+	}
+
+	for a := range len(j.places) {
+		for b := range a {
+			if visited[a] && visited[b] && j.time[a][b] >= unreachable {
+				return j.places[b], j.places[a], true
+			}
+		}
+	}
+
+	return "", "", false
+}
+
+// A Chain is a journey between two places of the candidates that the file
+// does not give, and that a way through other places supplies: a hotel
+// twenty minutes from the station and a station fifty-five minutes from
+// the next town say that the hotel is an hour and a quarter from the next
+// town, and the file need not repeat it.
+//
+// The program plans with these times, so it owes the author a look at
+// them: a chain is only as good as the journeys it rests on, and one wrong
+// journey spreads quietly through every pair it is part of. Through names
+// the places the way passes, so that a time that surprises can be traced
+// to the journey that caused it.
+type Chain struct {
+	From, To string
+	Duration time.Duration
+	Through  []string // the places the way passes, in order
+}
+
+// Chains returns the journeys between places of the candidates that the
+// file does not give and that a way through other places supplies, in the
+// order of the places. It returns nothing when travel.default is set,
+// since the default already answers for every pair and nothing is worked
+// out from the chains alone.
+func (p *Problem) Chains() []Chain {
+	if p.Travel.Default != nil {
+		return nil
+	}
+
+	trips := p.journeys()
+	n := len(trips.places)
+
+	// The same Floyd-Warshall as journeys, keeping the place each pair was
+	// improved through so that the way can be told back. It is run here
+	// rather than kept, because only -check ever asks for it.
+	dist, via := make([][]time.Duration, n), make([][]int, n)
+
+	for a := range n {
+		dist[a], via[a] = make([]time.Duration, n), make([]int, n)
+
+		for b := range n {
+			dist[a][b], via[a][b] = unreachable, -1
+			if a == b {
+				dist[a][b] = 0
+			}
+		}
+	}
+
+	listed := map[[2]int]bool{}
+	index := map[string]int{}
+
+	for i, name := range trips.places {
+		index[name] = i
+	}
+
+	for _, k := range p.Travel.Journeys {
+		a, b := index[k.From], index[k.To]
+		dist[a][b], dist[b][a] = k.Duration, k.Duration
+		listed[[2]int{a, b}], listed[[2]int{b, a}] = true, true
+	}
+
+	for k := range n {
+		for a := range n {
+			for b := range n {
+				if dist[a][k]+dist[k][b] < dist[a][b] {
+					dist[a][b], via[a][b] = dist[a][k]+dist[k][b], k
+				}
+			}
+		}
+	}
+
+	visited := map[int]bool{}
+	for _, a := range trips.placeOf {
+		if a >= 0 {
+			visited[a] = true
+		}
+	}
+
+	var out []Chain
+
+	for a := range n {
+		for b := range a {
+			if !visited[a] || !visited[b] || listed[[2]int{a, b}] || dist[b][a] >= unreachable {
+				continue
+			}
+
+			out = append(out, Chain{
+				From: trips.places[b], To: trips.places[a], Duration: dist[b][a],
+				Through: wayThrough(trips.places, via, b, a),
+			})
+		}
+	}
+
+	return out
+}
+
+// wayThrough names the places a way from a to b passes, in order, from the
+// place each pair was improved through.
+func wayThrough(places []string, via [][]int, a, b int) []string {
+	k := via[a][b]
+	if k < 0 {
+		return nil
+	}
+
+	out := wayThrough(places, via, a, k)
+	out = append(out, places[k])
+
+	return append(out, wayThrough(places, via, k, b)...)
 }
 
 // between returns the journey between the places of candidates a and b,

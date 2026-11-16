@@ -412,9 +412,15 @@ l'interdit pas. **Un défaut n'est sûr que si tous les trajets listés sont
 plus courts que lui** — comme les `5h` ci-dessus. À côté d'une liste
 complète il n'est jamais consulté, et `-check` le dit : retirez-le, pour
 qu'un lieu ajouté plus tard sans ses trajets soit refusé plutôt que doté
-d'une valeur que rien ne vérifie. Sans `default`, chaque paire de
-lieux des candidats doit être listée ; avec, la commande signale un lieu
-qu'aucun trajet ne nomme, peut-être une faute de frappe. Un candidat sans
+d'une valeur que rien ne vérifie. Sans `default`, les trajets n'ont pas à
+lister chaque paire : une paire atteinte par d'autres lieux coûte ce
+passage, donc Paris à Marseille n'a pas besoin de ligne une fois Paris à
+Lyon et Lyon à Marseille donnés. `-check` affiche les temps ainsi déduits,
+avec le chemin emprunté, pour qu'on puisse les relire avant de s'y fier.
+Deux lieux que rien ne relie sont refusés : il n'y a aucun temps avec quoi
+planifier, et les tenir pour un même lieu est la façon dont un planning
+devient infaisable le jour venu. Avec un `default`, la commande signale un
+lieu qu'aucun trajet ne nomme, peut-être une faute de frappe. Un candidat sans
 lieu ne demande aucun trajet, mais un recruteur doit quand même aller de
 Paris à Lyon autour de lui. Sur la grille du temps, les trajets sont
 arrondis aux 5 minutes supérieures : `2h07` compte pour `2h10`, plutôt que

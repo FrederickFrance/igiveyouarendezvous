@@ -451,6 +451,12 @@ func (p *Problem) check(o Options) error {
 		return err
 	}
 
+	trips := p.journeys()
+	if a, b, ok := trips.unlinked(); ok {
+		return fmt.Errorf("planning: travel: nothing links %s and %s: give the journey, such as "+
+			"[%s, %s, 2h], or a journey to a place between them, or a travel.default", a, b, a, b)
+	}
+
 	for _, c := range p.Candidates {
 		if _, err := normalize(c.Availability, o.days()); err != nil {
 			return fmt.Errorf("planning: candidate %s: %w", c.Name, err)

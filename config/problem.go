@@ -537,16 +537,22 @@ func (f *File) Problem(from, to string) (*planning.Problem, planning.Options, er
 		return nil, o, err
 	}
 
-	if p.Travel, err = f.travel(p); err != nil {
-		return nil, o, err
-	}
+	p.Travel = f.travel()
 
 	return p, o, nil
 }
 
-// travel converts the key travel, and checks that every two places of the
-// candidates have a journey, listed or the default.
-func (f *File) travel(p *planning.Problem) (planning.Travel, error) {
+// travel converts the key travel. It checks nothing of its own: a pair of
+// places that no chain of journeys links is refused by planning, which has
+// followed the chains and so can tell a pair that is really missing from
+// one that is merely not written down.
+//
+// Until v0.13 this demanded a line for every two places of the candidates,
+// even where the journeys already answered: a hotel twenty minutes from the
+// station and a station fifty-five from the next town said what the hotel
+// to the next town costs, and the file had to repeat it. Repeating it is
+// how the author of example/fr/trip.yaml came to write 72h twice.
+func (f *File) travel() planning.Travel {
 	var t planning.Travel
 
 	for _, j := range f.Travel.Journeys {
@@ -554,32 +560,11 @@ func (f *File) travel(p *planning.Problem) (planning.Travel, error) {
 	}
 
 	if f.Travel.Default != nil {
-		t.Default = time.Duration(*f.Travel.Default)
-
-		return t, nil
+		d := time.Duration(*f.Travel.Default)
+		t.Default = &d
 	}
 
-	var places []string
-
-	for _, c := range p.Candidates {
-		if c.Place != "" && !slices.Contains(places, c.Place) {
-			places = append(places, c.Place)
-		}
-	}
-
-	for i, a := range places {
-		for _, b := range places[:i] {
-			listed := slices.ContainsFunc(f.Travel.Journeys, func(j Journey) bool {
-				return j.From == a && j.To == b || j.From == b && j.To == a
-			})
-
-			if !listed {
-				return t, fmt.Errorf("travel: no journey between %s and %s: list it, such as [%s, %s, 2h], or give a default", b, a, b, a)
-			}
-		}
-	}
-
-	return t, nil
+	return t
 }
 
 // PlacesWithoutJourney lists the places of the candidates that no journey
