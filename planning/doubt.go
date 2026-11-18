@@ -63,6 +63,7 @@ func (p *Problem) Doubts(opts Options) []Doubt {
 	var out []Doubt
 	out = append(out, p.travelDoubts()...)
 	out = append(out, p.availabilityDoubts(o)...)
+	out = append(out, p.precedenceDoubts(o)...)
 	out = append(out, p.peopleDoubts()...)
 
 	return out
@@ -656,4 +657,50 @@ func sum(durations []time.Duration) time.Duration {
 	}
 
 	return whole
+}
+
+// precedenceDoubts reports a precedence the availabilities cannot hold: the
+// earlier candidate cannot be over in time for the later one to begin. It
+// is the kind of mistake that comes out as an impossible day rather than as
+// a refusal, since nothing in the file is wrong on its own.
+//
+// Both bounds are deliberately loose, so that a doubt is never raised on a
+// file that holds. The earlier candidate cannot finish before their first
+// free moment plus their longest interview — the sum of their interviews
+// would be larger, but joint groups may gather some of them, so the sum is
+// an upper estimate and no bound at all here. The later candidate cannot
+// begin after their last free moment less their longest interview. Between
+// those two the recruiters' hours and the gaps only ever push things
+// further apart, which is why what is reported cannot be a false alarm.
+func (p *Problem) precedenceDoubts(o Options) []Doubt {
+	var out []Doubt
+
+	for _, pr := range p.Precedences {
+		before, after := p.interviews(pr.Before, o), p.interviews(pr.After, o)
+		if len(before) == 0 || len(after) == 0 {
+			continue
+		}
+
+		early := availability(p.Candidates[pr.Before].Availability, o)
+		late := availability(p.Candidates[pr.After].Availability, o)
+
+		if len(early) == 0 || len(late) == 0 {
+			continue
+		}
+
+		soonest := early[0].Start + slices.Max(before)
+		latest := late[len(late)-1].End - slices.Max(after)
+
+		if soonest > latest {
+			out = append(out, Doubt{
+				About: p.Candidates[pr.Before].Name + " before " + p.Candidates[pr.After].Name,
+				Text: fmt.Sprintf("%s cannot be over before %s at the earliest, and %s cannot begin after %s: "+
+					"the order asked for cannot be held",
+					p.Candidates[pr.Before].Name, Clock(soonest),
+					p.Candidates[pr.After].Name, Clock(latest)),
+			})
+		}
+	}
+
+	return out
 }

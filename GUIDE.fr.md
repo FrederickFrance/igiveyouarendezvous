@@ -164,6 +164,13 @@ arrivent… sans tout déplacer :
   `recruiters` est une erreur : le programme le dit, avec la ligne.
 - **Entre accolades**, mettez les plages horaires entre guillemets :
   `{availability: "09:00-12:00, 14:00-16:00"}`.
+- **Deux sortes d'ordre** : les rangs de `meet` ordonnent les entretiens
+  d'un seul candidat ; `precedences` ordonne les candidats entre eux.
+  Demander l'un avec l'autre est la confusion habituelle.
+- **Tout le monde en même temps** : rien ne limite le nombre d'entretiens
+  tenus simultanément, ce qui est juste quand chaque recruteur reçoit dans
+  son bureau. Dans un hall, écrivez le nombre de tables (`rooms: 4`), sinon
+  le planning tiendra vingt rencontres à dix heures.
 - **Personne ne tient** : une règle est sans doute trop stricte. Relâchez-la
   (un écart, une disponibilité, une durée) et planifiez de nouveau.
 

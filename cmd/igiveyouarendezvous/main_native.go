@@ -13,6 +13,8 @@ import (
 )
 
 func main() {
+	tuneMemory()
+
 	// The first Ctrl+C (or SIGTERM) stops the computation, which still
 	// prints its best schedule; a second one kills the program.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

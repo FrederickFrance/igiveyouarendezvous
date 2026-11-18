@@ -413,3 +413,81 @@ func TestSearchRespectsTheFixedInterviews(t *testing.T) {
 		}
 	}
 }
+
+// A fixed interview takes a room like any other. apply installs the fixed
+// interviews straight into the busy sets, which is a third place where
+// slots are taken — mark and hold being the other two — and a per-slot
+// counter forgotten there is a cap the search cannot see. Nothing else
+// looks: Check catches it afterwards, and the search then confesses to
+// having built an invalid schedule rather than planning around the room
+// that was already taken.
+func TestAFixedInterviewTakesARoom(t *testing.T) {
+	t.Parallel()
+
+	// One room, four one-hour slots and four interviews to hold: A meets R1
+	// and R2, B meets R1, C meets R2. The day fits exactly, so every slot
+	// holds one interview and none holds two.
+	p := table(t, fixedDay)
+	o := planning.Options{
+		Day:      []planning.Interval{{Start: clock(8, 0), End: clock(12, 0)}},
+		Duration: time.Hour,
+		Rooms:    1,
+	}
+	require.NoError(t, p.Validate(o))
+
+	// B is convened at nine, and that room is then taken.
+	start := &planning.Schedule{Interviews: []planning.Interview{
+		iv(1, []int{0}, []int{2}, 900, 1000, true),
+	}}
+
+	for seed := range uint64(20) {
+		s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{
+			Seed: seed, Iterations: 2000, Start: start,
+		})
+		require.NoError(t, err, "seed %d", seed)
+		require.NoError(t, planning.Check(p, o, s), "seed %d", seed)
+
+		at := map[time.Duration]int{}
+		for _, interview := range s.Interviews {
+			at[interview.Start]++
+		}
+
+		for when, held := range at {
+			require.LessOrEqual(t, held, 1, "%d interviews at %s, seed %d", held, planning.Clock(when), seed)
+		}
+	}
+}
+
+// The same counter decides who the fairness rule compares, so a fixed
+// interview missing from it hid an unfair schedule from the search: the
+// rule was consulted, found nobody with two interviews, and let the plans
+// through. Check then refused the result. A fixed plan that breaks the rule
+// must be left out when it is added, as SearchOptions.Start promises, and
+// its candidate planned again.
+func TestAnUnfairFixedPlanIsLeftOut(t *testing.T) {
+	t.Parallel()
+
+	p, o := forum(t, [][2]int{{0, 1}, {0, 2}, {0, 3}, {1, 2}}, 4, planning.MaxMeetings)
+
+	// A sits in three interviews with a gap before each of the last two, so
+	// A waits twice while B and C wait not at all: two apart, which a limit
+	// of one refuses.
+	one := 1
+	o.BreakSpread = &one
+
+	start := &planning.Schedule{Interviews: []planning.Interview{
+		{Candidate: 0, Recruiters: []int{0, 1}, Requests: []int{0, 1}, Start: clock(9, 0), End: clock(10, 0), Fixed: true},
+		{Candidate: 3, Recruiters: []int{1, 2}, Requests: []int{6, 7}, Start: clock(10, 0), End: clock(11, 0), Fixed: true},
+		{Candidate: 1, Recruiters: []int{0, 2}, Requests: []int{2, 3}, Start: clock(11, 0), End: clock(12, 0), Fixed: true},
+		{Candidate: 2, Recruiters: []int{0, 3}, Requests: []int{4, 5}, Start: clock(14, 0), End: clock(15, 0), Fixed: true},
+	}}
+	require.Error(t, planning.Check(p, o, start), "the schedule seeded is itself unfair")
+
+	for seed := range uint64(10) {
+		s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{
+			Seed: seed, Iterations: 2000, Start: start,
+		})
+		require.NoError(t, err, "seed %d", seed)
+		require.NoError(t, planning.Check(p, o, s), "seed %d", seed)
+	}
+}

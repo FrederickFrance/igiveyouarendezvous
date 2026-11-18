@@ -73,6 +73,19 @@ type SearchOptions struct {
 	// otherwise. Clean tells beforehand what is kept, and why the rest is
 	// not.
 	Start *Schedule
+	// Retime is the share of the moves that try to re-time a whole day, the
+	// others ruining and recreating a few candidates: nought never
+	// re-times, one tries it on every move. Nil leaves the choice to the
+	// search, which is right unless the problem has been measured.
+	//
+	// The two moves do different work — a retiming packs a day tighter than
+	// any insertion can, and only a ruin lets in a candidate who had no
+	// place — and the best share depends on the problem. A retiming also
+	// costs about twelve ruins, so its share of the moves understates its
+	// share of the time.
+	//
+	// It is a setting for whoever measures, and may change before v1.
+	Retime *float64
 }
 
 // Progress describes the best schedule found so far by Search.
@@ -105,6 +118,10 @@ func Search(ctx context.Context, p *Problem, o Options, so SearchOptions) (*Sche
 		return nil, errNoStop
 	}
 
+	if so.Retime != nil && (*so.Retime < 0 || *so.Retime > 1) {
+		return nil, errRetime
+	}
+
 	in, err := newInstance(p, o)
 	if err != nil {
 		return nil, err
@@ -119,6 +136,10 @@ func Search(ctx context.Context, p *Problem, o Options, so SearchOptions) (*Sche
 	for i := range searchers {
 		if searchers[i], err = newSearcher(in, so.Seed+uint64(i)); err != nil {
 			return nil, err
+		}
+
+		if so.Retime != nil {
+			searchers[i].retime = *so.Retime
 		}
 
 		searchers[i].apply(prep)
@@ -231,14 +252,24 @@ type solution struct {
 }
 
 type searcher struct {
-	in      *instance
-	rnd     *rand.Rand
-	crit    []criterion
-	spanAt  int // index of MinRecruiterSpan in crit, or -1
-	usedAt  int // index of MinRecruiters in crit, or -1
-	halfAt  int // index of MinRecruiterHalfDays in crit, or -1
-	endAt   int // index of MinDayEnds in crit, or -1
-	wholeAt int // index of MinSpan in crit, or -1
+	in     *instance
+	rnd    *rand.Rand
+	crit   []criterion
+	spanAt int // index of MinRecruiterSpan in crit, or -1
+	gapAt  int // index of MinRecruiterBreaks in crit, or -1
+	// idleAt and idleSpreadAt are the indexes of MinRecruiterIdle and of
+	// MinRecruiterIdleSpread in crit, or -1. Both are counted by score from
+	// idle, the free slots inside each recruiter's day, and the spread
+	// looks only at the days with two interviews or more, which dayMeets
+	// counts.
+	idleAt       int
+	idleSpreadAt int
+	idle         []int // [unit]: free slots between first and last
+	dayMeets     []int // [unit]: interviews of the recruiter that day
+	usedAt       int   // index of MinRecruiters in crit, or -1
+	halfAt       int   // index of MinRecruiterHalfDays in crit, or -1
+	endAt        int   // index of MinDayEnds in crit, or -1
+	wholeAt      int   // index of MinSpan in crit, or -1
 	// completeFirst: complete candidates rank before meetings.
 	completeFirst bool
 	completeAt    int // index of the first criterion counting complete candidates, or -1
@@ -288,6 +319,7 @@ type searcher struct {
 	first     []int     // [unit]: first busy slot, -1 when free all day
 	last      []int     // [unit]: last busy slot
 	span      []int     // [unit]: last + 1 - first
+	gaps      []int     // [unit]: runs of free time between first and last
 	half      [][2]bool // [unit]: busy in the morning, in the afternoon
 	// dayEnd[d]: the end of the last interview of day d, as a time of day
 	// in minutes; 0 without interviews.
@@ -295,6 +327,47 @@ type searcher struct {
 	// wholeLo, wholeHi: the start of the first interview and the end of the
 	// last one over the period, in minutes; wholeLo is -1 without any.
 	wholeLo, wholeHi int
+
+	// rooms is Options.Rooms, and atSlot[t] how many interviews are held in
+	// slot t, over everybody. Both are left out without a cap: the count
+	// costs a pass over every slot of every placement, and most problems
+	// have no hall to run out of.
+	rooms  int
+	atSlot []int
+
+	// spread is Options.BreakSpread, -1 without one, and meets[h] how many
+	// interviews recruiter h has: a recruiter with fewer than two is left
+	// out of the comparison.
+	spread int
+	meets  []int
+
+	// earlier and later hold the precedences, per candidate: the candidates
+	// that must be over before this one begins, and those that must not
+	// begin before it is over. Both nil without precedences, which is what
+	// inOrder tests to cost nothing on a problem that has none.
+	earlier, later [][]int
+	// fixFirst and fixLast bracket the fixed interviews of each candidate,
+	// -1 for none. A fixed candidate is pinned and has no entry in plans,
+	// so a precedence against one would be invisible without this: the
+	// candidate replanned around them would be free to come after.
+	fixFirst, fixLast []int
+
+	// retime is the share of the moves that try a retiming, or negative to
+	// leave it at one in ruinEvery for the ruin, which is the draw the
+	// search has always made and so keeps a seed giving what it gave.
+	retime float64
+	// retimed and ruined count the moves of each kind that were made. They
+	// are what a measurement reads, and what a search choosing the share
+	// by itself would learn from.
+	retimed, ruined int
+
+	// bucket and byStart are scratch for retiming.reorder, and touched for
+	// mark, kept here and not where they are used so that a move does not
+	// allocate them again.
+	bucket  []int
+	byStart []unit
+	touched []int
+	sorted  []placed
 
 	plans   [][]placed
 	contrib [][]int // score contribution of each candidate
@@ -317,71 +390,58 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 	nC, nR := len(in.p.Candidates), len(in.p.Recruiters)
 	nU := nR * in.o.days()
 	s := &searcher{
-		in:        in,
-		rnd:       rand.New(rand.NewPCG(seed, 0x6a09e667f3bcc908)), //nolint:gosec // reproducible search, not cryptography
-		crit:      in.crit,
-		spanAt:    indexOf(in.crit, MinRecruiterSpan),
-		usedAt:    indexOf(in.crit, MinRecruiters),
-		halfAt:    indexOf(in.crit, MinRecruiterHalfDays),
-		endAt:     indexOf(in.crit, MinDayEnds),
-		wholeAt:   indexOf(in.crit, MinSpan),
-		pinned:    make([]bool, nC),
-		needed:    make([]bool, nC),
-		optionsOf: make([][]int, nC),
-		holding:   make([][][]int, nC),
-		longest:   make([][]int, nC),
-		before:    make([]uint64, len(in.options)),
-		optMask:   make([]uint64, len(in.options)),
-		fullMask:  make([]uint64, nC),
-		needMask:  make([]uint64, nC),
-		held:      make([][]int8, nC),
-		possible:  make([]uint64, nC),
-		days:      in.o.days(),
-		perDay:    in.g.perDay,
-		breaks:    in.o.everyDay(in.o.Breaks),
-		busy:      make([]bitset, nR),
-		first:     make([]int, nU),
-		last:      make([]int, nU),
-		span:      make([]int, nU),
-		half:      make([][2]bool, nU),
-		dayEnd:    make([]int, in.o.days()),
-		wholeLo:   -1,
-		plans:     make([][]placed, nC),
-		contrib:   make([][]int, nC),
-		total:     make([]int, len(in.crit)),
+		in:           in,
+		rnd:          rand.New(rand.NewPCG(seed, 0x6a09e667f3bcc908)), //nolint:gosec // reproducible search, not cryptography
+		crit:         in.crit,
+		retime:       -1,
+		spanAt:       indexOf(in.crit, MinRecruiterSpan),
+		gapAt:        indexOf(in.crit, MinRecruiterBreaks),
+		idleAt:       indexOf(in.crit, MinRecruiterIdle),
+		idleSpreadAt: indexOf(in.crit, MinRecruiterIdleSpread),
+		spread:       -1,
+		meets:        make([]int, nR),
+		usedAt:       indexOf(in.crit, MinRecruiters),
+		halfAt:       indexOf(in.crit, MinRecruiterHalfDays),
+		endAt:        indexOf(in.crit, MinDayEnds),
+		wholeAt:      indexOf(in.crit, MinSpan),
+		pinned:       make([]bool, nC),
+		needed:       make([]bool, nC),
+		optionsOf:    make([][]int, nC),
+		holding:      make([][][]int, nC),
+		longest:      make([][]int, nC),
+		before:       make([]uint64, len(in.options)),
+		optMask:      make([]uint64, len(in.options)),
+		fullMask:     make([]uint64, nC),
+		needMask:     make([]uint64, nC),
+		held:         make([][]int8, nC),
+		possible:     make([]uint64, nC),
+		days:         in.o.days(),
+		perDay:       in.g.perDay,
+		breaks:       in.o.everyDay(in.o.Breaks),
+		busy:         make([]bitset, nR),
+		first:        make([]int, nU),
+		last:         make([]int, nU),
+		span:         make([]int, nU),
+		gaps:         make([]int, nU),
+		dayMeets:     make([]int, nU),
+		half:         make([][2]bool, nU),
+		dayEnd:       make([]int, in.o.days()),
+		wholeLo:      -1,
+		plans:        make([][]placed, nC),
+		contrib:      make([][]int, nC),
+		total:        make([]int, len(in.crit)),
 	}
+
+	if s.idleAt >= 0 || s.idleSpreadAt >= 0 {
+		s.idle = make([]int, nU)
+	}
+
+	s.indexPrecedences()
 
 	part, parts := in.parts()
 
-	for c := range in.requestsOf {
-		if parts[c] > 64 {
-			return nil, fmt.Errorf("planning: %s has more than 64 interviews to hold", in.p.Candidates[c].Name)
-		}
-
-		s.fullMask[c] = 1<<parts[c] - 1
-		s.contrib[c] = make([]int, len(s.crit))
-		s.held[c] = make([]int8, parts[c])
-
-		// A part is optional only when every request in it is: a guest
-		// invited to a meeting does not make the meeting itself optional.
-		var needed, seen uint64
-
-		for _, r := range in.requestsOf[c] {
-			bit := uint64(1) << part[r]
-			seen |= bit
-
-			if !in.p.Requests[r].Optional {
-				needed |= bit
-			}
-		}
-
-		s.needMask[c] = needed & seen
-		s.needed[c] = in.p.Candidates[c].Required
-		s.needing = s.needing || s.needed[c]
-
-		for _, r := range in.requestsOf[c] {
-			s.held[c][part[r]]++
-		}
+	if err := s.maskParts(part, parts); err != nil {
+		return nil, err
 	}
 
 	for o, opt := range in.options {
@@ -421,6 +481,16 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 
 	for h := range s.busy {
 		s.busy[h] = newBitset(in.g.slots)
+	}
+
+	if s.rooms = in.o.Rooms; s.rooms > 0 {
+		s.atSlot = make([]int, in.g.slots)
+	}
+
+	// The breaks are counted for the objective, for the fairness rule, or
+	// for both: either one is reason enough to keep them.
+	if in.o.BreakSpread != nil {
+		s.spread = *in.o.BreakSpread
 	}
 
 	if in.travel {
@@ -465,6 +535,67 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 	s.completeAt = complete
 
 	return s, nil
+}
+
+// indexPrecedences lists, for each candidate, who must be over before them
+// and who must wait for them, and gets ready to hold the fixed interviews
+// of either. Nothing is allocated when nothing is ordered.
+func (s *searcher) indexPrecedences() {
+	in, nC := s.in, len(s.in.p.Candidates)
+	if len(in.p.Precedences) == 0 {
+		return
+	}
+
+	s.earlier, s.later = make([][]int, nC), make([][]int, nC)
+	s.fixFirst, s.fixLast = make([]int, nC), make([]int, nC)
+
+	for c := range nC {
+		s.fixFirst[c], s.fixLast[c] = -1, -1
+	}
+
+	for _, pr := range in.p.Precedences {
+		s.earlier[pr.After] = append(s.earlier[pr.After], pr.Before)
+		s.later[pr.Before] = append(s.later[pr.Before], pr.After)
+	}
+}
+
+// maskParts gives each candidate the bits of the parts they must hold,
+// those they need and how many requests each part holds.
+func (s *searcher) maskParts(part, parts []int) error {
+	in := s.in
+
+	for c := range in.requestsOf {
+		if parts[c] > 64 {
+			return fmt.Errorf("planning: %s has more than 64 interviews to hold", in.p.Candidates[c].Name)
+		}
+
+		s.fullMask[c] = 1<<parts[c] - 1
+		s.contrib[c] = make([]int, len(s.crit))
+		s.held[c] = make([]int8, parts[c])
+
+		// A part is optional only when every request in it is: a guest
+		// invited to a meeting does not make the meeting itself optional.
+		var needed, seen uint64
+
+		for _, r := range in.requestsOf[c] {
+			bit := uint64(1) << part[r]
+			seen |= bit
+
+			if !in.p.Requests[r].Optional {
+				needed |= bit
+			}
+		}
+
+		s.needMask[c] = needed & seen
+		s.needed[c] = in.p.Candidates[c].Required
+		s.needing = s.needing || s.needed[c]
+
+		for _, r := range in.requestsOf[c] {
+			s.held[c][part[r]]++
+		}
+	}
+
+	return nil
 }
 
 // capacity returns the most candidates the hours of the recruiters can hold:
@@ -678,6 +809,10 @@ func (s *searcher) greedy() {
 	for _, c := range order {
 		if plan := s.firstPlacement(c); plan != nil {
 			s.set(c, plan)
+
+			if !s.fair() {
+				s.set(c, nil) // the one placement that broke the rule
+			}
 		}
 	}
 }
@@ -1046,8 +1181,28 @@ func (s *searcher) apply(pr *prepared) {
 		for _, h := range iv.Recruiters {
 			s.fixedBusy[h].set(from, to, true)
 			s.busy[h].set(from, to, true)
+			s.meets[h]++
+			s.dayMeets[s.unit(h, from)]++
 			s.own(h, from, to, iv.Candidate)
 			s.refresh(s.unit(h, from))
+		}
+
+		// A fixed interview takes a room like any other, and this is the
+		// third place that takes slots after mark and hold: a counter left
+		// out here is a cap the search plans against without seeing what
+		// is already taken. One interview takes one room however many
+		// recruiters sit in it, which is why this is outside the loop.
+		if s.atSlot != nil {
+			s.occupy(from, to, true)
+		}
+
+		if s.fixFirst != nil {
+			c := iv.Candidate
+			if s.fixFirst[c] < 0 || from < s.fixFirst[c] {
+				s.fixFirst[c] = from
+			}
+
+			s.fixLast[c] = max(s.fixLast[c], to)
 		}
 	}
 
@@ -1248,15 +1403,35 @@ func (s *searcher) names(recruiters []int) string {
 	return strings.Join(names, " and ")
 }
 
+// retiming draws whether this move tries to re-time a day. Left to itself
+// the search draws as it always has, an integer out of ruinEvery, so that a
+// seed keeps giving the schedule it gave before the share could be set; a
+// share that was asked for is drawn against directly.
+func (s *searcher) retiming() bool {
+	if s.retime < 0 {
+		return s.rnd.IntN(ruinEvery) != 0
+	}
+
+	return s.rnd.Float64() < s.retime
+}
+
 // move removes some candidates and inserts them back, with a few candidates
 // who had no interview.
 func (s *searcher) move() {
 	// Re-timing a whole day packs it tighter than any insertion can, so
 	// most moves go to it; when it changes nothing, and once in ruinEvery
 	// moves, the ruin and recreate below takes over.
-	if s.rnd.IntN(ruinEvery) != 0 && s.resequence() {
+	if s.retiming() && s.resequence() {
+		s.retimed++
+
+		if !s.fair() {
+			s.undo()
+		}
+
 		return
 	}
+
+	s.ruined++
 
 	// How many of the needed ones are in before the move: the guard below
 	// compares, rather than demanding them all, so that a schedule holding
@@ -1307,9 +1482,43 @@ func (s *searcher) move() {
 	// move from a schedule that holds none, and the search could never
 	// build them up — it would depend on the opening greedy having placed
 	// them, with no way to recover if it had not.
-	if s.needing && s.neededHeld() < before {
+	// The fairness rule holds by the same means: the empty schedule obeys
+	// it, and a move that would break it is taken back, so every schedule
+	// the search ever holds obeys it too.
+	if s.needing && s.neededHeld() < before || !s.fair() {
 		s.undo()
 	}
+}
+
+// fair tells whether the recruiters' breaks sit within Options.BreakSpread.
+// Recruiters with fewer than two interviews are left out: they have no
+// waiting to speak of, and counting their nought would pull the fewest down
+// and turn a rule about the spread into a cap on the most.
+func (s *searcher) fair() bool {
+	if s.spread < 0 {
+		return true
+	}
+
+	lo, hi := -1, 0
+
+	for h := range s.meets {
+		if s.meets[h] < 2 {
+			continue
+		}
+
+		n := 0
+		for d := range s.days {
+			n += s.gaps[h*s.days+d]
+		}
+
+		if lo < 0 || n < lo {
+			lo = n
+		}
+
+		hi = max(hi, n)
+	}
+
+	return lo < 0 || hi-lo <= s.spread
 }
 
 // neededHeld counts the candidates the schedule cannot do without that are
@@ -1404,6 +1613,24 @@ func (s *searcher) ruin() []int {
 
 	var victims []int
 
+	// A recruiter kept waiting in the middle of their day is what the
+	// breaks objectives are about, and the whole day is what has to come
+	// apart to mend it: closing a gap means pulling what comes after it
+	// earlier, which moves those interviews for their candidates too, and
+	// then for the other recruiters of those candidates. The cases below
+	// pick a recruiter and a window at random and so land on such a day
+	// only by chance. The gaps are already counted for the objective, so
+	// aiming costs one pass.
+	if s.gapAt >= 0 || s.spread >= 0 {
+		if s.rnd.IntN(3) == 0 {
+			victims = s.gappyDay(served)
+		}
+	}
+
+	if len(victims) > 0 {
+		return s.strike(victims)
+	}
+
 	moves := 3
 	if s.completeAt >= 0 {
 		moves = 5
@@ -1466,9 +1693,63 @@ func (s *searcher) ruin() []int {
 		}
 	}
 
+	return s.strike(victims)
+}
+
+// strike removes the plans of the victims of a ruin and returns them, for
+// recreate to put back.
+func (s *searcher) strike(victims []int) []int {
 	victims = slices.Clone(victims)
 	for _, c := range victims {
 		s.set(c, nil)
+	}
+
+	return victims
+}
+
+// gappyDay picks a recruiter and a day where that recruiter is left waiting
+// between two interviews, and returns every candidate they meet that day:
+// the day comes apart whole, so that recreate may rebuild it without the
+// gap rather than shuffle one interview inside it.
+//
+// The pick is uniform over the days that have a gap, in one pass and
+// without allocating: taking the first would always ruin the same day, and
+// the search would stop seeing the others.
+func (s *searcher) gappyDay(served []int) []int {
+	chosen, seen := -1, 0
+
+	for u, gaps := range s.gaps {
+		if gaps == 0 {
+			continue
+		}
+
+		seen++
+		if s.rnd.IntN(seen) == 0 {
+			chosen = u
+		}
+	}
+
+	if chosen < 0 {
+		return nil
+	}
+
+	h, day := chosen/s.days, chosen%s.days
+	from, to := day*s.perDay, (day+1)*s.perDay
+
+	var victims []int
+
+	for _, c := range served {
+		for _, pl := range s.plans[c] {
+			if pl.start < from || pl.start >= to {
+				continue
+			}
+
+			if slices.Contains(s.in.options[pl.option].recruiters, h) {
+				victims = append(victims, c)
+
+				break
+			}
+		}
 	}
 
 	return victims
@@ -1712,8 +1993,12 @@ type node struct {
 	start      int // start of the last interview
 	end        int // end of the last interview (exclusive)
 	wait       int // slots between the interviews of a same day
+	breaks     int // runs of free time between them, each counting one
 	endSum     int // sum of the end times, in minutes
 	spanDelta  int // increase of the recruiters' presence
+	gapDelta   int // increase of the runs of free time in their days
+	heldDelta  int // slots the recruiters spend in the interviews placed
+	rangeDelta int // increase of the spread of the free time inside the days
 	endDelta   int // increase of the ends of the days, in minutes
 	wholeDelta int // increase of the span of the whole period, in minutes
 	usedDelta  int // recruiters' days that had no interview
@@ -1743,6 +2028,10 @@ func (s *searcher) then(n node, o, t int) node {
 
 	if n.blocks > 0 && s.in.day[t] == s.in.day[n.start] {
 		n.wait += t - n.end
+
+		if t > n.end {
+			n.breaks++ // one break, whatever its length
+		}
 	}
 
 	n.mask |= s.optMask[o]
@@ -1809,10 +2098,13 @@ func (s *searcher) bestPlacement(c int) []placed {
 
 		n.endDelta += s.endIncrease(n, t, opt.length)
 		n.wholeDelta += s.wholeIncrease(t, opt.length)
+		n.rangeDelta += s.spreadIncrease(opt, t)
 
 		for _, h := range opt.recruiters {
 			u := s.unit(h, t)
 			n.spanDelta += s.spanIncrease(u, t, t+opt.length)
+			n.gapDelta += s.gapIncrease(h, u, t, t+opt.length)
+			n.heldDelta += opt.length
 
 			if s.first[u] < 0 {
 				n.usedDelta++
@@ -1973,6 +2265,16 @@ func (s *searcher) vector(dst []int, c int, n node) {
 			dst[i] = n.wholeDelta
 		case MinCandidateWait:
 			dst[i] = n.wait
+		case MinCandidateBreaks:
+			dst[i] = n.breaks
+		case MinRecruiterBreaks:
+			dst[i] = n.gapDelta
+		case MinRecruiterIdle:
+			// What a placement adds to the free time inside the days: how
+			// much longer they get, less what the interviews fill.
+			dst[i] = n.spanDelta - n.heldDelta
+		case MinRecruiterIdleSpread:
+			dst[i] = n.rangeDelta
 		case MinEndTimes:
 			dst[i] = n.endSum
 		case MinRecruiters:
@@ -2017,6 +2319,56 @@ func (s *searcher) wholeIncrease(t, length int) int {
 	return max(s.wholeHi, to) - min(s.wholeLo, from) - (s.wholeHi - s.wholeLo)
 }
 
+// countGaps returns the runs of free time between the first and the last
+// busy slot, which is what MinRecruiterBreaks counts: one per run, however
+// long the run is. It returns 0 for a day with nothing in it.
+//
+// The slots [from, to) count as busy on top of the bitset, which is how a
+// placement is weighed without touching it: the bitset is shared by the
+// whole search, and lending it a slot for the length of a count would be a
+// fine way to lose one.
+func countGaps(busy bitset, first, last, from, to int) int {
+	if first < 0 {
+		return 0
+	}
+
+	gaps, inGap := 0, false
+
+	for t := first; t <= last; t++ {
+		switch {
+		case busy.has(t) || t >= from && t < to:
+			inGap = false
+		case !inGap:
+			inGap = true
+			gaps++
+		}
+	}
+
+	return gaps
+}
+
+// gapIncrease is the growth of the runs of free time of unit u if recruiter
+// h is busy in [t, end).
+//
+// It is only a guide: the placement uses it to choose between insertions,
+// while the score of a schedule comes from s.gaps, which refresh keeps from
+// the busy slots themselves. So it may be paid for exactly, by counting the
+// day twice, without the exactness of the total resting on it.
+func (s *searcher) gapIncrease(h, u, t, end int) int {
+	if s.gapAt < 0 {
+		return 0
+	}
+
+	first, last := s.first[u], s.last[u]
+	if first < 0 {
+		first, last = t, end-1
+	} else {
+		first, last = min(first, t), max(last, end-1)
+	}
+
+	return countGaps(s.busy[h], first, last, t, end) - s.gaps[u]
+}
+
 // spanIncrease is the growth of the presence of unit u if busy in [t, end).
 func (s *searcher) spanIncrease(u, t, end int) int {
 	if s.first[u] < 0 {
@@ -2026,10 +2378,103 @@ func (s *searcher) spanIncrease(u, t, end int) int {
 	return max(s.last[u]+1, end) - min(s.first[u], t) - s.span[u]
 }
 
+// spreadIncrease returns how much the spread of the free time inside the
+// recruiters' days grows if an interview of opt is held from slot t: the
+// range among the days with two interviews or more, after less before. It
+// is negative when the interview evens the days out.
+//
+// The increase of the free time itself will not do as a guide here, and
+// was tried: it always prefers the tightest day, while the best spread
+// sometimes wants a recruiter to wait on purpose, as long as another who
+// cannot help it. A search guided by tightness never proposes that day and
+// so never finds it — the exhaustive test caught exactly that, on a problem
+// of five meetings.
+//
+// It walks the days once, which is why it only runs when the objective is
+// asked for.
+func (s *searcher) spreadIncrease(opt *option, t int) int {
+	if s.idleSpreadAt < 0 {
+		return 0
+	}
+
+	was, will := newRange(), newRange()
+
+	for u, meets := range s.dayMeets {
+		idle := s.idle[u]
+
+		if meets >= 2 {
+			was.add(idle)
+		}
+
+		for _, h := range opt.recruiters {
+			if s.unit(h, t) == u {
+				idle += s.spanIncrease(u, t, t+opt.length) - opt.length
+				meets++
+
+				break
+			}
+		}
+
+		if meets >= 2 {
+			will.add(idle)
+		}
+	}
+
+	return will.width() - was.width()
+}
+
+// span of values seen: the least and the most, and nothing when none.
+type valueRange struct{ lo, hi int }
+
+func newRange() valueRange { return valueRange{lo: -1} }
+
+func (r *valueRange) add(v int) {
+	if r.lo < 0 || v < r.lo {
+		r.lo = v
+	}
+
+	r.hi = max(r.hi, v)
+}
+
+func (r valueRange) width() int {
+	if r.lo < 0 {
+		return 0
+	}
+
+	return r.hi - r.lo
+}
+
 // free tells whether the recruiters of option o are free from slot t; with
 // ignoreBusy, free of the fixed interviews only.
 func (s *searcher) free(o, t int) bool {
+	opt := &s.in.options[o]
+
+	// The rooms come first, and they hold even under ignoreBusy, which
+	// skips everything below. Eject looks for a place as if the others had
+	// moved, then drops only the candidates wanting the same recruiter —
+	// but a room runs out between candidates who share nobody, so a cap
+	// ignored here comes back as a schedule holding more interviews at once
+	// than there are rooms. Honouring it is conservative and never wrong,
+	// since dropping a candidate only ever frees a room.
+	if s.atSlot != nil {
+		for u := t; u < t+opt.length; u++ {
+			if s.atSlot[u] >= s.rooms {
+				return false
+			}
+		}
+	}
+
+	// The precedences come first for the same reason as the rooms: eject
+	// looks for a place as if the others had moved, and drops only the
+	// candidates wanting the same recruiter, while a precedence binds
+	// candidates who share nobody. Checked after the early return below it
+	// would be dead code on that path.
+	if !s.inOrder(opt.candidate, t, opt.length) {
+		return false
+	}
+
 	busy := s.busy
+
 	if s.ignoreBusy {
 		if s.fixedBusy == nil {
 			return true
@@ -2038,7 +2483,6 @@ func (s *searcher) free(o, t int) bool {
 		busy = s.fixedBusy
 	}
 
-	opt := &s.in.options[o]
 	for _, h := range opt.recruiters {
 		if !s.roomFor(busy[h], h, opt.candidate, t, opt.length) {
 			return false
@@ -2139,8 +2583,12 @@ func (s *searcher) undo() {
 }
 
 func (s *searcher) replace(c int, plan []placed) {
-	touched := s.mark(c, s.plans[c], false)
-	touched = append(touched, s.mark(c, plan, true)...)
+	// The one buffer is reused: mark used to return a slice of its own, and
+	// at two calls a replace it was the largest single source of garbage in
+	// the search. Nothing holds on to it past this function.
+	touched := s.mark(s.touched[:0], c, s.plans[c], false)
+	touched = s.mark(touched, c, plan, true)
+	s.touched = touched
 	s.plans[c] = plan
 
 	for _, u := range touched {
@@ -2166,6 +2614,20 @@ func (s *searcher) refresh(u int) {
 
 	if s.first[u] >= 0 {
 		s.span[u] = s.last[u] + 1 - s.first[u]
+	}
+
+	if s.gapAt >= 0 || s.spread >= 0 {
+		s.gaps[u] = countGaps(s.busy[h], s.first[u], s.last[u], 0, 0)
+	}
+
+	if s.idle != nil {
+		s.idle[u] = 0
+
+		for t := s.first[u]; s.first[u] >= 0 && t <= s.last[u]; t++ {
+			if !s.busy[h].has(t) {
+				s.idle[u]++
+			}
+		}
 	}
 
 	s.half[u] = [2]bool{
@@ -2207,11 +2669,11 @@ func (s *searcher) rebound() {
 	}
 }
 
-// mark sets or clears the busy slots of plan, of candidate c, and returns
-// the units.
-func (s *searcher) mark(c int, plan []placed, busy bool) []int {
-	var touched []int
-
+// mark sets or clears the busy slots of plan, of candidate c, and appends
+// the units it touched to touched, which it returns grown. The caller
+// brings the buffer so that marking a plan allocates nothing: it is done
+// twice on every replace, which is the hot path of the whole search.
+func (s *searcher) mark(touched []int, c int, plan []placed, busy bool) []int {
 	for _, pl := range plan {
 		opt := &s.in.options[pl.option]
 		for _, h := range opt.recruiters {
@@ -2219,12 +2681,36 @@ func (s *searcher) mark(c int, plan []placed, busy bool) []int {
 			touched = append(touched, s.unit(h, pl.start))
 
 			if busy {
+				s.meets[h]++
+				s.dayMeets[s.unit(h, pl.start)]++
+
 				s.own(h, pl.start, pl.start+opt.length, c)
+			} else {
+				s.meets[h]--
+				s.dayMeets[s.unit(h, pl.start)]--
 			}
+		}
+
+		// One interview takes one room however many recruiters sit in it,
+		// which is why this is counted here and not in the loop above.
+		if s.atSlot != nil {
+			s.occupy(pl.start, pl.start+opt.length, busy)
 		}
 	}
 
 	return touched
+}
+
+// occupy counts an interview in, or out of, the slots [from, to).
+func (s *searcher) occupy(from, to int, taken bool) {
+	d := 1
+	if !taken {
+		d = -1
+	}
+
+	for t := from; t < to; t++ {
+		s.atSlot[t] += d
+	}
 }
 
 // own records candidate c as the holder of the slots [from, to) of
@@ -2258,7 +2744,7 @@ func (s *searcher) contribution(dst []int, c int, plan []placed) {
 
 	s.vector(dst, c, n)
 
-	for _, i := range []int{s.spanAt, s.usedAt, s.halfAt, s.endAt, s.wholeAt} {
+	for _, i := range []int{s.spanAt, s.gapAt, s.idleAt, s.idleSpreadAt, s.usedAt, s.halfAt, s.endAt, s.wholeAt} {
 		if i >= 0 {
 			dst[i] = 0 // counted per recruiter or per day, by score
 		}
@@ -2274,6 +2760,14 @@ func (s *searcher) score() []int {
 			score[s.spanAt] += s.span[u]
 		}
 
+		if s.gapAt >= 0 {
+			score[s.gapAt] += s.gaps[u]
+		}
+
+		if s.idleAt >= 0 {
+			score[s.idleAt] += s.idle[u]
+		}
+
 		if s.usedAt >= 0 && s.first[u] >= 0 {
 			score[s.usedAt]++
 		}
@@ -2286,6 +2780,28 @@ func (s *searcher) score() []int {
 	if s.endAt >= 0 {
 		for _, end := range s.dayEnd {
 			score[s.endAt] += end
+		}
+	}
+
+	if s.idleSpreadAt >= 0 {
+		// The most free time less the least, among the days with two
+		// interviews or more: whoever comes once has no waiting to share.
+		lo, hi := -1, 0
+
+		for u, meets := range s.dayMeets {
+			if meets < 2 {
+				continue
+			}
+
+			if lo < 0 || s.idle[u] < lo {
+				lo = s.idle[u]
+			}
+
+			hi = max(hi, s.idle[u])
+		}
+
+		if lo >= 0 {
+			score[s.idleSpreadAt] += hi - lo
 		}
 	}
 
@@ -2462,5 +2978,65 @@ func (b bitset) boundsIn(from, to int) (int, int) {
 	return first, last
 }
 
+// errRetime is returned for a share of retimings that is not a share.
+var errRetime = errors.New("planning: the share of the moves that re-time a day is between 0 and 1")
+
 // errNoStop is returned when nothing would stop the search.
 var errNoStop = errors.New("planning: the search needs a deadline, a number of iterations or a patience")
+
+// inOrder reports whether an interview of candidate c at slot t, lasting
+// length slots, keeps the precedences against the candidates already
+// planned. A candidate with no interviews constrains nobody: the order
+// holds between the interviews that take place, so a precedence whose
+// earlier candidate goes unplanned leaves the later one free. Which of the
+// two was planned first does not matter, since each is checked against
+// what is already there.
+func (s *searcher) inOrder(c, t, length int) bool {
+	if s.earlier == nil {
+		return true
+	}
+
+	for _, b := range s.earlier[c] {
+		if end := s.lastEnd(b); end >= 0 && end > t {
+			return false
+		}
+	}
+
+	for _, a := range s.later[c] {
+		if start := s.firstStart(a); start >= 0 && start < t+length {
+			return false
+		}
+	}
+
+	return true
+}
+
+// firstStart returns the slot of the first interview of candidate c, fixed
+// ones included, or -1 when they have none. Only inOrder calls it, which
+// returns before that when there are no precedences, so fixFirst is never
+// nil here.
+func (s *searcher) firstStart(c int) int {
+	out := s.fixFirst[c]
+
+	for _, pl := range s.plans[c] {
+		if out < 0 || pl.start < out {
+			out = pl.start
+		}
+	}
+
+	return out
+}
+
+// lastEnd returns the slot after the last interview of candidate c, fixed
+// ones included, or -1 when they have none.
+func (s *searcher) lastEnd(c int) int {
+	out := s.fixLast[c]
+
+	for _, pl := range s.plans[c] {
+		if end := pl.start + s.in.options[pl.option].length; end > out {
+			out = end
+		}
+	}
+
+	return out
+}

@@ -198,6 +198,7 @@ igiveyouarendezvous -date 2026-11-23 semaine3.yaml             # un seul jour
 | `-progress-json` | affiche chaque amélioration en un objet JSON par ligne, pour un programme |
 | `-workers N` | recherches lancées en parallèle (par défaut : le nombre de cœurs) |
 | `-seed N` | graine aléatoire |
+| `-retime S` | pour les mesures : la part des mouvements qui re-horodatent une journée entière, de `0` à `1` ; la recherche choisit quand il est omis |
 | `-list-objectives` | liste les objectifs |
 
 Les fichiers nommés `.json` sont écrits en JSON, les autres en YAML ; les deux
@@ -265,6 +266,9 @@ Les clés sont en anglais, comme le reste du programme. `recruiters` et
 | `joint-groups` | aucun | groupes de recruteurs qui peuvent recevoir ensemble (voir plus bas) |
 | `panels` | aucun | groupes de recruteurs qui reçoivent toujours ensemble, comme un jury (voir plus bas) |
 | `max-joint-size` | `0` | nombre maximal de recruteurs dans un entretien commun (`0` : sans limite) |
+| `rooms` | `0` | nombre maximal d'entretiens en même temps, quels qu'en soient les participants : les salles, les tables ou les stands dont on dispose (`0` : sans limite) |
+| `break-spread` | aucun | écart maximal entre les nombres de pauses des recruteurs, parmi ceux qui ont au moins deux entretiens (`2` : personne n'attend plus de deux fois plus souvent qu'un autre) ; aucun : sans limite |
+| `precedences` | aucune | candidats à tenir dans l'ordre : des paires de noms, `[[a, b], [a, c]]` demandant que `a` soit fini avant que `b` et `c` commencent (voir plus bas) |
 | `objectives` | voir plus bas | objectifs, le plus important d'abord |
 | `recruiters.<nom>.duration` | `duration` | durée des entretiens avec ce recruteur ; un entretien commun dure autant que sa plus longue partie |
 | `recruiters.<nom>.availability` | `day` | plages du recruteur (`none` : absent), chaque jour ou par date (voir plus bas) |
@@ -274,6 +278,7 @@ Les clés sont en anglais, comme le reste du programme. `recruiters` et
 | `candidates.<nom>.meetings` | aucune | des rencontres avec plusieurs recruteurs à la fois, chacune telle quelle ; un recruteur peut revenir dans plusieurs (voir plus bas) |
 | `candidates.<nom>.availability` | `day` | plages du candidat, chaque jour ou par date |
 | `candidates.<nom>.priority` | `1` | plus c'est haut, plus c'est important (objectif `priorities`) |
+| `candidates.<nom>.required` | `false` | `true` : une contrainte et non plus un objectif — un planning sans ce candidat est refusé et il est nommé (voir plus bas) |
 | `candidates.<nom>.duration` | celle des recruteurs | durée des entretiens de ce candidat, à la place de celles des recruteurs (la durée d'une rencontre dans `meet` l'emporte) |
 | `candidates.<nom>.together` | `false` | `true` : une réunion, tous les recruteurs à la fois en un seul entretien, ou rien (voir [Autres usages](#autres-usages)) |
 | `candidates.<nom>.place` | aucun | où l'on rencontre le candidat, comme la ville d'un tournage ; aucun : pas de trajet vers lui ni depuis lui, comme un appel (voir plus bas) |
@@ -328,6 +333,57 @@ max-gap: unlimited
 min-gap: 30m        # le même jour, avec 30 minutes à 2 heures entre deux
 max-gap: 2h
 ```
+
+**Les salles.** `rooms` limite le nombre d'entretiens tenus en même temps,
+quels qu'en soient les participants : les salles, les tables ou les stands
+dont on dispose. Rien d'autre ne le borne, et vingt recruteurs libres à dix
+heures sont tous rencontrés à dix heures si le fichier ne dit pas le
+contraire — ce qui est juste quand chacun reçoit dans son bureau, et faux
+dans un hall qui a quatre tables. `0`, la valeur par défaut, ne limite rien.
+
+**La même attente pour tous.** `break-spread` borne l'écart entre le
+recruteur qui attend le plus souvent et celui qui attend le moins : avec
+`break-spread: 2`, personne n'attend plus de deux fois plus souvent qu'un
+autre. C'est une contrainte dure et non un objectif, donc elle ne se
+négocie jamais contre un meilleur score ailleurs : un planning qui l'enfreint
+est refusé, par la recherche comme par `-check`. Elle compare les recruteurs
+qui ont au moins deux entretiens, puisqu'un seul entretien n'est pas de
+l'attente et qu'il n'y a là rien à partager équitablement — les compter
+tirerait le minimum à zéro et la règle ne dirait plus que ceci : personne
+n'attend plus de deux fois. Omettre la clé ne limite rien ;
+`break-spread: 0` est une limite de zéro, qui demande que chaque recruteur
+attende exactement aussi souvent que les autres. Les deux ne sont pas la
+même chose.
+
+```yaml
+rooms: 14                                # un hall de quatorze tables
+break-spread: 2                          # l'attente répartie également
+objectives: [meetings, recruiter-breaks]
+```
+
+**L'ordre entre candidats.** Les rangs de `meet` ordonnent les entretiens
+d'**un** candidat ; `precedences` ordonne les candidats entre eux. Chaque
+entrée est une paire, le premier fini avant que le second commence : chaque
+entretien du premier se termine au plus tard quand commence chaque
+entretien du second.
+
+```yaml
+precedences:
+  - [présélection, jury]     # le jury ne voit personne avant la présélection
+  - [présélection, débrief]
+  - [jury, débrief]          # et le débrief vient en dernier
+```
+
+Des paires plutôt que des rangs, parce qu'une paire ne dit que ce qu'elle
+dit. Les rangs découpent les candidats en couches, et deux candidats de
+couches différentes sont alors ordonnés même là où rien ne le demande ; une
+couche écrite sous la forme des paires qu'elle représente demande exactement
+ce qu'elle veut dire. La clé est optionnelle et ne pèse que les ordres
+réellement nécessaires.
+
+Un candidat non planifié ne retient personne : l'ordre s'applique entre les
+entretiens qui ont lieu. Un cycle est refusé, en nommant le tour, puisqu'un
+cycle réparti sur plusieurs lignes n'a pas de paire fautive à montrer.
 
 **L'ordre.** `meet` est une liste, dans n'importe quel ordre, ou les
 recruteurs avec leurs rangs : le rang 1 d'abord, puis le rang 2, et ainsi de
@@ -583,7 +639,11 @@ tournée](example/fr/tour.yaml).
 | `recruiter-half-days` | minimise les demi-journées (matin, après-midi) où des recruteurs ont un entretien, sommées sur les recruteurs et les jours |
 | `interviews` | minimise les entretiens, donc les rencontres groupées quand c'est permis |
 | `recruiter-span` | minimise le temps de présence des recruteurs, du début de leur premier entretien à la fin du dernier, jour par jour |
+| `recruiter-breaks` | minimise le nombre de fois où un recruteur attend entre deux entretiens d'une même journée, chaque attente comptée une fois quelle qu'en soit la durée |
+| `recruiter-idle` | minimise le temps libre à l'intérieur des journées des recruteurs : du premier entretien à la fin du dernier, moins les entretiens eux-mêmes |
+| `recruiter-idle-spread` | minimise l'écart entre le recruteur qui a le plus de temps libre à l'intérieur de sa journée et celui qui en a le moins, parmi ceux qui ont au moins deux entretiens ce jour-là |
 | `candidate-wait` | minimise l'attente des candidats entre deux entretiens d'une même journée (utile quand `max-gap` n'est pas `0`) |
+| `candidate-breaks` | minimise le nombre de fois où un candidat attend entre deux entretiens d'une même journée, chaque attente comptée une fois quelle qu'en soit la durée |
 | `earliest` | place les entretiens le plus tôt possible dans la période |
 | `day-end` | finit chaque journée le plus tôt possible : réduit la fin du dernier entretien du jour, additionnée sur les jours avec entretiens |
 | `span` | termine le plus tôt possible : minimise le temps entre le début du premier entretien et la fin du dernier, sur toute la période, nuits comprises |
@@ -614,6 +674,32 @@ soit pas sacrifié à celui qui en a d'autres.
 Les jours restants ne comptent que les dates (on ne vérifie pas que tout le
 monde est libre en même temps ce jour-là), et la commande les affiche en
 `last day`, `2 days left`…
+
+`candidate-wait` et `recruiter-span` comptent du temps ; `candidate-breaks`
+et `recruiter-breaks` comptent des **fois**. Un trou de trois heures est une
+pause et trois heures d'attente ; trois trous d'une heure sont trois pauses
+et les mêmes trois heures. Choisir laquelle minimiser est un vrai choix :
+qui est venu pour la journée préfère une longue pause à trois renvois, et
+qui est venu pour une heure préfère attendre moins au total. Les deux
+mesures classent ces journées en sens inverse, et c'est pourquoi les deux
+existent. Une pause compte une fois quelle qu'en soit la durée, et des
+entretiens qui s'enchaînent sans rien entre eux ne sont pas une pause.
+
+`recruiter-idle-spread` parle du partage et non du total : il vaut zéro
+quand personne n'attend, et zéro tout autant quand tout le monde attend une
+heure. C'est son sens et non un défaut, mais c'est pourquoi il a rarement le
+dernier mot : placez `recruiter-idle` après lui, et parmi les journées aussi
+bien partagées la recherche garde celle où l'on attend le moins au total.
+
+```yaml
+objectives: [meetings, recruiter-idle-spread, recruiter-idle]
+```
+
+`recruiter-idle` lui-même est `recruiter-span` moins les entretiens, qui
+sont les mêmes où qu'on les place : les deux classent les plannings pareil
+tant que les mêmes entretiens ont lieu, et ne se séparent que lorsqu'un
+candidat n'est pas servi ou qu'un entretien commun en réunit deux. Prenez
+`recruiter-span` sauf si c'est bien le temps libre que vous voulez compter.
 
 La **pause du déjeuner** sépare le matin de l'après-midi : avec plusieurs
 pauses, la plus longue ; sans pause, midi. Un recruteur qui n'a d'entretiens

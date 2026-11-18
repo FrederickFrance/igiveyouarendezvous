@@ -21,6 +21,8 @@
 //	panels:                   # recruiters who always interview together, such as a jury
 //	  - [recruiter 4, recruiter 5]
 //	max-joint-size: 0         # maximum recruiters in a joint interview (0: no limit)
+//	rooms: 0                  # interviews that can be held at once (0: no limit)
+//	break-spread:             # how far the recruiters' break counts may differ (none: no limit)
 //	objectives: [priorities, meetings, recruiters, recruiter-half-days, interviews, recruiter-span]
 //	recruiters:
 //	  recruiter 1:
@@ -90,13 +92,18 @@ type File struct {
 	MaxGap   Gap       `yaml:"max-gap"`
 	// RecruiterMinGap is the gap of every recruiter without one of their
 	// own (see Recruiter.MinGap).
-	RecruiterMinGap Duration         `yaml:"recruiter-min-gap"`
-	JointGroups     [][]string       `yaml:"joint-groups"`
-	Panels          [][]string       `yaml:"panels"`
-	MaxJointSize    int              `yaml:"max-joint-size"`
-	Objectives      []string         `yaml:"objectives"`
-	Recruiters      Named[Recruiter] `yaml:"recruiters"`
-	Candidates      Named[Candidate] `yaml:"candidates"`
+	RecruiterMinGap Duration   `yaml:"recruiter-min-gap"`
+	JointGroups     [][]string `yaml:"joint-groups"`
+	Panels          [][]string `yaml:"panels"`
+	MaxJointSize    int        `yaml:"max-joint-size"`
+	Rooms           int        `yaml:"rooms"`
+	// Precedences order candidates against each other, as pairs of their
+	// names: [a, b] asks for a to be over before b begins.
+	Precedences [][]string       `yaml:"precedences"`
+	BreakSpread *int             `yaml:"break-spread"`
+	Objectives  []string         `yaml:"objectives"`
+	Recruiters  Named[Recruiter] `yaml:"recruiters"`
+	Candidates  Named[Candidate] `yaml:"candidates"`
 	// Travel gives the journeys between the places of the candidates.
 	Travel Travel `yaml:"travel"`
 	// Schema is the JSON schema of the file, for editors; it is ignored.
@@ -242,6 +249,7 @@ var problemKeys = shape{
 	"$schema": nil, "from": nil, "to": nil, "not-before": nil, "weekdays": nil, "closed": nil,
 	"day": nil, "breaks": nil, "duration": nil, "step": nil, "min-gap": nil, "max-gap": nil,
 	"recruiter-min-gap": nil, "joint-groups": nil, "panels": nil, "max-joint-size": nil, "objectives": nil,
+	"rooms": nil, "break-spread": nil, "precedences": nil,
 	"recruiters": {"*": {"duration": nil, "availability": nil, "min-gap": nil}},
 	"candidates": {"*": {"meet": nil, "meetings": nil, "priority": nil, "availability": nil, "duration": nil, "together": nil, "place": nil, "required": nil}},
 	"travel":     {"default": nil, "journeys": nil},
@@ -431,6 +439,8 @@ func (f *File) Problem(from, to string) (*planning.Problem, planning.Options, er
 		MinGap:       planning.Gap(f.MinGap),
 		MaxGap:       planning.Gap(f.MaxGap),
 		MaxJointSize: f.MaxJointSize,
+		Rooms:        f.Rooms,
+		BreakSpread:  f.BreakSpread,
 	}
 
 	for d, date := range dates {
@@ -468,6 +478,7 @@ func (f *File) Problem(from, to string) (*planning.Problem, planning.Options, er
 
 	p := &planning.Problem{}
 	recruiters := map[string]int{}
+	candidates := map[string]int{}
 
 	for h, e := range f.Recruiters {
 		spans, set, err := on(e.Value.Availability, dates)
@@ -506,6 +517,7 @@ func (f *File) Problem(from, to string) (*planning.Problem, planning.Options, er
 			cand.Availability = spans
 		}
 
+		candidates[e.Name] = c
 		p.Candidates = append(p.Candidates, cand)
 
 		met := map[int]bool{}
@@ -534,6 +546,10 @@ func (f *File) Problem(from, to string) (*planning.Problem, planning.Options, er
 	}
 
 	if p.Panels, err = groups("panels", f.Panels, recruiters); err != nil {
+		return nil, o, err
+	}
+
+	if p.Precedences, err = precedences(f.Precedences, candidates); err != nil {
 		return nil, o, err
 	}
 
@@ -838,4 +854,32 @@ func clone(n *yaml.Node) *yaml.Node {
 	c.Alias = clone(n.Alias)
 
 	return &c
+}
+
+// precedences converts the key precedences: pairs of candidate names. A
+// pair is two names and not more, since a chain of three written as one
+// line would hide which of the two orders it asks for.
+func precedences(pairs [][]string, candidates map[string]int) ([]planning.Precedence, error) {
+	var out []planning.Precedence
+
+	for _, pair := range pairs {
+		if len(pair) != 2 {
+			return nil, fmt.Errorf("precedences: %q: a precedence is two candidates, the first before the second", pair)
+		}
+
+		var both [2]int
+
+		for i, name := range pair {
+			c, ok := candidates[NormalizeName(name)]
+			if !ok {
+				return nil, fmt.Errorf("precedences: %q is not a candidate of the file", name)
+			}
+
+			both[i] = c
+		}
+
+		out = append(out, planning.Precedence{Before: both[0], After: both[1]})
+	}
+
+	return out, nil
 }

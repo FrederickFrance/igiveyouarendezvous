@@ -157,6 +157,13 @@ moving everything:
   `recruiters` is an error: the program says so, with the line.
 - **Inside braces**, quote the time spans:
   `{availability: "09:00-12:00, 14:00-16:00"}`.
+- **Two kinds of order**: the ranks in `meet` order the interviews of one
+  candidate; `precedences` orders candidates against each other. Asking for
+  one with the other is the usual mix-up.
+- **Everybody at once**: nothing limits how many interviews are held at the
+  same time, which is right when each recruiter receives in their own
+  office. In a hall, write how many tables there are (`rooms: 4`), or the
+  schedule will hold twenty meetings at ten o'clock.
 - **Nobody fits**: a rule is probably too strict. Relax it (a gap, an
   availability, a length) and plan again.
 

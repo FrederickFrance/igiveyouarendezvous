@@ -127,11 +127,36 @@ a des valeurs par défaut) :
   de rangs alors, ni de `meetings`. D'autres usages reprennent les mêmes
   mots : les invités et l'équipe sont des « recruteurs », les épisodes,
   tournages ou séances des « candidats ».
+- `rooms` : le nombre maximal d'entretiens en même temps, quels qu'en soient
+  les participants : les salles, les tables ou les stands dont on dispose.
+  Rien d'autre ne le borne, donc donne-le pour un hall ou un salon
+  (« quatre tables », `rooms: 4`) et omets-le quand chacun reçoit dans son
+  bureau.
+- `break-spread` : l'écart maximal entre les nombres de pauses des
+  recruteurs, parmi ceux qui ont au moins deux entretiens. C'est une
+  contrainte dure : avec `break-spread: 2`, personne n'attend plus de deux
+  fois plus souvent qu'un autre. Donne-le quand je demande que l'attente
+  soit répartie équitablement.
+- `precedences` : des candidats à tenir dans l'ordre, par paires de leurs
+  noms : `[[présélection, jury], [jury, débrief]]` demande que la
+  présélection soit finie avant que le jury commence, et le jury avant le
+  débrief. Cela ordonne les candidats entre eux ; les rangs de `meet`
+  ordonnent les entretiens d'un seul candidat, ce qui est autre chose. Des
+  paires et non des rangs, pour qu'une paire demande exactement ce qu'elle
+  dit. Optionnel : ne donne que les ordres réellement nécessaires.
 - `objectives` : ce qui compte, le plus important d'abord. Garde la valeur
   par défaut sauf si je dis autre chose ; « finir la journée le plus tôt
   possible » est `day-end`, « attendre le moins possible entre deux
   rencontres » est `candidate-wait`, par exemple `[complete-candidates,
-  day-end, candidate-wait]`.
+  day-end, candidate-wait]`. `candidate-wait` et `recruiter-span` comptent
+  du temps, tandis que `candidate-breaks` et `recruiter-breaks` comptent le
+  nombre de fois où quelqu'un attend, quelle qu'en soit la durée :
+  « j'aime mieux attendre une fois longtemps que trois fois » est
+  `candidate-breaks`, « ne laissez pas les recruteurs en plan » est
+  `recruiter-breaks`. « Répartissez l'attente également entre les
+  recruteurs » est `recruiter-idle-spread`, et il va avec `recruiter-idle`
+  juste après lui, puisqu'un partage égal ne dit rien de la quantité
+  d'attente : `[meetings, recruiter-idle-spread, recruiter-idle]`.
 
 Comment l'écrire :
 

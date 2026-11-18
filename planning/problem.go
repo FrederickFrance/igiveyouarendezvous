@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -178,6 +179,24 @@ type Problem struct {
 	Panels [][]int
 	// Travel gives the journeys between the places of the candidates.
 	Travel Travel
+	// Precedences order candidates against each other, which Request.Rank
+	// cannot do: a rank orders the interviews of one candidate.
+	Precedences []Precedence
+}
+
+// Precedence requires one candidate to be over before another begins: every
+// interview of Before ends no later than every interview of After starts.
+//
+// A pair says only what it says, which is why this is a list of pairs and
+// not ranks: ranks cut the candidates into layers, and two candidates of
+// different layers are then ordered even where nothing asks for it. Ranks
+// are the shorter way to write a layering, and a layering is written here
+// as the pairs it stands for.
+//
+// A candidate that is not planned constrains nobody: the precedence holds
+// between the interviews that take place.
+type Precedence struct {
+	Before, After int // indexes in Problem.Candidates
 }
 
 // priority returns the priority of candidate c, 1 by default.
@@ -264,6 +283,23 @@ type Options struct {
 	// MaxJointSize caps the number of recruiters in a joint interview; zero
 	// means no cap.
 	MaxJointSize int
+	// BreakSpread caps how far the recruiters' numbers of breaks may differ:
+	// with 2, nobody waits more than two times more often than anybody
+	// else. It counts the recruiters who have at least two interviews,
+	// since one interview is no waiting and nothing to be fair about, and
+	// counting them would pull the fewest down to zero and leave the rule
+	// saying only that nobody waits more than twice at all.
+	//
+	// A nil BreakSpread is no limit; zero is a limit of zero, which asks
+	// every recruiter to wait exactly as often as every other. The two are
+	// not the same, hence the pointer.
+	BreakSpread *int
+	// Rooms caps the interviews held at the same time, whoever attends
+	// them: the rooms, tables or booths there are. Zero means no cap, which
+	// is right when everybody meets in their own office and wrong in a hall
+	// — twenty recruiters free at ten o'clock cannot all be met at ten
+	// o'clock with four tables.
+	Rooms int
 	// Objectives are optimised in this order (lexicographically); nil means
 	// DefaultObjectives.
 	Objectives []Objective
@@ -398,6 +434,10 @@ func (o Options) checkPeriod() error {
 	case o.MinGap.Days > o.MaxGap.Days && o.MaxGap.Days > 0,
 		o.MaxGap.Days == 0 && o.MaxGap.Duration != NoLimit && o.MinGap.Duration > o.MaxGap.Duration:
 		return fmt.Errorf("planning: the minimum gap, %s, is more than the maximum gap, %s", o.MinGap, o.MaxGap)
+	case o.Rooms < 0:
+		return errors.New("planning: negative number of rooms")
+	case o.BreakSpread != nil && *o.BreakSpread < 0:
+		return errors.New("planning: negative break spread")
 	}
 
 	for _, d := range o.Closed {
@@ -491,7 +531,80 @@ func (p *Problem) check(o Options) error {
 		return err
 	}
 
+	if err := p.checkPrecedences(); err != nil {
+		return err
+	}
+
 	return p.checkRequests()
+}
+
+// checkPrecedences validates the precedences: known candidates, nobody
+// before themselves, and no cycle. A cycle is impossible to plan and the
+// message names the way round, since a cycle written in pairs is spread
+// over several lines and the pair at fault cannot be pointed at alone.
+func (p *Problem) checkPrecedences() error {
+	after := make([][]int, len(p.Candidates))
+
+	for i, pr := range p.Precedences {
+		if pr.Before < 0 || pr.Before >= len(p.Candidates) || pr.After < 0 || pr.After >= len(p.Candidates) {
+			return fmt.Errorf("planning: precedence %d: unknown candidate", i)
+		}
+
+		if pr.Before == pr.After {
+			return fmt.Errorf("planning: %s cannot come before themselves", p.Candidates[pr.Before].Name)
+		}
+
+		after[pr.Before] = append(after[pr.Before], pr.After)
+	}
+
+	// Depth-first, keeping the way down so the cycle can be named.
+	const (
+		fresh = iota
+		open
+		done
+	)
+
+	state := make([]int, len(p.Candidates))
+	path := []int{}
+
+	var walk func(c int) error
+
+	walk = func(c int) error {
+		state[c] = open
+		path = append(path, c)
+
+		for _, next := range after[c] {
+			switch state[next] {
+			case open:
+				names := []string{}
+				for _, c := range path[slices.Index(path, next):] {
+					names = append(names, p.Candidates[c].Name)
+				}
+
+				return fmt.Errorf("planning: %s comes before themselves, through %s",
+					p.Candidates[next].Name, strings.Join(names[1:], ", then "))
+			case fresh:
+				if err := walk(next); err != nil {
+					return err
+				}
+			}
+		}
+
+		path = path[:len(path)-1]
+		state[c] = done
+
+		return nil
+	}
+
+	for c := range p.Candidates {
+		if state[c] == fresh {
+			if err := walk(c); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 // checkRequests validates the requests: a candidate meets a recruiter once

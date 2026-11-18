@@ -27,6 +27,43 @@ const (
 	// interviews of the same day (only useful when Options.MaxGap is not
 	// zero).
 	MinCandidateWait
+	// MinRecruiterBreaks minimises the number of breaks in the recruiters'
+	// days: a run of free time between two of their interviews counts one,
+	// however long it is. MinRecruiterSpan minimises the time they are held
+	// there, which is the waiting plus the interviews; this counts how many
+	// times they are left hanging, which is what makes somebody go home.
+	MinRecruiterBreaks
+	// MinCandidateBreaks minimises the number of breaks in the candidates'
+	// days: a run of free time between two interviews counts one, however
+	// long it is. It is not MinCandidateWait, which counts the minutes: one
+	// wait of an hour is one break and three waits of ten minutes are
+	// three, so the two disagree on which day is worse, and a file that
+	// means "do not scatter my day" wants this one.
+	MinCandidateBreaks
+	// MinRecruiterIdle minimises the free time inside the recruiters' days:
+	// the time between the start of their first interview and the end of
+	// their last, less the interviews themselves, summed over the
+	// recruiters and the days.
+	//
+	// It differs from MinRecruiterSpan by the interviews, which are the
+	// same wherever they are put, so the two rank a schedule alike as long
+	// as the same interviews take place in it. They part company when a
+	// candidate goes unserved or when a joint interview gathers what would
+	// otherwise be two: that is the only reason both exist, and
+	// MinRecruiterSpan is the one to reach for otherwise.
+	MinRecruiterIdle
+	// MinRecruiterIdleSpread minimises the difference between the recruiter
+	// with the most free time inside their day and the one with the least,
+	// counting only the recruiters who have at least two interviews that
+	// day — one interview is no waiting, and counting it would pull the
+	// fewest to zero and leave the objective saying only that nobody waits
+	// much at all.
+	//
+	// It is the fair share of the waiting rather than its total, so it
+	// cannot tell a day where nobody waits from one where everybody waits
+	// as much as everybody else. Put MinRecruiterIdle after it to choose
+	// between those, which is what a lexicographic order is for.
+	MinRecruiterIdleSpread
 	// MinEndTimes minimises the sum of the interview end times, counted from
 	// the start of the period: interviews take place as early as possible.
 	MinEndTimes
@@ -62,25 +99,31 @@ const (
 )
 
 var objectiveNames = map[Objective][2]string{
-	MaxCompleteCandidates: {"complete-candidates", "maximise the candidates who meet all their recruiters"},
-	MaxMeetings:           {"meetings", "maximise the candidate/recruiter meetings held"},
-	MinInterviews:         {"interviews", "minimise the interviews (group meetings when allowed)"},
-	MinRecruiterSpan:      {"recruiter-span", "minimise the time recruiters spend from their first interview to the end of their last, day by day"},
-	MinCandidateWait:      {"candidate-wait", "minimise the time candidates wait between two interviews of a day"},
-	MinEndTimes:           {"earliest", "hold the interviews as early as possible"},
-	MinRecruiters:         {"recruiters", "minimise the recruiters who have an interview, day by day"},
-	MaxPriorities:         {"priorities", "maximise the complete candidates, priority level by priority level, the highest first"},
-	MinRecruiterHalfDays:  {"recruiter-half-days", "minimise the half-days (morning, afternoon) in which recruiters have an interview"},
-	MaxUrgency:            {"urgency", "maximise the complete candidates with the fewest days left, the fewest first"},
-	MinDayEnds:            {"day-end", "minimise the end of the last interview of each day"},
-	MinSpan:               {"span", "minimise the time from the first interview to the end of the last one"},
+	MaxCompleteCandidates:  {"complete-candidates", "maximise the candidates who meet all their recruiters"},
+	MaxMeetings:            {"meetings", "maximise the candidate/recruiter meetings held"},
+	MinInterviews:          {"interviews", "minimise the interviews (group meetings when allowed)"},
+	MinRecruiterSpan:       {"recruiter-span", "minimise the time recruiters spend from their first interview to the end of their last, day by day"},
+	MinCandidateWait:       {"candidate-wait", "minimise the time candidates wait between two interviews of a day"},
+	MinCandidateBreaks:     {"candidate-breaks", "minimise the breaks in the candidates' days, however long each one is"},
+	MinRecruiterBreaks:     {"recruiter-breaks", "minimise the breaks in the recruiters' days, however long each one is"},
+	MinRecruiterIdle:       {"recruiter-idle", "minimise the free time inside the recruiters' days, day by day"},
+	MinRecruiterIdleSpread: {"recruiter-idle-spread", "minimise the difference between the recruiter with the most free time inside their day and the one with the least"},
+	MinEndTimes:            {"earliest", "hold the interviews as early as possible"},
+	MinRecruiters:          {"recruiters", "minimise the recruiters who have an interview, day by day"},
+	MaxPriorities:          {"priorities", "maximise the complete candidates, priority level by priority level, the highest first"},
+	MinRecruiterHalfDays:   {"recruiter-half-days", "minimise the half-days (morning, afternoon) in which recruiters have an interview"},
+	MaxUrgency:             {"urgency", "maximise the complete candidates with the fewest days left, the fewest first"},
+	MinDayEnds:             {"day-end", "minimise the end of the last interview of each day"},
+	MinSpan:                {"span", "minimise the time from the first interview to the end of the last one"},
 }
 
 // AllObjectives lists every objective.
 func AllObjectives() []Objective {
 	return []Objective{
 		MaxPriorities, MaxUrgency, MaxCompleteCandidates, MaxMeetings, MinRecruiters, MinRecruiterHalfDays,
-		MinInterviews, MinRecruiterSpan, MinCandidateWait, MinEndTimes, MinDayEnds, MinSpan,
+		MinInterviews, MinRecruiterSpan, MinRecruiterBreaks, MinRecruiterIdle,
+		MinRecruiterIdleSpread, MinCandidateWait, MinCandidateBreaks,
+		MinEndTimes, MinDayEnds, MinSpan,
 	}
 }
 
