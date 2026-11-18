@@ -26,7 +26,11 @@ const objectives = [
   { name: "recruiter-half-days", en: "Fewest half-days for recruiters", fr: "Le moins de demi-journées pour les recruteurs" },
   { name: "interviews", en: "Fewest interviews (group them)", fr: "Le moins d'entretiens (les grouper)" },
   { name: "recruiter-span", en: "Shortest presence of recruiters", fr: "Présence des recruteurs la plus courte" },
+  { name: "recruiter-breaks", en: "Fewest gaps in recruiters' days", fr: "Le moins de trous dans les journées des recruteurs" },
+  { name: "recruiter-idle", en: "Least free time in recruiters' days", fr: "Le moins de temps libre dans les journées des recruteurs" },
+  { name: "recruiter-idle-spread", en: "Recruiters' free time as even as possible", fr: "Temps libre des recruteurs le plus égal possible" },
   { name: "candidate-wait", en: "Least waiting for candidates", fr: "Le moins d'attente pour les candidats" },
+  { name: "candidate-breaks", en: "Fewest gaps in candidates' days", fr: "Le moins de trous dans les journées des candidats" },
   { name: "earliest", en: "Interviews as early as possible", fr: "Entretiens le plus tôt possible" },
   { name: "day-end", en: "Each day ends as early as possible", fr: "Chaque journée finit le plus tôt possible" },
   { name: "span", en: "Over as soon as possible", fr: "Tout fini le plus tôt possible" },
@@ -42,6 +46,8 @@ const texts = {
     examplesLabel: "Examples",
     editorLabel: "Problem file",
     editorHelp: "Who must meet whom, and when everybody is free, in YAML (or JSON). The comments of the examples explain every key. Tab indents; Esc then Tab leaves the editor.",
+    aiHelp: "No time to learn the format? Give an AI assistant this prompt and your rules in plain words, then paste the file it writes here.",
+    aiPrompt: "The prompt for an AI",
     startSummary: "Start from a plan",
     startHelp: "To plan again around appointments already sent: paste a plan file, import one, or take the last schedule computed here. Candidates with fixed: true keep their appointments exactly; the others may move.",
     useLast: "Take the last schedule",
@@ -124,6 +130,8 @@ const texts = {
     examplesLabel: "Exemples",
     editorLabel: "Fichier problème",
     editorHelp: "Qui doit rencontrer qui, et quand chacun est libre, en YAML (ou JSON). Les commentaires des exemples expliquent chaque clé. Tab indente ; Échap puis Tab quitte l'éditeur.",
+    aiHelp: "Pas le temps d'apprendre le format ? Donnez cette consigne et vos règles en français courant à un assistant IA, puis collez ici le fichier qu'il écrit.",
+    aiPrompt: "La consigne pour une IA",
     startSummary: "Partir d'un plan",
     startHelp: "Pour replanifier autour de rendez-vous déjà envoyés : collez un fichier plan, importez-en un, ou reprenez le dernier planning calculé ici. Les candidats en fixed: true gardent exactement leurs rendez-vous ; les autres peuvent bouger.",
     useLast: "Reprendre le dernier planning",
@@ -251,6 +259,7 @@ let ranFor = 0; // the seconds the search lasted, to scale the curves on the who
 function applyTexts() {
   document.documentElement.lang = lang;
   $("guide").href = `https://github.com/FrederickFrance/igiveyouarendezvous/blob/main/${lang === "fr" ? "GUIDE.fr.md" : "GUIDE.md"}`;
+  $("ai-prompt").href = `https://github.com/FrederickFrance/igiveyouarendezvous/blob/main/prompt/${lang === "fr" ? "fr.md" : "en.md"}`;
   for (const element of document.querySelectorAll("[data-i18n]")) {
     element.textContent = t(element.dataset.i18n);
   }

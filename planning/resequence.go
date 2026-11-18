@@ -103,7 +103,15 @@ func (r *retiming) collect() bool {
 			continue
 		}
 
-		plan = slices.SortedFunc(slices.Values(plan), func(a, b placed) int { return a.start - b.start })
+		// A copy sorted in place, in a buffer kept for it rather than a new
+		// slice per candidate per move: collecting the iterator into one
+		// came to a fifth of all the garbage the search made. The buffer
+		// serves one candidate at a time, and nothing below outlives the
+		// turn of the candidate it belongs to.
+		s.sorted = append(s.sorted[:0], plan...)
+		slices.SortFunc(s.sorted, func(a, b placed) int { return a.start - b.start })
+		plan = s.sorted
+
 		r.people = append(r.people, c)
 
 		var block []int
@@ -131,13 +139,68 @@ func (r *retiming) collect() bool {
 	return len(r.units) >= minResequenced
 }
 
-// reorder sorts the units by their start, then moves one of them elsewhere
-// in this order, or swaps two.
+// reorder puts the units in the order of their starts, those that start
+// together in a random order among themselves, and then moves one of them
+// elsewhere in this order, or swaps two.
+//
+// The order comes out of counting the slots and not out of a sort. The
+// starts are slots of one day, so there are few of them and they are known,
+// where shuffling the units and sorting them again on every move cost a
+// seventh of the whole search to produce an order that is nearly the same
+// every time. The counting is O(units + slots) and the shuffling is kept,
+// but only among the units that really do start together, which is all the
+// shuffle was ever for: their order decides who gets the earliest place
+// when they cannot all have it.
 func (r *retiming) reorder() {
 	rnd, units := r.s.rnd, r.units
+	slots := r.to - r.from + 1
 
-	rnd.Shuffle(len(units), func(i, j int) { units[i], units[j] = units[j], units[i] })
-	slices.SortStableFunc(units, func(a, b unit) int { return a.start - b.start })
+	bucket := r.s.bucket
+	if cap(bucket) < slots {
+		bucket = make([]int, slots)
+	}
+
+	bucket = bucket[:slots]
+	clear(bucket)
+	r.s.bucket = bucket
+
+	for _, u := range units {
+		bucket[u.start-r.from]++
+	}
+
+	total := 0
+	for at, n := range bucket {
+		total += n
+		bucket[at] = total // the end of the bucket, for now
+	}
+
+	byStart := r.s.byStart
+	if cap(byStart) < len(units) {
+		byStart = make([]unit, len(units))
+	}
+
+	byStart = byStart[:len(units)]
+	copy(byStart, units)
+	r.s.byStart = byStart
+
+	for _, u := range byStart {
+		at := u.start - r.from
+		bucket[at]-- // walked down to the start of the bucket
+		units[bucket[at]] = u
+	}
+
+	for at := range slots {
+		end := total
+		if at+1 < slots {
+			end = bucket[at+1]
+		}
+
+		if start := bucket[at]; end-start > 1 {
+			rnd.Shuffle(end-start, func(i, j int) {
+				units[start+i], units[start+j] = units[start+j], units[start+i]
+			})
+		}
+	}
 
 	i, j := rnd.IntN(len(units)), rnd.IntN(len(units))
 
@@ -338,14 +401,27 @@ func (s *searcher) windowOn(buf []window, last placed, day int) (window, bool) {
 }
 
 // hold sets or clears the busy slots of one interview, ahead of the plans.
+// It is the second place that occupies slots, beside mark, so it owes the
+// room count the same upkeep: a retiming that held interviews without
+// counting them read a stale count and packed a day past its rooms.
 func (s *searcher) hold(c int, pl placed, busy bool) {
 	opt := &s.in.options[pl.option]
 	for _, h := range opt.recruiters {
 		s.busy[h].set(pl.start, pl.start+opt.length, busy)
 
 		if busy {
+			s.meets[h]++
+			s.dayMeets[s.unit(h, pl.start)]++
+
 			s.own(h, pl.start, pl.start+opt.length, c)
+		} else {
+			s.meets[h]--
+			s.dayMeets[s.unit(h, pl.start)]--
 		}
+	}
+
+	if s.atSlot != nil {
+		s.occupy(pl.start, pl.start+opt.length, busy)
 	}
 }
 

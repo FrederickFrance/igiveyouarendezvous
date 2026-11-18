@@ -148,6 +148,28 @@
       "minimum": 0,
       "description": "Maximum recruiters in a joint interview (0: no limit)."
     },
+    "rooms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Interviews that can be held at the same time, whoever attends them: the rooms, tables or booths there are. 0 means no limit."
+    },
+    "break-spread": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "How far the recruiters' numbers of breaks may differ, counting those with at least two interviews. Absent means no limit; 0 asks every recruiter to wait exactly as often as every other."
+    },
+    "precedences": {
+      "description": "Candidates to hold in order: each entry is a pair of candidate names, the first over before the second begins.",
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "minItems": 2,
+        "maxItems": 2
+      }
+    },
     "objectives": {
       "description": "The objectives, most important first (see igiveyouarendezvous -list-objectives).",
       "type": "array",
@@ -162,7 +184,11 @@
           "recruiter-half-days",
           "interviews",
           "recruiter-span",
+          "recruiter-breaks",
+          "recruiter-idle",
+          "recruiter-idle-spread",
           "candidate-wait",
+          "candidate-breaks",
           "earliest",
           "day-end",
           "span"
@@ -275,7 +301,7 @@
                         },
                         "optional": {
                           "type": "boolean",
-                          "description": "Invites the recruiter without needing them (false by default): the candidate is complete without this meeting, and holding it is a bonus the search looks for. The guest who comes along if they can \u2014 a friend on an outing, a second assessor if they are free. The meeting is held with the guests who are free at that time and without the others."
+                          "description": "Invites the recruiter without needing them (false by default): the candidate is complete without this meeting, and holding it is a bonus the search looks for. The guest who comes along if they can — a friend on an outing, a second assessor if they are free. The meeting is held with the guests who are free at that time and without the others."
                         }
                       }
                     }

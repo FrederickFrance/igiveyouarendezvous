@@ -88,6 +88,7 @@ type options struct {
 	csvSeparator                 rune
 	timeout, patience            time.Duration
 	seed                         uint64
+	retime                       float64
 	workers                      int
 	progress, progressJSON       bool
 	list, fixAll, check, version bool
@@ -108,6 +109,7 @@ func parseFlags(args []string, stderr io.Writer) (*options, error) {
 	fs.DurationVar(&o.timeout, "timeout", time.Minute, "maximum computing time")
 	fs.DurationVar(&o.patience, "patience", 30*time.Second, "search: stop after this long without improvement (0: run until the timeout)")
 	fs.Uint64Var(&o.seed, "seed", 1, "search: random seed, to reproduce a result")
+	fs.Float64Var(&o.retime, "retime", -1, "search, for measurements: share of the moves that re-time a whole day, from 0 to 1 (default: the search's own choice)")
 	fs.IntVar(&o.workers, "workers", runtime.NumCPU(), "search: number of searches run in parallel")
 	fs.BoolVar(&o.progress, "progress", false, "search: print every improvement")
 	fs.BoolVar(&o.progressJSON, "progress-json", false, "search: print every improvement as one JSON object per line, for a program to read")
@@ -424,6 +426,12 @@ func loadStart(o *options, p *planning.Problem, opts planning.Options, pe period
 // searchOptions returns the options of the local search.
 func searchOptions(o *options, start *planning.Schedule, stderr io.Writer) planning.SearchOptions {
 	so := planning.SearchOptions{Seed: o.seed, Patience: o.patience, Workers: o.workers, Start: start}
+
+	// A negative share is the flag left alone: the search then chooses, and
+	// a share out of range is the search's to refuse.
+	if o.retime >= 0 {
+		so.Retime = &o.retime
+	}
 
 	switch {
 	case o.progressJSON:

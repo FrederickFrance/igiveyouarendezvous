@@ -7,6 +7,136 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
+## [0.14.0] - 2026-11-18 "Mildred Ratched" 📋
+
+The ward runs on a timetable, and this version is about the room and the
+rhythm of the day. Until now nothing said how many interviews could be held
+at once — right when each recruiter receives in their own office, wrong in a
+hall with four tables — and nothing counted how often somebody is sent away
+to wait, only how long. A day is now held to the rooms there are, the times
+each person is left hanging are counted, nobody may be left hanging far more
+often than anybody else, and candidates can be held in a fixed order. Those
+are what a business forum needs, where many people meet many others over a
+few tables in one day.
+
+### Added
+
+- **`precedences`**: candidates held in order, as pairs of their names, each
+  one over before the next begins. The ranks of `meet` order the interviews
+  of one candidate and could not do this. Pairs and not ranks, because ranks
+  cut the candidates into layers and two candidates of different layers are
+  then held in order where nothing asks for it; the pairs ask for exactly
+  what they say. A candidate nobody plans holds nobody back, and a cycle is
+  refused with the way round named, a cycle spread over several lines having
+  no one pair at fault.
+- **`-check` says when the availabilities cannot hold an order**: the
+  earlier candidate cannot be over in time for the later one to begin. That
+  is the kind of mistake nothing in the file is wrong about on its own, and
+  which comes out as an impossible day rather than as a refusal. Both
+  bounds are loose on purpose, the longest interview and not the sum, since
+  joint interviews make the sum an overestimate and a checker that cries
+  wolf is a checker nobody reads.
+- **`rooms`**: the most interviews at the same time, whoever attends them —
+  the rooms, tables or booths there are. Nothing else bounded it, so twenty
+  recruiters free at ten o'clock were all met at ten o'clock. `0`, the
+  default, is no cap and leaves every file as it was.
+- **The objectives `recruiter-breaks` and `candidate-breaks`**: the times
+  somebody is left waiting between two interviews of a day, each wait
+  counted once however long it lasts. `recruiter-span` and `candidate-wait`
+  count time, and cannot tell one gap of three hours from three gaps of an
+  hour; these count the gaps, and prefer the single one. Which of the two to
+  minimise is a real choice and not a refinement: the two measures rank
+  those days the other way round.
+- **The objectives `recruiter-idle-spread` and `recruiter-idle`**: the
+  difference between the recruiter with the most free time inside their day
+  and the one with the least, among those with at least two interviews, and
+  the free time itself. The first is what `break-spread` bounds, turned into
+  something the search can minimise; it is nought when nobody waits and
+  nought just the same when everybody waits an hour, so the second goes
+  after it to tell those apart. The search is guided by the true increase
+  of the range and not by how tight the days are: the best share sometimes
+  wants somebody to wait on purpose, as long as another who cannot help it,
+  and a search that prefers tight days never proposes that — the exhaustive
+  test caught it on a problem of five meetings.
+- **`break-spread`**: how far the recruiters' numbers of breaks may differ,
+  among those with at least two interviews. With `break-spread: 2` nobody
+  waits more than two times more often than anybody else. It is a hard
+  constraint and not an objective, so it is never traded away for a better
+  score elsewhere, and `-check` refuses a schedule that breaks it whoever
+  built it. Omitting the key is no limit; `0` is a limit of zero, which asks
+  every recruiter to wait exactly as often as every other.
+- **`-retime`, and `SearchOptions.Retime` in the library**: the share of
+  the moves that re-time a whole day rather than take interviews out and put
+  them back, between 0 and 1. Unset, the search keeps its own share and
+  finds exactly the plans it found before. A setting to measure with, not
+  one to tune by hand.
+- **The demo points to the prompt for an AI**, in the language of the page,
+  under the editor: whoever has no time to learn the format gives it to an
+  assistant with their rules in plain words, and pastes back what it writes.
+  The prompt was there all along, but only the readmes and the guide said
+  so, and someone who arrives by a link to the demo reads neither.
+- **The four new objectives can be ticked in the demo**, with a test that
+  the demo lists every objective of the program, in its order: the list is
+  written by hand, to name each objective in both languages, and nothing
+  else would notice one missing.
+- **A test that both readmes document every key and every objective.** Four
+  keys were added by hand to six files, which is how a key comes to exist
+  only in the code. The prompt files stay out of it on purpose: they are
+  instructions for writing a problem file, not a reference.
+- **A test that walks a search over random forums and checks, after every
+  move, that the counters agree with the plans and that the plans keep the
+  rules.** The searcher keeps counters beside the schedule and maintains
+  them in more than one place; one updated in one place and forgotten in
+  another is invisible until the final check refuses the result. That has
+  now happened once per counter added, so the invariant is tested rather
+  than the symptoms: taking the room count out of `mark` fails the first
+  half, taking it out of `hold` fails the second.
+
+### Changed
+
+- **The search makes four fifths more moves a second**, which is that much
+  more search for the same wait. Measured on a business forum of 154
+  meetings in one day, where a move re-times the whole of it: 3 500 moves a
+  second before, 6 300 after. Three gains, each measured on its own.
+  - A re-timing put its interviews in the order of their starts by
+    shuffling them and sorting them again, every move, to then move one of
+    them: a seventh of the whole search spent rebuilding an order that was
+    nearly the same every time. The starts are slots of one day, so they
+    are counted instead, and only the interviews that really do start
+    together are shuffled, which is all the shuffling was for.
+  - Two buffers were allocated afresh on every move and are now kept: nine
+    million allocations a second came down to two.
+  - The command gives the garbage collector a ceiling of 64 MiB to work to
+    rather than the default ratio. The search allocates heavily against a
+    small live heap, so by default a collection ran every few milliseconds
+    and cost about a quarter of its speed. `GOGC` or `GOMEMLIMIT` of your
+    own always wins, and the demo is left alone: a browser tab decides
+    what it may use. A ceiling rather than a bigger ratio because the
+    ratio multiplies what is live and what is live here is small — asking
+    for eight times it reached the same speed and 168 MiB instead of 58.
+- **Ruin and recreate aims at a recruiter who is actually kept waiting.**
+  Mending a break means pulling what comes after it earlier, which moves
+  those interviews for their candidates, and then for the other recruiters
+  of those candidates — a chain the other cases found only by chance, since
+  they pick a recruiter and a window at random. The day now comes apart
+  whole, and the day is chosen uniformly among those that have a break. The
+  breaks were already counted for the objective, so aiming costs one pass.
+
+### Fixed
+
+- **A fixed interview did not take a room, and was not counted among the
+  interviews the fairness rule compares.** `apply`, which installs the
+  interviews of `-start`, writes them straight into the busy sets and is a
+  third place that takes slots after `mark` and `hold`: the two counters
+  added in this version were missing there. With `rooms: 1` the search put
+  two interviews at nine o'clock, and an unfair set of fixed plans went
+  through the rule unseen. Nothing invalid was ever returned — the final
+  check held — but it was the search confessing to a schedule it should not
+  have built instead of planning around what was already taken.
+- **`candidates.<name>.required` was missing from the key tables** of both
+  readmes. It was explained in the prose further down, but nobody reading
+  the table could find it. The test above is what found it.
+
 ## [0.13.0] - 2026-11-16 "Allied Mastercomputer" 🤐
 
 AM allows no choice it did not allow. This version is about what the

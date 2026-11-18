@@ -139,7 +139,142 @@ func Check(p *Problem, opts Options, s *Schedule) error {
 		return err
 	}
 
+	if err := checkRooms(o, s); err != nil {
+		return err
+	}
+
+	if err := checkSpread(p, o, s); err != nil {
+		return err
+	}
+
+	if err := checkPrecedences(p, s); err != nil {
+		return err
+	}
+
 	return checkCandidates(p, o, s, held, breaks)
+}
+
+// checkPrecedences tells whether every candidate asked to come before
+// another is over before that one begins. A candidate with no interview
+// constrains nobody: the order holds between the interviews that take
+// place, and a candidate left out of the schedule holds nothing back.
+func checkPrecedences(p *Problem, s *Schedule) error {
+	if len(p.Precedences) == 0 {
+		return nil
+	}
+
+	first := map[int]time.Duration{}
+	last := map[int]time.Duration{}
+
+	for _, iv := range s.Interviews {
+		if t, seen := first[iv.Candidate]; !seen || iv.Start < t {
+			first[iv.Candidate] = iv.Start
+		}
+
+		if t, seen := last[iv.Candidate]; !seen || iv.End > t {
+			last[iv.Candidate] = iv.End
+		}
+	}
+
+	for _, pr := range p.Precedences {
+		end, held := last[pr.Before]
+		start, taken := first[pr.After]
+
+		if !held || !taken {
+			continue
+		}
+
+		if end > start {
+			return fmt.Errorf("%s comes before %s, but ends at %s and %s starts at %s",
+				p.Candidates[pr.Before].Name, p.Candidates[pr.After].Name,
+				Clock(end), p.Candidates[pr.After].Name, Clock(start))
+		}
+	}
+
+	return nil
+}
+
+// checkSpread tells whether the recruiters' breaks sit within
+// Options.BreakSpread, counting only those with at least two interviews.
+func checkSpread(p *Problem, o Options, s *Schedule) error {
+	if o.BreakSpread == nil {
+		return nil
+	}
+
+	lo, hi, loAt, hiAt := -1, 0, "", ""
+
+	for h := range p.Recruiters {
+		if interviewsWith(s, h) < 2 {
+			continue
+		}
+
+		n := recruiterBreaks(s, h)
+		if lo < 0 || n < lo {
+			lo, loAt = n, p.Recruiters[h].Name
+		}
+
+		if n > hi {
+			hi, hiAt = n, p.Recruiters[h].Name
+		}
+	}
+
+	if lo < 0 || hi-lo <= *o.BreakSpread {
+		return nil
+	}
+
+	return fmt.Errorf("%s waits %s and %s %s, which is %d apart for a break spread of %d",
+		hiAt, plural(hi, "time"), loAt, plural(lo, "time"), hi-lo, *o.BreakSpread)
+}
+
+// interviewsWith counts the interviews recruiter h sits in.
+func interviewsWith(s *Schedule, h int) int {
+	n := 0
+
+	for _, iv := range s.Interviews {
+		if slices.Contains(iv.Recruiters, h) {
+			n++
+		}
+	}
+
+	return n
+}
+
+// checkRooms tells whether the schedule ever holds more interviews at once
+// than there are rooms. It sweeps the starts and the ends in time order,
+// counting what is open: an interview ending where another begins does not
+// need two rooms, so the ends are taken before the starts at an equal time.
+func checkRooms(o Options, s *Schedule) error {
+	if o.Rooms <= 0 {
+		return nil
+	}
+
+	type event struct {
+		at    time.Duration
+		delta int
+	}
+
+	events := make([]event, 0, 2*len(s.Interviews))
+	for _, iv := range s.Interviews {
+		events = append(events, event{iv.Start, 1}, event{iv.End, -1})
+	}
+
+	slices.SortFunc(events, func(a, b event) int {
+		if a.at != b.at {
+			return int(a.at - b.at)
+		}
+
+		return a.delta - b.delta
+	})
+
+	open := 0
+
+	for _, e := range events {
+		if open += e.delta; open > o.Rooms {
+			return fmt.Errorf("%d interviews at %s, with %s", open, Clock(e.at), plural(o.Rooms, "room"))
+		}
+	}
+
+	return nil
 }
 
 func checkInterview(p *Problem, o Options, iv Interview, held []int, breaks []Interval) error {
@@ -497,6 +632,104 @@ func candidateWait(s *Schedule, c int) time.Duration {
 	return wait
 }
 
+// recruiterIdle returns the free time inside recruiter h's days, day by
+// day: the time from the start of their first interview to the end of their
+// last, less the interviews themselves. Interviews held at the same time
+// count once, since the recruiter cannot sit in two, and overlapping ones
+// count the time they cover.
+//
+// byDay is the days of h with at least how many interviews the caller asks
+// for: two, for the spread, which leaves out whoever comes once.
+func recruiterIdle(s *Schedule, h, least int) time.Duration {
+	idle := time.Duration(0)
+
+	for _, ivs := range recruiterDays(s, h) {
+		if len(ivs) >= least {
+			idle += dayIdle(ivs)
+		}
+	}
+
+	return idle
+}
+
+// dayIdle returns the free time inside one day of interviews: from the
+// start of the first to the end of the last, less the time they cover.
+// Interviews held at the same time count once, since nobody sits in two.
+func dayIdle(ivs []Interview) time.Duration {
+	slices.SortFunc(ivs, func(a, b Interview) int { return int(a.Start - b.Start) })
+
+	held, end := time.Duration(0), ivs[0].Start
+
+	for _, iv := range ivs {
+		held += iv.End - max(iv.Start, end)
+		end = max(end, iv.End)
+	}
+
+	return end - ivs[0].Start - held
+}
+
+// recruiterDays returns the interviews of recruiter h, day by day.
+func recruiterDays(s *Schedule, h int) map[int][]Interview {
+	byDay := map[int][]Interview{}
+
+	for _, iv := range s.Interviews {
+		if slices.Contains(iv.Recruiters, h) {
+			d := dayOf(iv.Start)
+			byDay[d] = append(byDay[d], iv)
+		}
+	}
+
+	return byDay
+}
+
+// recruiterBreaks returns the number of breaks in recruiter h's days: a run
+// of free time between two of their interviews of the same day, counting
+// one however long it lasts.
+func recruiterBreaks(s *Schedule, h int) int {
+	byDay := map[int][]Interview{}
+
+	for _, iv := range s.Interviews {
+		if slices.Contains(iv.Recruiters, h) {
+			d := dayOf(iv.Start)
+			byDay[d] = append(byDay[d], iv)
+		}
+	}
+
+	breaks := 0
+
+	for _, ivs := range byDay {
+		slices.SortFunc(ivs, func(a, b Interview) int { return int(a.Start - b.Start) })
+
+		end := ivs[0].End
+
+		for _, iv := range ivs[1:] {
+			if iv.Start > end {
+				breaks++
+			}
+
+			end = max(end, iv.End)
+		}
+	}
+
+	return breaks
+}
+
+// candidateBreaks returns the number of breaks in candidate c's days: a run
+// of free time between two interviews of the same day, counting one however
+// long it lasts.
+func candidateBreaks(s *Schedule, c int) int {
+	ivs := interviewsOf(s, c)
+	breaks := 0
+
+	for i := 1; i < len(ivs); i++ {
+		if dayOf(ivs[i].Start) == dayOf(ivs[i-1].Start) && ivs[i].Start > ivs[i-1].End {
+			breaks++
+		}
+	}
+
+	return breaks
+}
+
 // Evaluate computes the value of each objective of the options on the
 // schedule, MaxPriorities and MaxUrgency giving one score per level. Proven
 // is left false.
@@ -561,28 +794,7 @@ func spanMinutes(s *Schedule) int {
 func evaluate(p *Problem, o Options, s *Schedule, cr criterion, held []bool) int {
 	switch obj := cr.obj; obj {
 	case MinRecruiters, MinRecruiterHalfDays: // by recruiter and day
-		used := map[[2]int][2]bool{}
-
-		for _, iv := range s.Interviews {
-			halves := halfDaysOf(o, iv.Start, iv.End)
-			for _, h := range iv.Recruiters {
-				key := [2]int{h, dayOf(iv.Start)}
-				used[key] = [2]bool{used[key][0] || halves[0], used[key][1] || halves[1]}
-			}
-		}
-
-		n := 0
-
-		for _, u := range used {
-			switch {
-			case obj == MinRecruiterHalfDays:
-				n += count(u[:])
-			case u[0] || u[1]:
-				n++
-			}
-		}
-
-		return n
+		return recruitersUsed(o, s, obj == MinRecruiterHalfDays)
 	case MaxCompleteCandidates, MaxPriorities, MaxUrgency:
 		n := 0
 
@@ -597,6 +809,56 @@ func evaluate(p *Problem, o Options, s *Schedule, cr criterion, held []bool) int
 		return count(held)
 	case MinInterviews:
 		return len(s.Interviews)
+	case MinRecruiterSpan, MinCandidateWait, MinRecruiterBreaks, MinCandidateBreaks,
+		MinRecruiterIdle, MinRecruiterIdleSpread:
+		return waitScore(p, s, obj)
+	case MinEndTimes:
+		total := time.Duration(0)
+		for _, iv := range s.Interviews {
+			total += iv.End
+		}
+
+		return int(total / time.Minute)
+	case MinSpan:
+		return spanMinutes(s)
+	case MinDayEnds:
+		return dayEndMinutes(s)
+	}
+
+	return 0
+}
+
+// recruitersUsed counts the recruiters at work, day by day, or the half
+// days they are at work when halfDays is set.
+func recruitersUsed(o Options, s *Schedule, halfDays bool) int {
+	used := map[[2]int][2]bool{}
+
+	for _, iv := range s.Interviews {
+		halves := halfDaysOf(o, iv.Start, iv.End)
+		for _, h := range iv.Recruiters {
+			key := [2]int{h, dayOf(iv.Start)}
+			used[key] = [2]bool{used[key][0] || halves[0], used[key][1] || halves[1]}
+		}
+	}
+
+	n := 0
+
+	for _, u := range used {
+		switch {
+		case halfDays:
+			n += count(u[:])
+		case u[0] || u[1]:
+			n++
+		}
+	}
+
+	return n
+}
+
+// waitScore is the value of an objective about how long or how often
+// people wait, and how evenly.
+func waitScore(p *Problem, s *Schedule, obj Objective) int {
+	switch obj {
 	case MinRecruiterSpan: // by recruiter and day
 		first, last := map[[2]int]time.Duration{}, map[[2]int]time.Duration{}
 
@@ -624,20 +886,49 @@ func evaluate(p *Problem, o Options, s *Schedule, cr criterion, held []bool) int
 		}
 
 		return int(total / time.Minute)
-	case MinEndTimes:
+	case MinRecruiterBreaks:
+		total := 0
+		for h := range p.Recruiters {
+			total += recruiterBreaks(s, h)
+		}
+
+		return total
+	case MinCandidateBreaks:
+		total := 0
+		for c := range p.Candidates {
+			total += candidateBreaks(s, c)
+		}
+
+		return total
+	case MinRecruiterIdle:
 		total := time.Duration(0)
-		for _, iv := range s.Interviews {
-			total += iv.End
+		for h := range p.Recruiters {
+			total += recruiterIdle(s, h, 1)
 		}
 
 		return int(total / time.Minute)
-	case MinSpan:
-		return spanMinutes(s)
-	case MinDayEnds:
-		return dayEndMinutes(s)
-	}
+	case MinRecruiterIdleSpread:
+		// Only the recruiters with two interviews in a day are compared,
+		// and a recruiter is compared day by day like the span: whoever
+		// has no such day is not in it at all.
+		var idle []time.Duration
 
-	return 0
+		for h := range p.Recruiters {
+			for _, ivs := range recruiterDays(s, h) {
+				if len(ivs) >= 2 {
+					idle = append(idle, dayIdle(ivs))
+				}
+			}
+		}
+
+		if len(idle) == 0 {
+			return 0
+		}
+
+		return int((slices.Max(idle) - slices.Min(idle)) / time.Minute)
+	default: // not about waiting: evaluate never asks
+		return 0
+	}
 }
 
 // completeCandidates tells which candidates have all their mandatory

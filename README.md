@@ -189,6 +189,7 @@ igiveyouarendezvous -date 2026-11-23 week3.yaml               # one day
 | `-progress-json` | print every improvement as one JSON object per line, for a program to read |
 | `-workers N` | searches run in parallel (default: the number of cores) |
 | `-seed N` | random seed |
+| `-retime S` | for measurements: the share of the moves that re-time a whole day, from `0` to `1`; the search chooses when it is left out |
 | `-list-objectives` | list the objectives |
 
 Files named `.json` are written in JSON, the others in YAML; both formats are
@@ -254,6 +255,9 @@ candidates:
 | `joint-groups` | none | groups of recruiters who may interview together (see below) |
 | `panels` | none | groups of recruiters who always interview together, such as a jury (see below) |
 | `max-joint-size` | `0` | most recruiters in a joint interview (`0`: no limit) |
+| `rooms` | `0` | most interviews at the same time, whoever attends them: the rooms, tables or booths there are (`0`: no limit) |
+| `break-spread` | none | how far the recruiters' numbers of breaks may differ, among those with at least two interviews (`2`: nobody waits more than two times more often than anybody else); none: no limit |
+| `precedences` | none | candidates to hold in order: pairs of names, `[[a, b], [a, c]]` asking for `a` to be over before `b` and before `c` begin (see below) |
 | `objectives` | see below | objectives, the most important first |
 | `recruiters.<name>.duration` | `duration` | length of the interviews with this recruiter; a joint interview lasts as long as its longest part |
 | `recruiters.<name>.availability` | `day` | time spans of the recruiter (`none`: absent), every day or by date (see below) |
@@ -263,6 +267,7 @@ candidates:
 | `candidates.<name>.meetings` | none | meetings with several recruiters at once, each held as given; a recruiter may come back in several (see below) |
 | `candidates.<name>.availability` | `day` | time spans of the candidate, every day or by date |
 | `candidates.<name>.priority` | `1` | the higher, the more important (objective `priorities`) |
+| `candidates.<name>.required` | `false` | `true`: a constraint and no longer an objective — a schedule without this candidate is refused and they are named (see below) |
 | `candidates.<name>.duration` | the recruiters' | length of the interviews of this candidate, in place of the recruiters' ones (the length of a meeting in `meet` still wins) |
 | `candidates.<name>.together` | `false` | `true`: a meeting, all the recruiters at once in one interview, or not at all (see [Other uses](#other-uses)) |
 | `candidates.<name>.place` | none | where the candidate is met, such as the city of a shoot; none: no journey to or from them, such as a call (see below) |
@@ -318,6 +323,54 @@ max-gap: unlimited
 min-gap: 30m        # the same day, with 30 minutes to 2 hours between
 max-gap: 2h
 ```
+
+**The rooms.** `rooms` caps the interviews held at the same time, whoever
+attends them: the rooms, tables or booths there are. Nothing else bounds
+it, so twenty recruiters free at ten o'clock are all met at ten o'clock
+unless the file says otherwise — right when everybody receives in their own
+office, wrong in a hall with four tables. `0`, the default, is no cap.
+
+**The same waiting for everybody.** `break-spread` bounds the difference
+between the recruiter left waiting most often and the one left waiting
+least: with `break-spread: 2`, nobody waits more than two times more often
+than anybody else. It is a hard constraint and not an objective, so it is
+never traded away for a better score elsewhere: a schedule that breaks it
+is refused, by the search and by `-check` alike. It compares the recruiters
+with at least two interviews, since one interview is no waiting and nothing
+to be fair about — counting those recruiters would pull the fewest down to
+zero and leave the rule saying only that nobody waits more than twice at
+all. Leaving the key out is no limit; `break-spread: 0` is a limit of zero,
+which asks every recruiter to wait exactly as often as every other. The two
+are not the same.
+
+```yaml
+rooms: 14                                # a hall with fourteen tables
+break-spread: 2                          # waiting shared out evenly
+objectives: [meetings, recruiter-breaks]
+```
+
+**The order between candidates.** The ranks in `meet` order the interviews
+of **one** candidate; `precedences` orders candidates against each other.
+Each entry is a pair, the first over before the second begins: every
+interview of the first ends no later than every interview of the second
+starts.
+
+```yaml
+precedences:
+  - [screening, panel]     # the panel sees nobody before the screening
+  - [screening, debrief]
+  - [panel, debrief]       # and the debrief comes last
+```
+
+Pairs rather than ranks, because a pair says only what it says. Ranks cut
+the candidates into layers, and two candidates in different layers are then
+held in order even where nothing asks for it; a layering written as the
+pairs it stands for asks for exactly as much as it means. The key is
+optional and only as long as the orders really needed.
+
+A candidate who is not planned holds nobody back: the order applies between
+the interviews that take place. A cycle is refused, with the way round
+named, since a cycle spread over several lines has no one pair at fault.
 
 **The order.** `meet` is a list, in any order, or the recruiters with their
 ranks: rank 1 first, then the rank 2, and so on; `X` (or `any`, or nothing)
@@ -561,7 +614,11 @@ example of a tour](example/tour.yaml).
 | `recruiter-half-days` | minimise the half-days (morning, afternoon) in which recruiters have an interview, summed over the recruiters and the days |
 | `interviews` | minimise the interviews, so group meetings when allowed |
 | `recruiter-span` | minimise the time recruiters spend from the start of their first interview to the end of their last, day by day |
+| `recruiter-breaks` | minimise the times a recruiter is left waiting between two interviews of a day, counting each wait once however long it lasts |
+| `recruiter-idle` | minimise the free time inside the recruiters' days: from their first interview to the end of their last, less the interviews themselves |
+| `recruiter-idle-spread` | minimise the difference between the recruiter with the most free time inside their day and the one with the least, among those with at least two interviews that day |
 | `candidate-wait` | minimise the time candidates wait between two interviews of a day (useful when `max-gap` is not `0`) |
+| `candidate-breaks` | minimise the times a candidate is left waiting between two interviews of a day, counting each wait once however long it lasts |
 | `earliest` | hold the interviews as early as possible in the period |
 | `day-end` | finish each day as early as possible: minimise the end of the last interview of the day, summed over the days with interviews |
 | `span` | be over as soon as possible: minimise the time from the start of the first interview to the end of the last one, over the whole period, nights included |
@@ -591,6 +648,32 @@ can only come on one date is not sacrificed for one who has others. The days
 left are counted on the dates only (whether everybody is free at the same
 time that day is not checked), and the command shows them as `last day`,
 `2 days left`…
+
+`candidate-wait` and `recruiter-span` count time; `candidate-breaks` and
+`recruiter-breaks` count **times**. One gap of three hours is one break and
+three hours of waiting; three gaps of one hour are three breaks and the same
+three hours. Which of the two to minimise is a real choice: somebody who
+came for the day would rather take one long pause than be sent away three
+times, and somebody who came for an hour would rather wait less in all. The
+two measures rank those days the other way round, which is why both exist. A
+break is counted once however long it lasts, and interviews that follow each
+other with nothing between them are no break at all.
+
+`recruiter-idle-spread` is about sharing and not about the total: it is
+nought when nobody waits, and nought just the same when everybody waits an
+hour. That is its meaning and not a flaw, but it is why it is seldom the
+only word on the matter: put `recruiter-idle` after it, and among the days
+shared out as evenly the search keeps the one with the least waiting in all.
+
+```yaml
+objectives: [meetings, recruiter-idle-spread, recruiter-idle]
+```
+
+`recruiter-idle` itself is `recruiter-span` less the interviews, which are
+the same wherever they are put: the two rank schedules alike as long as the
+same interviews take place, and part company only when a candidate goes
+unserved or a joint interview gathers two into one. Reach for
+`recruiter-span` unless the free time is what you mean to count.
 
 The **lunch break** separates the morning from the afternoon: with several
 breaks, the longest one; without breaks, noon. A recruiter with interviews

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -230,4 +231,47 @@ func TestTheSchemaKnowsTheSameKeys(t *testing.T) {
 		keys(props(plan, "properties", "candidates", "additionalProperties")))
 	require.Equal(t, shapeKeys(planKeys["candidates"]["*"]["interviews"]),
 		keys(props(plan, "properties", "candidates", "additionalProperties", "properties", "interviews", "items")))
+}
+
+// Both readmes hold a table of every key and every objective, and they are
+// the only places where the whole set is written out: the prompt files are
+// instructions for writing a problem file, not a reference, and leave out
+// what a model never has to produce. A key the program knows and the tables
+// do not is a key nobody reading the documentation can find, which is a
+// quiet way of shipping a feature that does not exist.
+func TestTheReadmesKnowTheSameKeys(t *testing.T) {
+	t.Parallel()
+
+	// The tables name the keys of a recruiter and of a candidate with a
+	// placeholder, which is translated along with the rest.
+	readmes := map[string]string{"README.md": "<name>", "README.fr.md": "<nom>"}
+
+	for readme, hole := range readmes {
+		data, err := os.ReadFile(filepath.Join("..", readme))
+		require.NoError(t, err)
+
+		// Not require.Contains: it prints the haystack, and the haystack is
+		// a readme.
+		text := string(data)
+		want := func(needle, what string) {
+			t.Helper()
+			require.True(t, strings.Contains(text, needle), "%s documents no %s", readme, what) //nolint:testifylint // see above, on require.Contains
+		}
+
+		for key, under := range problemKeys {
+			want("`"+key+"`", "key "+key)
+
+			for sub := range under["*"] {
+				want("`"+key+"."+hole+"."+sub+"`", "key "+key+".*."+sub)
+			}
+		}
+
+		for key := range problemKeys["travel"] {
+			want("`"+key+"`", "key travel."+key)
+		}
+
+		for _, objective := range planning.AllObjectives() {
+			want("`"+objective.String()+"`", "objective "+objective.String())
+		}
+	}
 }

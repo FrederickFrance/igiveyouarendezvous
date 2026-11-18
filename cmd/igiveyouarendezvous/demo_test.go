@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/FrederickFrance/igiveyouarendezvous/planning"
 )
 
 // The online demo runs the command without files: what it reads and writes
@@ -97,4 +100,56 @@ func TestLineWriter(t *testing.T) {
 
 	w.Flush()
 	require.Equal(t, []string{"one", "two", "three", "four"}, lines)
+}
+
+// The demo lists the objectives by hand, in the order of AllObjectives, to
+// give each a name in both languages. An objective the program knows and
+// the demo does not cannot be ticked there, and nothing else would say so:
+// four were missing for a while.
+func TestTheDemoKnowsEveryObjective(t *testing.T) {
+	t.Parallel()
+
+	data, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	require.NoError(t, err)
+
+	text := string(data)
+	start := strings.Index(text, "const objectives = [")
+	require.NotEqual(t, -1, start, "the list of the objectives in app.js")
+
+	end := strings.Index(text[start:], "];")
+	require.NotEqual(t, -1, end)
+
+	var listed []string
+	for _, match := range regexp.MustCompile(`name: "([a-z-]+)"`).FindAllStringSubmatch(text[start:start+end], -1) {
+		listed = append(listed, match[1])
+	}
+
+	var want []string
+	for _, objective := range planning.AllObjectives() {
+		want = append(want, objective.String())
+	}
+
+	require.Equal(t, want, listed, "the objectives of web/app.js, in the order of AllObjectives")
+}
+
+// The demo points to the prompt for an AI in the language of the page, and
+// both prompts exist where it points.
+func TestTheDemoLinksThePromptForAnAI(t *testing.T) {
+	t.Parallel()
+
+	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	require.NoError(t, err)
+
+	page, err := os.ReadFile(filepath.Join("..", "..", "web", "index.html"))
+	require.NoError(t, err)
+
+	// Counted rather than require.Contains, which would print both files.
+	require.Equal(t, 1, strings.Count(string(page), `id="ai-prompt"`), "the link in index.html")
+	require.Equal(t, 1, strings.Count(string(app), `prompt/${lang === "fr" ? "fr.md" : "en.md"}`),
+		"the link follows the language")
+
+	for _, name := range []string{"en.md", "fr.md"} {
+		_, err := os.Stat(filepath.Join("..", "..", "prompt", name))
+		require.NoError(t, err, "prompt/%s", name)
+	}
 }

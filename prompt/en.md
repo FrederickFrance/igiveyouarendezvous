@@ -120,11 +120,34 @@ has defaults):
   recruiters of `meet` at once (a show, a workshop session); no ranks then,
   and no `meetings`. Other uses map onto the same words: guests and crews
   are "recruiters", episodes, shoots or sessions are "candidates".
+- `rooms`: the most interviews at the same time, whoever attends them: the
+  rooms, tables or booths there are. Nothing else bounds it, so give it for
+  a hall or a fair ("four tables", `rooms: 4`) and leave it out when
+  everybody receives in their own office.
+- `break-spread`: how far the recruiters' numbers of breaks may differ,
+  among those with at least two interviews. It is a hard constraint: with
+  `break-spread: 2` nobody waits more than two times more often than
+  anybody else. Give it when I ask for the waiting to be shared out fairly.
+- `precedences`: candidates to hold in order, as pairs of their names:
+  `[[screening, panel], [panel, debrief]]` asks for the screening to be over
+  before the panel begins, and the panel before the debrief. This orders
+  candidates against each other; the ranks in `meet` order the interviews of
+  one candidate, which is not the same thing. Pairs and not ranks, so that a
+  pair asks for exactly what it says. Optional: give only the orders really
+  needed.
 - `objectives`: what matters, the most important first. Keep the default
   unless I say otherwise; "finish the day as early as possible" is
   `day-end`, "as little waiting as possible between two meetings" is
   `candidate-wait`, for instance `[complete-candidates, day-end,
-  candidate-wait]`.
+  candidate-wait]`. `candidate-wait` and `recruiter-span` count time, while
+  `candidate-breaks` and `recruiter-breaks` count the times somebody is
+  left waiting, whatever the length: "I would rather wait once for a long
+  while than three times" is `candidate-breaks`, "don't leave the
+  recruiters hanging" is `recruiter-breaks`. "Share the waiting out
+  evenly between the recruiters" is `recruiter-idle-spread`, and it goes
+  with `recruiter-idle` right after it, since an even share says nothing
+  of how much waiting there is: `[meetings, recruiter-idle-spread,
+  recruiter-idle]`.
 
 How to write it:
 
