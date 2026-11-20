@@ -151,8 +151,17 @@ those who could do better…) and puts them back in the best place, trying the
 possible groupings and orders of their interviews. A move is accepted when
 the new schedule is not worse than the current one, or than the one of 1,000
 moves ago (*late acceptance hill climbing*): accepting a slightly worse
-schedule now and then gets the search out of dead ends. The command runs one
-search per core.
+schedule now and then gets the search out of dead ends.
+
+Most moves, though, re-time a whole day: they keep who meets whom and pack
+the interviews of the day as tight as they go; the ruin and recreate comes
+one move in fifty, and whenever a re-timing changes nothing. With `-exact`,
+some moves also take the day of one recruiter that has a break and put its
+interviews back where they leave the fewest breaks there can be, for the
+recruiter and for everybody they meet: on days of one-slot meetings, as at a
+business forum, that placement is worked out rather than tried. Where these
+methods come from: [References](#references). The command runs one search
+per core.
 
 It stops after `-timeout`, after `-patience` without improvement, or as soon
 as every objective reaches an obvious bound (everybody served, for
@@ -190,6 +199,7 @@ igiveyouarendezvous -date 2026-11-23 week3.yaml               # one day
 | `-workers N` | searches run in parallel (default: the number of cores) |
 | `-seed N` | random seed |
 | `-retime S` | for measurements: the share of the moves that re-time a whole day, from `0` to `1`; the search chooses when it is left out |
+| `-exact S` | for measurements, experimental: the share of the moves that re-time one recruiter's day to the fewest breaks there can be, from `0` (default: never) to `1` |
 | `-list-objectives` | list the objectives |
 
 Files named `.json` are written in JSON, the others in YAML; both formats are
@@ -936,7 +946,10 @@ code. To contribute, report a problem or a vulnerability: the
 The GitHub CI (`.github/workflows/ci.yml`) runs the tests with the race
 detector and the coverage, the linter and `osv-scanner` on every push and
 pull request, and the scan again every week. Dependabot proposes the
-updates of the Go modules and of the actions. A version tag (`git tag v0.1.0
+updates of the Go modules and of the actions; what it does not see, the Go
+of `go.mod` and the version of golangci-lint, a weekly workflow
+(`.github/workflows/versions.yml`) watches, opening an issue when a newer one
+is out and closing it once both are raised. A version tag (`git tag v0.1.0
 && git push origin v0.1.0`) publishes a release with the ready-to-use zips of
 the tutorial (`.github/workflows/release.yml`, `scripts/package.sh`).
 
@@ -980,6 +993,35 @@ What a schema cannot check is the substance: a file that writes your own
 plan down instead of modelling it, a place spelt two ways, a priority the
 wrong way round. Read `prompt/en.md` yourself once — it is short, and it
 names the mistakes a model makes on this format.
+
+## References
+
+The search puts together methods of the literature, listed here in the
+style of APA 7 and cited in the documentation of the code where each is
+used: accepting a move not worse than the schedule of a thousand moves ago
+(Burke & Bykov, 2017); removing some candidates and putting them back
+(Schrimpf et al., 2000), chosen among related ones, such as those sharing a
+recruiter or a time window (Shaw, 1998); objectives in a strict order
+(Ehrgott, 2005); and the exact re-timing of one recruiter's day (`-exact`),
+a dynamic programme over the subsets of its interviews (Held & Karp, 1962).
+
+- Burke, E. K., & Bykov, Y. (2017). The late acceptance hill-climbing
+  heuristic. *European Journal of Operational Research, 258*(1), 70–78.
+  https://doi.org/10.1016/j.ejor.2016.07.012
+- Ehrgott, M. (2005). *Multicriteria optimization* (2nd ed.). Springer.
+  https://doi.org/10.1007/3-540-27659-9
+- Held, M., & Karp, R. M. (1962). A dynamic programming approach to sequencing
+  problems. *Journal of the Society for Industrial and Applied Mathematics,
+  10*(1), 196–210. https://doi.org/10.1137/0110015
+- Schrimpf, G., Schneider, J., Stamm-Wilbrandt, H., & Dueck, G. (2000). Record
+  breaking optimization results using the ruin and recreate principle.
+  *Journal of Computational Physics, 159*(2), 139–171.
+  https://doi.org/10.1006/jcph.1999.6413
+- Shaw, P. (1998). Using constraint programming and local search methods to
+  solve vehicle routing problems. In M. Maher & J.-F. Puget (Eds.),
+  *Principles and practice of constraint programming — CP98* (Lecture Notes in
+  Computer Science, Vol. 1520, pp. 417–431). Springer.
+  https://doi.org/10.1007/3-540-49481-2_30
 
 ## License
 

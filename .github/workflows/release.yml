@@ -36,3 +36,9 @@ jobs:
           else
             gh release create "$GITHUB_REF_NAME" dist/*.zip --title "$title" --generate-notes
           fi
+      # pkg.go.dev shows a version only once the Go module proxy has fetched
+      # it, which happens when somebody asks the proxy for it: ask, so that
+      # the documentation of the new version is there the same day. It is
+      # last, so that a release is never held back by it.
+      - name: Tell the Go module proxy about the version
+        run: GOPROXY=https://proxy.golang.org go list -m "github.com/FrederickFrance/igiveyouarendezvous@$GITHUB_REF_NAME"

@@ -6,7 +6,15 @@ import (
 	"strings"
 )
 
-// Objective is one criterion of the lexicographic optimisation.
+// Objective is one criterion of the lexicographic optimisation (Ehrgott,
+// 2005): a schedule is better than another when it does better on the
+// first objective, or as well on the first and better on the second, and so
+// on.
+//
+// References:
+//
+//   - Ehrgott, M. (2005). Multicriteria optimization (2nd ed.). Springer.
+//     https://doi.org/10.1007/3-540-27659-9
 type Objective int
 
 // The objectives. Their String form is the name used in configuration files.

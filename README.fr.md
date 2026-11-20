@@ -159,8 +159,18 @@ faire…) et les replace au mieux, en essayant les regroupements et les ordres
 possibles de leurs entretiens. Un mouvement est accepté quand le nouveau
 planning n'est pas pire que le courant, ou que celui d'il y a 1 000
 mouvements (*late acceptance hill climbing*) : accepter de temps en temps un
-planning un peu moins bon sort la recherche des impasses. La commande lance
-une recherche par cœur.
+planning un peu moins bon sort la recherche des impasses.
+
+La plupart des mouvements, pourtant, re-horodatent une journée entière : ils
+gardent qui rencontre qui et resserrent les entretiens de la journée autant
+que possible ; le « détruire et reconstruire » vient un mouvement sur
+cinquante, et chaque fois qu'un re-horodatage ne change rien. Avec `-exact`,
+certains mouvements prennent aussi la journée d'un recruteur qui a un trou et
+replacent ses entretiens là où ils laissent le moins de trous possible, pour
+lui et pour tous ceux qu'il rencontre : sur des journées de rencontres d'un
+créneau, comme dans un forum d'affaires, ce placement est calculé et non
+essayé. D'où viennent ces méthodes : [Références](#références). La commande
+lance une recherche par cœur.
 
 Elle s'arrête après `-timeout`, après `-patience` sans amélioration, ou dès
 que tous les objectifs atteignent une borne évidente (tout le monde servi,
@@ -199,6 +209,7 @@ igiveyouarendezvous -date 2026-11-23 semaine3.yaml             # un seul jour
 | `-workers N` | recherches lancées en parallèle (par défaut : le nombre de cœurs) |
 | `-seed N` | graine aléatoire |
 | `-retime S` | pour les mesures : la part des mouvements qui re-horodatent une journée entière, de `0` à `1` ; la recherche choisit quand il est omis |
+| `-exact S` | pour les mesures, expérimental : la part des mouvements qui re-horodatent la journée d'un recruteur au moins de trous possible, de `0` (par défaut : jamais) à `1` |
 | `-list-objectives` | liste les objectifs |
 
 Les fichiers nommés `.json` sont écrits en JSON, les autres en YAML ; les deux
@@ -969,7 +980,10 @@ français), et la [politique de sécurité](SECURITY.md).
 La CI GitHub (`.github/workflows/ci.yml`) lance les tests avec le détecteur
 de concurrence et la couverture, le linter et `osv-scanner` à chaque push et
 pull request, et l'analyse à nouveau chaque semaine. Dependabot propose les
-mises à jour des modules Go et des actions. Un tag de version (`git tag
+mises à jour des modules Go et des actions ; ce qu'il ne voit pas, le Go de
+`go.mod` et la version de golangci-lint, un workflow hebdomadaire
+(`.github/workflows/versions.yml`) le surveille : il ouvre une issue quand une
+version plus récente sort, et la ferme une fois les deux montées. Un tag de version (`git tag
 v0.1.0 && git push origin v0.1.0`) publie une version avec les zips prêts à
 l'emploi du tutoriel (`.github/workflows/release.yml`, `scripts/package.sh`).
 
@@ -1015,6 +1029,36 @@ Ce qu'un schéma ne vérifie pas, c'est le fond : un fichier qui recopie
 votre planning au lieu de le modéliser, un lieu écrit de deux façons, une
 priorité à l'envers. Lisez `prompt/fr.md` vous-même une fois — c'est court,
 et ça nomme les erreurs qu'un modèle commet sur ce format.
+
+## Références
+
+La recherche assemble des méthodes de la littérature, listées ici selon la
+norme APA 7 et citées dans la documentation du code là où chacune sert :
+accepter un mouvement qui n'est pas pire que le planning d'il y a mille
+mouvements (Burke & Bykov, 2017) ; retirer quelques candidats et les remettre
+(Schrimpf et al., 2000), choisis parmi des candidats liés, comme ceux qui
+partagent un recruteur ou une plage horaire (Shaw, 1998) ; des objectifs dans
+un ordre strict (Ehrgott, 2005) ; et le re-horodatage exact de la journée
+d'un recruteur (`-exact`), une programmation dynamique sur les sous-ensembles
+de ses entretiens (Held & Karp, 1962).
+
+- Burke, E. K., & Bykov, Y. (2017). The late acceptance hill-climbing
+  heuristic. *European Journal of Operational Research, 258*(1), 70–78.
+  https://doi.org/10.1016/j.ejor.2016.07.012
+- Ehrgott, M. (2005). *Multicriteria optimization* (2nd ed.). Springer.
+  https://doi.org/10.1007/3-540-27659-9
+- Held, M., & Karp, R. M. (1962). A dynamic programming approach to sequencing
+  problems. *Journal of the Society for Industrial and Applied Mathematics,
+  10*(1), 196–210. https://doi.org/10.1137/0110015
+- Schrimpf, G., Schneider, J., Stamm-Wilbrandt, H., & Dueck, G. (2000). Record
+  breaking optimization results using the ruin and recreate principle.
+  *Journal of Computational Physics, 159*(2), 139–171.
+  https://doi.org/10.1006/jcph.1999.6413
+- Shaw, P. (1998). Using constraint programming and local search methods to
+  solve vehicle routing problems. In M. Maher & J.-F. Puget (Eds.),
+  *Principles and practice of constraint programming — CP98* (Lecture Notes in
+  Computer Science, Vol. 1520, pp. 417–431). Springer.
+  https://doi.org/10.1007/3-540-49481-2_30
 
 ## Licence
 

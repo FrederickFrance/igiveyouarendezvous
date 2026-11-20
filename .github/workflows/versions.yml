@@ -1,0 +1,23 @@
+# Weekly watch over the versions Dependabot does not see: the Go of go.mod
+# and the golangci-lint of ci.yml. It opens an issue when a newer one is out,
+# and closes it once all is up to date; see scripts/versions.sh.
+name: Versions
+
+on:
+  schedule:
+    - cron: "41 6 * * 1" # Mondays, after the CI's weekly scan
+  workflow_dispatch: # "Run workflow" button, to try it
+
+permissions:
+  contents: read
+  issues: write # to open, update and close its one issue
+
+jobs:
+  versions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Compare with the latest releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: sh scripts/versions.sh

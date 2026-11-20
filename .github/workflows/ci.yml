@@ -14,14 +14,9 @@ on:
       - "WTFPL.txt"
       - ".github/ISSUE_TEMPLATE/**"
       - "docs/**"
+  # Every pull request, documentation alone included: the branches require
+  # these checks before a merge, and a check that never runs never passes.
   pull_request:
-    paths-ignore:
-      - "**.md"
-      - "prompt/**"
-      - "LICENSE"
-      - "WTFPL.txt"
-      - ".github/ISSUE_TEMPLATE/**"
-      - "docs/**"
   schedule:
     - cron: "17 5 * * 1"
   workflow_dispatch: # "Run workflow" button
