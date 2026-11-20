@@ -11,12 +11,12 @@ import "fmt"
 // TestVersionMatchesTheChangelog keeps them equal to the first section of
 // CHANGELOG.md: raising one and forgetting the other fails the tests.
 const (
-	version     = "0.14.0"
-	releaseName = "Mildred Ratched"
-	releaseMark = "📋"
+	version     = "0.15.0"
+	releaseName = "Bullseye"
+	releaseMark = "🎯"
 )
 
-// release is the version as the release page writes it: v0.14.0 "Mildred Ratched" 📋.
+// release is the version as the release page writes it: v0.15.0 "Bullseye" 🎯.
 func release() string {
 	return fmt.Sprintf("v%s %q %s", version, releaseName, releaseMark)
 }

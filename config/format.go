@@ -40,6 +40,12 @@ func FormatOf(path string) Format {
 func parse(data []byte) (*yaml.Node, error) {
 	data = bytes.TrimPrefix(data, []byte("\xef\xbb\xbf")) // a byte order mark
 
+	// The line endings of Windows. The YAML reader takes them for line
+	// breaks in the values, but not in the comments: it doubles every line
+	// of a comment and hands a comment to the wrong key, so that a file
+	// written back (-rest) comes out with its comments out of place.
+	data = bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
+
 	if trimmed := bytes.TrimSpace(data); len(trimmed) > 0 && trimmed[0] == '{' {
 		root, err := parseJSON(data)
 		if err != nil {

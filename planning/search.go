@@ -19,7 +19,14 @@ import (
 const (
 	// lahcHistory is the length of the late acceptance history: a move is
 	// accepted when it is not worse than the solution of lahcHistory
-	// iterations ago, which lets the search leave local optima.
+	// iterations ago, which lets the search leave local optima (Burke &
+	// Bykov, 2017).
+	//
+	// References:
+	//
+	//   - Burke, E. K., & Bykov, Y. (2017). The late acceptance hill-climbing
+	//     heuristic. European Journal of Operational Research, 258(1), 70–78.
+	//     https://doi.org/10.1016/j.ejor.2016.07.012
 	lahcHistory = 1000
 	// maxNodes bounds the placements examined when inserting one candidate.
 	maxNodes = 20000
@@ -85,7 +92,35 @@ type SearchOptions struct {
 	// share of the time.
 	//
 	// It is a setting for whoever measures, and may change before v1.
+	//
+	// References:
+	//
+	//   - Schrimpf, G., Schneider, J., Stamm-Wilbrandt, H., & Dueck, G.
+	//     (2000). Record breaking optimization results using the ruin and
+	//     recreate principle. Journal of Computational Physics, 159(2),
+	//     139–171. https://doi.org/10.1006/jcph.1999.6413
 	Retime *float64
+	// Exact is the share of the moves that take the day of one recruiter
+	// with a break and put its interviews back where they leave the fewest
+	// breaks there can be, for the recruiter and for everybody they meet,
+	// everything else held. It applies to days of one-slot interviews whose
+	// candidates have nothing else planned, as at a business forum, under
+	// an objective on breaks and without journeys; elsewhere the move falls
+	// back to the others. Nought, the default, never tries it and leaves
+	// the search as it was: the same seed gives the same schedule.
+	//
+	// The placement is a dynamic programme over the slots of the day and
+	// the subsets of its interviews (Held & Karp, 1962).
+	//
+	// It is a setting for whoever measures, and may change before v1.
+	//
+	// References:
+	//
+	//   - Held, M., & Karp, R. M. (1962). A dynamic programming approach to
+	//     sequencing problems. Journal of the Society for Industrial and
+	//     Applied Mathematics, 10(1), 196–210.
+	//     https://doi.org/10.1137/0110015
+	Exact float64
 }
 
 // Progress describes the best schedule found so far by Search.
@@ -99,10 +134,13 @@ type Progress struct {
 }
 
 // Search plans the period with a local search in pure Go: a greedy
-// construction, then "ruin and recreate" moves (remove some candidates,
-// insert them back in the best place) accepted with late acceptance hill
-// climbing. The objectives are compared lexicographically: the first one
-// decides, the next one only breaks ties, and so on.
+// construction, then moves accepted when the schedule is not worse than the
+// current one or than the one of a thousand moves ago (late acceptance hill
+// climbing; Burke & Bykov, 2017). Most moves re-time a whole day; the others
+// remove some candidates, at random or among related ones, and insert them
+// back in the best place (ruin and recreate; Schrimpf et al., 2000; Shaw,
+// 1998). The objectives are compared lexicographically (Ehrgott, 2005): the
+// first one decides, the next one only breaks ties, and so on.
 //
 // The schedule improves with time but its optimality is not proven, except
 // for objectives that reach an obvious bound (everybody served, for
@@ -113,13 +151,36 @@ type Progress struct {
 // Whatever stops it, Search returns the best schedule found so far: to stop
 // it on demand, give it a context created with context.WithCancel and call
 // the cancel function; Search returns within a few milliseconds.
+//
+// References:
+//
+//   - Burke, E. K., & Bykov, Y. (2017). The late acceptance hill-climbing
+//     heuristic. European Journal of Operational Research, 258(1), 70–78.
+//     https://doi.org/10.1016/j.ejor.2016.07.012
+//   - Ehrgott, M. (2005). Multicriteria optimization (2nd ed.). Springer.
+//     https://doi.org/10.1007/3-540-27659-9
+//   - Schrimpf, G., Schneider, J., Stamm-Wilbrandt, H., & Dueck, G. (2000).
+//     Record breaking optimization results using the ruin and recreate
+//     principle. Journal of Computational Physics, 159(2), 139–171.
+//     https://doi.org/10.1006/jcph.1999.6413
+//   - Shaw, P. (1998). Using constraint programming and local search methods
+//     to solve vehicle routing problems. In M. Maher & J.-F. Puget (Eds.),
+//     Principles and practice of constraint programming — CP98 (Lecture Notes
+//     in Computer Science, Vol. 1520, pp. 417–431). Springer.
+//     https://doi.org/10.1007/3-540-49481-2_30
 func Search(ctx context.Context, p *Problem, o Options, so SearchOptions) (*Schedule, error) {
 	if ctx.Done() == nil && so.Iterations == 0 && so.Patience == 0 {
 		return nil, errNoStop
 	}
 
-	if so.Retime != nil && (*so.Retime < 0 || *so.Retime > 1) {
+	// Written so that NaN, which compares false with everything, is refused
+	// too.
+	if so.Retime != nil && !(*so.Retime >= 0 && *so.Retime <= 1) {
 		return nil, errRetime
+	}
+
+	if !(so.Exact >= 0 && so.Exact <= 1) {
+		return nil, errExact
 	}
 
 	in, err := newInstance(p, o)
@@ -141,6 +202,8 @@ func Search(ctx context.Context, p *Problem, o Options, so SearchOptions) (*Sche
 		if so.Retime != nil {
 			searchers[i].retime = *so.Retime
 		}
+
+		searchers[i].exact = so.Exact
 
 		searchers[i].apply(prep)
 	}
@@ -360,6 +423,11 @@ type searcher struct {
 	// are what a measurement reads, and what a search choosing the share
 	// by itself would learn from.
 	retimed, ruined int
+	exact           float64 // SearchOptions.Exact
+	exacted         int
+	// The tables of exactDay, kept between moves.
+	exactFit             [][]int
+	exactCost, exactBack []int32
 
 	// bucket and byStart are scratch for retiming.reorder, and touched for
 	// mark, kept here and not where they are used so that a move does not
@@ -1418,6 +1486,19 @@ func (s *searcher) retiming() bool {
 // move removes some candidates and inserts them back, with a few candidates
 // who had no interview.
 func (s *searcher) move() {
+	// On the share asked for, the exact re-timing of one recruiter's day
+	// (SearchOptions.Exact) comes first; nought draws nothing, so that the
+	// moves of a seed stay what they were.
+	if s.exact > 0 && s.rnd.Float64() < s.exact && s.exactDay() {
+		s.exacted++
+
+		if !s.fair() {
+			s.undo()
+		}
+
+		return
+	}
+
 	// Re-timing a whole day packs it tighter than any insertion can, so
 	// most moves go to it; when it changes nothing, and once in ruinEvery
 	// moves, the ruin and recreate below takes over.
@@ -1589,7 +1670,21 @@ func (s *searcher) recreate(pool []int, noise bool) {
 	}
 }
 
-// ruin removes the interviews of some candidates and returns them.
+// ruin removes the interviews of some candidates and returns them: the ruin
+// of ruin and recreate (Schrimpf et al., 2000), the candidates chosen at
+// random or among related ones (Shaw, 1998).
+//
+// References:
+//
+//   - Schrimpf, G., Schneider, J., Stamm-Wilbrandt, H., & Dueck, G. (2000).
+//     Record breaking optimization results using the ruin and recreate
+//     principle. Journal of Computational Physics, 159(2), 139–171.
+//     https://doi.org/10.1006/jcph.1999.6413
+//   - Shaw, P. (1998). Using constraint programming and local search methods
+//     to solve vehicle routing problems. In M. Maher & J.-F. Puget (Eds.),
+//     Principles and practice of constraint programming — CP98 (Lecture Notes
+//     in Computer Science, Vol. 1520, pp. 417–431). Springer.
+//     https://doi.org/10.1007/3-540-49481-2_30
 func (s *searcher) ruin() []int {
 	var served []int
 
@@ -2910,7 +3005,12 @@ func (s *searcher) absent(sched *Schedule) {
 	sched.Absent.Candidates = slices.Sorted(maps.Keys(candidates))
 }
 
-// compare orders scores lexicographically.
+// compare orders scores lexicographically (Ehrgott, 2005).
+//
+// References:
+//
+//   - Ehrgott, M. (2005). Multicriteria optimization (2nd ed.). Springer.
+//     https://doi.org/10.1007/3-540-27659-9
 func compare(a, b []int) int {
 	return slices.Compare(a, b)
 }
@@ -2980,6 +3080,9 @@ func (b bitset) boundsIn(from, to int) (int, int) {
 
 // errRetime is returned for a share of retimings that is not a share.
 var errRetime = errors.New("planning: the share of the moves that re-time a day is between 0 and 1")
+
+// errExact is returned for a share of exact re-timings that is not a share.
+var errExact = errors.New("planning: the share of the moves that re-time a recruiter's day exactly is between 0 and 1")
 
 // errNoStop is returned when nothing would stop the search.
 var errNoStop = errors.New("planning: the search needs a deadline, a number of iterations or a patience")

@@ -7,6 +7,63 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
+## [0.15.0] - 2026-11-20 "Bullseye" 🎯
+
+Some breaks are not found by trying: they can be worked out. On a day where
+one recruiter meets one person after another, a slot each, where those
+interviews go decides every break of that day — the recruiter's, and those
+of the people they meet — and nothing else. That day can then be laid out
+for the fewest breaks there can be, outright, rather than reached by moves
+that may or may not land on it. This version adds that move, as a setting
+to measure with, and says where the methods of the search come from.
+
+### Added
+
+- **`-exact`, and `SearchOptions.Exact` in the library**: the share of the
+  moves that take the day of one recruiter with a break and put its
+  interviews back where they leave the fewest breaks there can be, for the
+  recruiter and for everybody they meet, everything else held. A dynamic
+  programme over the slots of the day finds that placement, remembering
+  which interviews are placed and whether the recruiter is waiting. It
+  applies to days of one-slot interviews whose candidates have nothing
+  else planned and follow nobody, up to twelve of them, under an objective
+  on breaks, without journeys, for a recruiter who needs no time between
+  interviews; elsewhere the move gives way to the others. Nought, the
+  default, never tries it, and the same seed gives the same schedule as
+  before. A test compares the placement with every
+  possible one, up to five meetings, on random forums.
+- **References**, in the style of APA 7: the methods the search puts
+  together, and where each comes from. The readmes list them; in the code,
+  each is written out in full on what uses it — `Search`, `SearchOptions`,
+  `Objective` and the functions inside — so that hovering over a name in
+  an editor shows the reference with the documentation, as at the foot of
+  an article. A test keeps every copy equal to the list of the package
+  documentation, and both readmes to it.
+- **A weekly watch over the versions Dependabot does not see**: the Go of
+  `go.mod` and the version of golangci-lint. A workflow opens an issue when
+  a newer one is out, and closes it once both are raised.
+
+- **The documentation of each version on pkg.go.dev the same day**: the
+  release workflow asks the Go module proxy for the new version, which is
+  what makes pkg.go.dev show it; until then it waited for somebody to
+  fetch the version.
+
+- **Every pull request runs the checks**, one that changes only the
+  documentation too, so that `dev` can require them before a merge.
+
+### Fixed
+
+- **A problem file saved with the line endings of Windows** was planned
+  right, but the next file written by `-rest` came out with every line of
+  its comments doubled and some comments under the wrong key: the YAML
+  reader takes those line endings for line breaks in the values, not in the
+  comments. They are now read as plain line breaks. A test reads every
+  example as Notepad saves it, with a byte order mark and the line endings
+  of Windows, and requires the same file, problem and plan.
+- **A share of moves that is not a share is refused**, `SearchOptions.Exact`
+  as `SearchOptions.Retime` was; and for both, a share that is not a
+  number, which slipped through the comparison before.
+
 ## [0.14.0] - 2026-11-18 "Mildred Ratched" 📋
 
 The ward runs on a timetable, and this version is about the room and the

@@ -58,6 +58,15 @@
 // the highest priorities first, then the candidates with the fewest
 // requests, each at the first place found.
 //
+// Most moves re-time a whole day, keeping who meets whom and packing the
+// interviews as tight as they go; one in fifty, and whenever re-timing
+// changes nothing, removes some candidates and puts them back
+// ([SearchOptions.Retime]). With [SearchOptions.Exact], some moves take the
+// day of one recruiter that has a break and put its interviews back where
+// they leave the fewest breaks there can be, for the recruiter and for
+// everybody they meet: worked out rather than tried, on days of one-slot
+// meetings.
+//
 // [Check] verifies any schedule independently of the search, and [Evaluate]
 // scores it.
 //
@@ -71,6 +80,35 @@
 // and kept as they are, unless they no longer hold; the other interviews are
 // kept when they still fit. [Clean] tells beforehand what is kept, and why
 // the rest is not.
+//
+// # References
+//
+// The search puts together methods of the literature, cited where each is
+// used and listed here, in the style of APA 7: accepting a move not worse
+// than the schedule of a thousand moves ago (Burke & Bykov, 2017); removing
+// some candidates and putting them back (Schrimpf et al., 2000), chosen
+// among related ones, such as those sharing a recruiter or a time window
+// (Shaw, 1998); objectives in a strict order (Ehrgott, 2005); and the exact
+// re-timing of one recruiter's day, a dynamic programme over the subsets of
+// its interviews (Held & Karp, 1962).
+//
+//   - Burke, E. K., & Bykov, Y. (2017). The late acceptance hill-climbing
+//     heuristic. European Journal of Operational Research, 258(1), 70–78.
+//     https://doi.org/10.1016/j.ejor.2016.07.012
+//   - Ehrgott, M. (2005). Multicriteria optimization (2nd ed.). Springer.
+//     https://doi.org/10.1007/3-540-27659-9
+//   - Held, M., & Karp, R. M. (1962). A dynamic programming approach to
+//     sequencing problems. Journal of the Society for Industrial and Applied
+//     Mathematics, 10(1), 196–210. https://doi.org/10.1137/0110015
+//   - Schrimpf, G., Schneider, J., Stamm-Wilbrandt, H., & Dueck, G. (2000).
+//     Record breaking optimization results using the ruin and recreate
+//     principle. Journal of Computational Physics, 159(2), 139–171.
+//     https://doi.org/10.1006/jcph.1999.6413
+//   - Shaw, P. (1998). Using constraint programming and local search methods
+//     to solve vehicle routing problems. In M. Maher & J.-F. Puget (Eds.),
+//     Principles and practice of constraint programming — CP98 (Lecture Notes
+//     in Computer Science, Vol. 1520, pp. 417–431). Springer.
+//     https://doi.org/10.1007/3-540-49481-2_30
 //
 // # Example
 //
