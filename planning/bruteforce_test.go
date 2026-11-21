@@ -47,6 +47,13 @@ func TestAgainstBruteForce(t *testing.T) {
 
 			best, _ := exhaustive(t, seed, p, o)
 			require.Equal(t, best, got, "seed %d, objectives %v, options %+v", seed, o.Objectives, o)
+
+			// A bound is a value no schedule beats: not even the best of all.
+			for i, sc := range s.Scores {
+				if sc.Bound != 0 {
+					require.LessOrEqual(t, best[i], sc.Bound, "seed %d, %v: the best schedule beats the bound", seed, sc.Objective)
+				}
+			}
 		})
 	}
 }

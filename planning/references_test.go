@@ -60,7 +60,7 @@ func TestEveryReferenceIsTheOneOfThePackageDocumentation(t *testing.T) {
 	require.NoError(t, err)
 
 	canonical := references(string(doc), listItem, listMore)
-	require.Len(t, canonical, 5, "the references of the package documentation")
+	require.Len(t, canonical, 6, "the references of the package documentation")
 
 	files, err := filepath.Glob("*.go")
 	require.NoError(t, err)

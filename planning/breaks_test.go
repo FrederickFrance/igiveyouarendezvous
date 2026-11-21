@@ -117,7 +117,7 @@ func TestSearchMinimisesTheBreaks(t *testing.T) {
 	p, o := scattered(t, planning.MinCandidateBreaks)
 	require.NoError(t, p.Validate(o))
 
-	s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Patience: time.Second})
+	s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Seed: 1, Iterations: 10_000})
 	require.NoError(t, err)
 	require.Empty(t, s.Unscheduled)
 	require.NoError(t, planning.Check(p, o, s))

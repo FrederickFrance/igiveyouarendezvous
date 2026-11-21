@@ -86,7 +86,7 @@ func TestSearchMinimisesTheRecruiterBreaks(t *testing.T) {
 	p, o := forum(t, pairs, 5, planning.MaxMeetings, planning.MinRecruiterBreaks)
 	require.NoError(t, p.Validate(o))
 
-	s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Patience: 2 * time.Second})
+	s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Seed: 1, Iterations: 10_000})
 	require.NoError(t, err)
 	require.Empty(t, s.Unscheduled)
 	require.NoError(t, planning.Check(p, o, s))
@@ -110,7 +110,7 @@ func TestRecruiterBreaksAgreeWithTheSearch(t *testing.T) {
 	o.Rooms = 3
 	require.NoError(t, p.Validate(o))
 
-	s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Patience: 2 * time.Second})
+	s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Seed: 1, Iterations: 10_000})
 	require.NoError(t, err)
 	require.NoError(t, planning.Check(p, o, s))
 
