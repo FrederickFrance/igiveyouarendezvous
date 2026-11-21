@@ -729,8 +729,11 @@ qui en voient peu.
   disponibles. Le programme le calcule et l'affiche à côté du compte :
   `147/200, at most 154`. Il ignore l'ordre des entretiens, ce qui en fait
   une borne et non un planning, et c'est la seule chose qui dise si une
-  réponse est bonne sur une journée où la demande dépasse les heures. Là où
-  le compte l'atteint, la réponse est prouvée sans rien énumérer.
+  réponse est bonne sur une journée où la demande dépasse les heures. Il
+  compte aussi les heures de chaque recruteur : si tout le monde doit voir
+  Alice, présente deux heures, quatre entretiens d'une demi-heure avec elle,
+  c'est tout ce que la journée peut tenir, si libres que soient les autres.
+  Là où le compte l'atteint, la réponse est prouvée sans rien énumérer.
 - **`optional: true`** sur un des recruteurs de `meet` l'invite sans en
   avoir besoin : `meet: {Marché: {}, Annick: {optional: true}}`. Le
   candidat est complet sans lui, la rencontre se tient avec les invités
@@ -977,9 +980,10 @@ que le code. Pour contribuer, signaler un problème ou une vulnérabilité : le
 [guide de contribution](CONTRIBUTING.md), en anglais (on peut écrire en
 français), et la [politique de sécurité](SECURITY.md).
 
-La CI GitHub (`.github/workflows/ci.yml`) lance les tests avec le détecteur
-de concurrence et la couverture, le linter et `osv-scanner` à chaque push et
-pull request, et l'analyse à nouveau chaque semaine. Dependabot propose les
+La CI GitHub (`.github/workflows/ci.yml`) lance les tests avec la
+couverture, de nouveau les tests avec le détecteur de concurrence à côté
+(sans les comparaisons exhaustives, `-short`), le linter et `osv-scanner` à
+chaque push et pull request, et l'analyse à nouveau chaque semaine. Dependabot propose les
 mises à jour des modules Go et des actions ; ce qu'il ne voit pas, le Go de
 `go.mod` et la version de golangci-lint, un workflow hebdomadaire
 (`.github/workflows/versions.yml`) le surveille : il ouvre une issue quand une
@@ -1038,9 +1042,11 @@ accepter un mouvement qui n'est pas pire que le planning d'il y a mille
 mouvements (Burke & Bykov, 2017) ; retirer quelques candidats et les remettre
 (Schrimpf et al., 2000), choisis parmi des candidats liés, comme ceux qui
 partagent un recruteur ou une plage horaire (Shaw, 1998) ; des objectifs dans
-un ordre strict (Ehrgott, 2005) ; et le re-horodatage exact de la journée
-d'un recruteur (`-exact`), une programmation dynamique sur les sous-ensembles
-de ses entretiens (Held & Karp, 1962).
+un ordre strict (Ehrgott, 2005) ; le re-horodatage exact de la journée d'un
+recruteur (`-exact`), une programmation dynamique sur les sous-ensembles de
+ses entretiens (Held & Karp, 1962) ; et, pour savoir quand aucun planning ne
+peut recevoir plus de candidats, un sac à dos des heures de chaque recruteur
+(Kellerer et al., 2004).
 
 - Burke, E. K., & Bykov, Y. (2017). The late acceptance hill-climbing
   heuristic. *European Journal of Operational Research, 258*(1), 70–78.
@@ -1050,6 +1056,8 @@ de ses entretiens (Held & Karp, 1962).
 - Held, M., & Karp, R. M. (1962). A dynamic programming approach to sequencing
   problems. *Journal of the Society for Industrial and Applied Mathematics,
   10*(1), 196–210. https://doi.org/10.1137/0110015
+- Kellerer, H., Pferschy, U., & Pisinger, D. (2004). *Knapsack problems*.
+  Springer. https://doi.org/10.1007/978-3-540-24777-7
 - Schrimpf, G., Schneider, J., Stamm-Wilbrandt, H., & Dueck, G. (2000). Record
   breaking optimization results using the ruin and recreate principle.
   *Journal of Computational Physics, 159*(2), 139–171.

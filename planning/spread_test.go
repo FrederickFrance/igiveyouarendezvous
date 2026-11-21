@@ -2,7 +2,6 @@ package planning_test
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -78,7 +77,7 @@ func TestBreakSpreadHoldsOnWhatTheSearchFinds(t *testing.T) {
 
 		require.NoError(t, p.Validate(o))
 
-		s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Patience: 2 * time.Second})
+		s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Seed: 1, Iterations: 10_000})
 		require.NoError(t, err)
 		require.NoError(t, planning.Check(p, o, s))
 
@@ -100,14 +99,14 @@ func TestBreakSpreadOfZeroIsALimit(t *testing.T) {
 	o.Rooms = 1 // one table: the day is a queue, and waiting is forced
 	require.NoError(t, p.Validate(o))
 
-	s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Patience: 2 * time.Second})
+	s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Seed: 1, Iterations: 10_000})
 	require.NoError(t, err)
 	none := spreadOf(breaksPerRecruiter(p, s))
 
 	o.BreakSpread = &zero
 	require.NoError(t, p.Validate(o))
 
-	s, err = planning.Search(t.Context(), p, o, planning.SearchOptions{Patience: 2 * time.Second})
+	s, err = planning.Search(t.Context(), p, o, planning.SearchOptions{Seed: 1, Iterations: 10_000})
 	require.NoError(t, err)
 	require.NoError(t, planning.Check(p, o, s))
 	require.Equal(t, 0, spreadOf(breaksPerRecruiter(p, s)))

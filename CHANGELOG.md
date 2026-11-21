@@ -7,6 +7,32 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
+## [0.16.0] - 2026-11-21 "Jill Valentine" 🧟
+
+Eight slots in her inventory, six in Chris's: not every bag holds as much.
+Until now the program knew how many candidates all the recruiters' hours
+put together could hold. It now also knows each recruiter's, and the
+tightest of them is the one that counts.
+
+### Changed
+
+- **The bound on the complete candidates counts each recruiter's hours**,
+  as a knapsack of their own, besides all the hours put together. When
+  everybody must see the same recruiter, the day holds no more complete
+  candidates than those who do not need them, plus as many of those who do
+  as fit into that recruiter's hours, however free the others are. The
+  count printed beside the result (`147/200, at most 154`) is then the true
+  ceiling of such a day, and a schedule that reaches it is proven optimal on
+  that count, where it used to stay unproven; the search stops as soon as
+  every objective is proven. A reference to the knapsack problems (Kellerer
+  et al., 2004) joins the others.
+- **The CI runs the tests faster**: the race detector, which slows them
+  down several times over, now runs in a job of its own beside the others,
+  without the comparisons with an exhaustive search (`-short`), which share
+  nothing between goroutines; the tests that let a search run for a second
+  or two now stop after a number of moves, which also makes them give the
+  same result every time.
+
 ## [0.15.0] - 2026-11-20 "Bullseye" 🎯
 
 Some breaks are not found by trying: they can be worked out. On a day where

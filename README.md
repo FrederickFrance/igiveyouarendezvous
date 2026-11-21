@@ -701,8 +701,11 @@ recruiters, `complete-candidates` first those who need few.
   prints it next to the count: `147/200, at most 154`. It ignores the order
   of the interviews, which is what makes it a bound and not a schedule, and
   it is the only thing that says whether an answer is good on a day where
-  the demand is higher than the hours. Where the count reaches it, the
-  answer is proven with nothing to enumerate.
+  the demand is higher than the hours. It counts each recruiter's hours too:
+  when everybody must see Alice, who is there two hours, four half-hour
+  interviews with her is all the day can hold, however free the others are.
+  Where the count reaches it, the answer is proven with nothing to
+  enumerate.
 - **`optional: true`** on one of the recruiters of `meet` invites them
   without needing them: `meet: {Market: {}, Annick: {optional: true}}`. The
   candidate is complete without them, the interview is held with the guests
@@ -943,9 +946,10 @@ JSON schemas, and that the schemas know the same keys and objectives as the
 code. To contribute, report a problem or a vulnerability: the
 [contributing guide](CONTRIBUTING.md) and the [security policy](SECURITY.md).
 
-The GitHub CI (`.github/workflows/ci.yml`) runs the tests with the race
-detector and the coverage, the linter and `osv-scanner` on every push and
-pull request, and the scan again every week. Dependabot proposes the
+The GitHub CI (`.github/workflows/ci.yml`) runs the tests with the coverage,
+the tests again with the race detector beside them (without the exhaustive
+comparisons, `-short`), the linter and `osv-scanner` on every push and pull
+request, and the scan again every week. Dependabot proposes the
 updates of the Go modules and of the actions; what it does not see, the Go
 of `go.mod` and the version of golangci-lint, a weekly workflow
 (`.github/workflows/versions.yml`) watches, opening an issue when a newer one
@@ -1002,8 +1006,10 @@ used: accepting a move not worse than the schedule of a thousand moves ago
 (Burke & Bykov, 2017); removing some candidates and putting them back
 (Schrimpf et al., 2000), chosen among related ones, such as those sharing a
 recruiter or a time window (Shaw, 1998); objectives in a strict order
-(Ehrgott, 2005); and the exact re-timing of one recruiter's day (`-exact`),
-a dynamic programme over the subsets of its interviews (Held & Karp, 1962).
+(Ehrgott, 2005); the exact re-timing of one recruiter's day (`-exact`), a
+dynamic programme over the subsets of its interviews (Held & Karp, 1962);
+and, to know when no schedule can serve more candidates, a knapsack of each
+recruiter's hours (Kellerer et al., 2004).
 
 - Burke, E. K., & Bykov, Y. (2017). The late acceptance hill-climbing
   heuristic. *European Journal of Operational Research, 258*(1), 70–78.
@@ -1013,6 +1019,8 @@ a dynamic programme over the subsets of its interviews (Held & Karp, 1962).
 - Held, M., & Karp, R. M. (1962). A dynamic programming approach to sequencing
   problems. *Journal of the Society for Industrial and Applied Mathematics,
   10*(1), 196–210. https://doi.org/10.1137/0110015
+- Kellerer, H., Pferschy, U., & Pisinger, D. (2004). *Knapsack problems*.
+  Springer. https://doi.org/10.1007/978-3-540-24777-7
 - Schrimpf, G., Schneider, J., Stamm-Wilbrandt, H., & Dueck, G. (2000). Record
   breaking optimization results using the ruin and recreate principle.
   *Journal of Computational Physics, 159*(2), 139–171.

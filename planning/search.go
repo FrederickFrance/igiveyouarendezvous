@@ -668,57 +668,99 @@ func (s *searcher) maskParts(part, parts []int) error {
 
 // capacity returns the most candidates the hours of the recruiters can hold:
 // every interview takes a recruiter's time, so the candidates, taken by
-// increasing total length, stop fitting once their lengths add up to more
-// than the hours available. It ignores the order of the interviews, which is
-// what makes it a bound and not a schedule, and it is the only bound that
-// says anything on a day where the demand is higher than the hours.
+// increasing length, stop fitting once their lengths add up to more than the
+// hours available. It ignores the order of the interviews, which is what
+// makes it a bound and not a schedule, and it says something on a day where
+// the demand is higher than the hours.
+//
+// The hours are counted twice, and the tighter count kept: all the
+// recruiters' hours put together, then each recruiter's on their own, as a
+// knapsack per recruiter (Kellerer et al., 2004). A recruiter everybody
+// wants to see bounds the complete candidates by those who do not need
+// them, plus as many of those who do as fit into their hours, however free
+// the others are.
+//
+// References:
+//
+//   - Kellerer, H., Pferschy, U., & Pisinger, D. (2004). Knapsack problems.
+//     Springer. https://doi.org/10.1007/978-3-540-24777-7
 func (s *searcher) capacity() int {
 	minutes := int(s.in.g.step / time.Minute)
-	free := 0
+	free := make([]int, len(s.in.availR)) // each recruiter's minutes
+	total := 0
 
 	for h := range s.in.availR {
 		for t, ok := range s.in.availR[h] {
 			if ok && s.in.session[t] >= 0 {
-				free += minutes
+				free[h] += minutes
 			}
 		}
+
+		total += free[h]
 	}
 
-	costs := make([]int, 0, len(s.needMask))
+	// The time of one recruiter per request, which is the least a candidate
+	// can take: holding two requests at once takes both recruiters for as
+	// long as the longer of them. perRecruiter[h] holds the time each
+	// candidate takes of recruiter h, nought for one who does not meet them.
+	var costs []int
+
+	perRecruiter := make([][]int, len(free))
+	eligible := 0
 
 	for c, need := range s.needMask {
 		if need == 0 || s.possible[c]&need != need {
 			continue
 		}
 
-		// The time of one recruiter per request, which is the least a
-		// candidate can take: holding two requests at once takes both
-		// recruiters for as long as the longer of them.
+		eligible++
 		cost := 0
+		of := make([]int, len(free))
 
 		for _, r := range s.in.requestsOf[c] {
-			if !s.in.p.Requests[r].Optional {
-				cost += int(s.in.p.length([]int{r}, s.in.o) / time.Minute)
+			if s.in.p.Requests[r].Optional {
+				continue
 			}
+
+			length := int(s.in.p.length([]int{r}, s.in.o) / time.Minute)
+			cost += length
+			of[s.in.p.Requests[r].Recruiter] += length
 		}
 
 		costs = append(costs, cost)
+
+		for h, length := range of {
+			if length > 0 {
+				perRecruiter[h] = append(perRecruiter[h], length)
+			}
+		}
 	}
 
+	fit := fitting(costs, total)
+
+	for h, lengths := range perRecruiter {
+		fit = min(fit, eligible-len(lengths)+fitting(lengths, free[h]))
+	}
+
+	return fit
+}
+
+// fitting returns how many of costs fit into room, the smallest first.
+func fitting(costs []int, room int) int {
 	slices.Sort(costs)
 
-	fit, used := 0, 0
+	n, used := 0, 0
 
 	for _, cost := range costs {
-		if used+cost > free {
+		if used+cost > room {
 			break
 		}
 
 		used += cost
-		fit++
+		n++
 	}
 
-	return fit
+	return n
 }
 
 // indexOf returns the index of the first criterion of objective obj, or -1.

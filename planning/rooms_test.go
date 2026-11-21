@@ -59,7 +59,7 @@ func TestRoomsCapWhatIsHeldAtOnce(t *testing.T) {
 	p, o := hall(t, 6, 0)
 	require.NoError(t, p.Validate(o))
 
-	s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Patience: time.Second})
+	s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Seed: 1, Iterations: 10_000})
 	require.NoError(t, err)
 	require.Empty(t, s.Unscheduled)
 	require.Equal(t, 6, atOnce(s), "without a cap they are all held at once")
@@ -67,7 +67,7 @@ func TestRoomsCapWhatIsHeldAtOnce(t *testing.T) {
 	p, o = hall(t, 6, 2)
 	require.NoError(t, p.Validate(o))
 
-	s, err = planning.Search(t.Context(), p, o, planning.SearchOptions{Patience: time.Second})
+	s, err = planning.Search(t.Context(), p, o, planning.SearchOptions{Seed: 1, Iterations: 10_000})
 	require.NoError(t, err)
 	require.Empty(t, s.Unscheduled, "six interviews of half an hour fit two rooms in a morning")
 	require.LessOrEqual(t, atOnce(s), 2)
@@ -90,7 +90,7 @@ func TestRoomsCountInterviewsAndNotPeople(t *testing.T) {
 
 	require.NoError(t, p.Validate(o))
 
-	s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Patience: time.Second})
+	s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Seed: 1, Iterations: 10_000})
 	require.NoError(t, err)
 	require.Empty(t, s.Unscheduled)
 	require.Len(t, s.Interviews, 1)
@@ -107,7 +107,7 @@ func TestRoomsCanLeaveInterviewsUnscheduled(t *testing.T) {
 	p, o := hall(t, 12, 1)
 	require.NoError(t, p.Validate(o))
 
-	s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Patience: 2 * time.Second})
+	s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Seed: 1, Iterations: 10_000})
 	require.NoError(t, err)
 	require.Len(t, s.Interviews, 6)
 	require.Len(t, s.Unscheduled, 6)
@@ -123,7 +123,7 @@ func TestCheckRefusesTooManyAtOnce(t *testing.T) {
 	p, o := hall(t, 3, 3)
 	require.NoError(t, p.Validate(o))
 
-	s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Patience: time.Second})
+	s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Seed: 1, Iterations: 10_000})
 	require.NoError(t, err)
 	require.Equal(t, 3, atOnce(s))
 	require.NoError(t, planning.Check(p, o, s))

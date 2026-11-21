@@ -39,10 +39,25 @@ jobs:
           go-version-file: go.mod # the Go of the build is the one of go.mod
       - run: go build ./...
       - run: go vet ./...
-      - name: Tests, with the race detector and the coverage
-        run: go test -race -coverpkg=./... -coverprofile=coverage.out ./...
+      - name: Tests, with the coverage
+        run: go test -coverpkg=./... -coverprofile=coverage.out ./...
       - name: Coverage
         run: go tool cover -func=coverage.out | tail -1 | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # The race detector slows the program down several times over: it runs
+  # apart, beside the tests above, and leaves out the comparisons with an
+  # exhaustive search (-short): they share nothing between goroutines, so
+  # the detector has nothing to find there, and they take most of the time
+  # of the suite.
+  race:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Tests, with the race detector
+        run: go test -race -short ./...
 
   lint:
     runs-on: ubuntu-latest

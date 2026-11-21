@@ -88,9 +88,11 @@
 // than the schedule of a thousand moves ago (Burke & Bykov, 2017); removing
 // some candidates and putting them back (Schrimpf et al., 2000), chosen
 // among related ones, such as those sharing a recruiter or a time window
-// (Shaw, 1998); objectives in a strict order (Ehrgott, 2005); and the exact
+// (Shaw, 1998); objectives in a strict order (Ehrgott, 2005); the exact
 // re-timing of one recruiter's day, a dynamic programme over the subsets of
-// its interviews (Held & Karp, 1962).
+// its interviews (Held & Karp, 1962); and, to know when no schedule can
+// serve more candidates, a knapsack of each recruiter's hours (Kellerer et
+// al., 2004).
 //
 //   - Burke, E. K., & Bykov, Y. (2017). The late acceptance hill-climbing
 //     heuristic. European Journal of Operational Research, 258(1), 70–78.
@@ -100,6 +102,8 @@
 //   - Held, M., & Karp, R. M. (1962). A dynamic programming approach to
 //     sequencing problems. Journal of the Society for Industrial and Applied
 //     Mathematics, 10(1), 196–210. https://doi.org/10.1137/0110015
+//   - Kellerer, H., Pferschy, U., & Pisinger, D. (2004). Knapsack problems.
+//     Springer. https://doi.org/10.1007/978-3-540-24777-7
 //   - Schrimpf, G., Schneider, J., Stamm-Wilbrandt, H., & Dueck, G. (2000).
 //     Record breaking optimization results using the ruin and recreate
 //     principle. Journal of Computational Physics, 159(2), 139–171.
