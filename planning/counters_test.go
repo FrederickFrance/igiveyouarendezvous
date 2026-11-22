@@ -28,7 +28,7 @@ import (
 func TestTheCountersAgreeWithThePlans(t *testing.T) {
 	t.Parallel()
 
-	for seed := range uint64(40) {
+	for seed := range deepSeeds(t, 40) {
 		rnd := rand.New(rand.NewPCG(seed, 0x9e3779b97f4a7c15))
 		p, o := randomForum(rnd)
 

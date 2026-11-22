@@ -111,10 +111,13 @@ func fixedProblem(p *Problem, o Options, accepted []Interview, c int, plan []Int
 		}
 	}
 
+	// What the candidate needs and the plan does not hold: a guest who was
+	// not there (see Request.Optional) is no new meeting, the interview took
+	// place without them.
 	var missing []string
 
 	for r, req := range p.Requests {
-		if req.Candidate == c && !held[r] {
+		if req.Candidate == c && !held[r] && !req.Optional {
 			missing = append(missing, p.Recruiters[req.Recruiter].Name)
 		}
 	}

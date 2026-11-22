@@ -48,7 +48,7 @@ type Score struct {
 // Schedule is the plan of a period.
 type Schedule struct {
 	Interviews  []Interview // sorted by start, then candidate
-	Unscheduled []int       // requests not held, to plan another time
+	Unscheduled []int       // requests not held; Remaining tells which are still to plan
 	Impossible  []int       // unscheduled requests that no day with the same availabilities can hold
 	// Absent lists the people, as indexes of their requests' recruiters and
 	// candidates, who are available at no time of the period (on the open
@@ -71,7 +71,11 @@ func (s *Schedule) Proven() bool {
 }
 
 // Remaining returns the problem left: the same people, with the same
-// availabilities, and only the requests that were not held.
+// availabilities, and only the requests still to hold. Those are the
+// requests that were not held, but for the optional ones (see
+// Request.Optional) of the candidates who are complete: their interviews
+// took place, and a guest who missed one is not asked again to an interview
+// that is over.
 func (s *Schedule) Remaining(p *Problem) *Problem {
 	next := &Problem{
 		Recruiters:  slices.Clone(p.Recruiters),
@@ -79,10 +83,20 @@ func (s *Schedule) Remaining(p *Problem) *Problem {
 		JointGroups: p.JointGroups,
 		Panels:      p.Panels,
 		Travel:      p.Travel,
+		Precedences: p.Precedences,
 	}
 
+	held := make([]bool, len(p.Requests))
+	for r := range held {
+		held[r] = !slices.Contains(s.Unscheduled, r)
+	}
+
+	complete := completeCandidates(p, held)
+
 	for _, r := range s.Unscheduled {
-		next.Requests = append(next.Requests, p.Requests[r])
+		if req := p.Requests[r]; !req.Optional || !complete[req.Candidate] {
+			next.Requests = append(next.Requests, req)
+		}
 	}
 
 	return next
@@ -456,14 +470,20 @@ func checkGathering(p *Problem, o Options, iv Interview, recruiters []int, meeti
 	if meeting > 0 {
 		var all []int
 
-		for _, r := range p.Requests {
-			if r.Candidate == c && r.Meeting == meeting {
-				all = append(all, r.Recruiter)
+		for r, req := range p.Requests {
+			if req.Candidate == c && req.Meeting == meeting {
+				all = append(all, r)
 			}
 		}
 
-		if len(all) != len(recruiters) {
-			return fmt.Errorf("%s meets %s in one interview, without anybody else", candidate, recruiterNames(p, slices.Sorted(slices.Values(all))))
+		if must := gathering(p, all); !holds(iv.Requests, must) {
+			var names []int
+
+			for _, r := range must {
+				names = append(names, p.Requests[r].Recruiter)
+			}
+
+			return fmt.Errorf("%s meets %s in one interview, without anybody else", candidate, recruiterNames(p, slices.Sorted(slices.Values(names))))
 		}
 
 		return nil
@@ -478,29 +498,51 @@ func checkGathering(p *Problem, o Options, iv Interview, recruiters []int, meeti
 	}
 
 	if p.Candidates[c].Together {
-		all := 0
-		// The guests are let off: an optional request may be absent, and
-		// the interview is still the one interview with everybody else.
-		for _, r := range p.Requests {
-			if r.Candidate == c && !r.Optional {
-				all++
+		var all []int
+
+		for r, req := range p.Requests {
+			if req.Candidate == c {
+				all = append(all, r)
 			}
 		}
 
-		held := 0
-
-		for _, r := range iv.Requests {
-			if !p.Requests[r].Optional {
-				held++
-			}
-		}
-
-		if held != all {
+		if !holds(iv.Requests, gathering(p, all)) {
 			return fmt.Errorf("%s meets everybody together, in one interview", candidate)
 		}
 	}
 
 	return nil
+}
+
+// gathering returns who an interview gathering the requests of all cannot
+// be held without: everybody but the guests (see Request.Optional), each of
+// whom comes along when they are free at that time. A gathering made of
+// guests only has nobody to be held around: it is held whole.
+func gathering(p *Problem, all []int) []int {
+	var must []int
+
+	for _, r := range all {
+		if !p.Requests[r].Optional {
+			must = append(must, r)
+		}
+	}
+
+	if len(must) == 0 {
+		return all
+	}
+
+	return must
+}
+
+// holds tells whether the requests held include all those of must.
+func holds(held, must []int) bool {
+	for _, r := range must {
+		if !slices.Contains(held, r) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // checkCandidates verifies "all or nothing", and the gaps and the order of
@@ -935,31 +977,29 @@ func waitScore(p *Problem, s *Schedule, obj Objective) int {
 // requests held. A guest invited with Request.Optional and unable to come
 // does not make the candidate incomplete — that is the whole point of the
 // guest — so only the requests that are not optional are counted, exactly
-// as checkCandidates counts them for "all or nothing". A candidate holding
-// nothing is never complete, which matters for one whose every request is
-// optional.
+// as checkCandidates counts them for "all or nothing". A candidate whose
+// every request is optional needs nothing and is never complete, whatever
+// they hold: their interviews are a bonus, counted as meetings and not as
+// a candidate served.
 func completeCandidates(p *Problem, held []bool) []bool {
 	missing := make([]int, len(p.Candidates))
-	got := make([]int, len(p.Candidates))
-	asked := make([]bool, len(p.Candidates))
+	needs := make([]bool, len(p.Candidates))
 
 	for r, req := range p.Requests {
-		asked[req.Candidate] = true
-
-		if held[r] {
-			got[req.Candidate]++
-
+		if req.Optional {
 			continue
 		}
 
-		if !req.Optional {
+		needs[req.Candidate] = true
+
+		if !held[r] {
 			missing[req.Candidate]++
 		}
 	}
 
 	complete := make([]bool, len(p.Candidates))
 	for c := range complete {
-		complete[c] = asked[c] && missing[c] == 0 && got[c] > 0
+		complete[c] = needs[c] && missing[c] == 0
 	}
 
 	return complete

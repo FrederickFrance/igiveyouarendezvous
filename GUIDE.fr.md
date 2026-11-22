@@ -105,8 +105,10 @@ Toutes les clés sont dans le [README](README.fr.md#le-fichier-problème).
   par jour. Hachuré : un rendez-vous figé (voir plus bas).
 - **Sous le planning** : « Toutes les rencontres sont planifiées », ou
   « À planifier plus tard », les candidats qui ne tiennent pas dans la
-  période, pour la suivante. « Impossible » signale quelqu'un qui n'est
-  jamais disponible, ou deux personnes jamais libres ensemble assez
+  période, pour la suivante. « Invités absents » nomme ceux qui étaient
+  invités avec `optional` et ont manqué une rencontre qui a eu lieu : il
+  ne reste rien à planifier pour eux. « Impossible » signale quelqu'un qui
+  n'est jamais disponible, ou deux personnes jamais libres ensemble assez
   longtemps : c'est le fichier qu'il faut revoir, pas la recherche.
 - **Une erreur** dit ce qui ne va pas, et la ligne en cause est sélectionnée
   dans l'éditeur.

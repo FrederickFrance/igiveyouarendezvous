@@ -48,8 +48,9 @@ func (d Doubt) String() string {
 
 // Doubts returns what looks like a mistake in the problem without being
 // one, in a stable order: the journeys first, then the availabilities, then
-// the people. It returns nothing for a problem that does not hold together
-// — that is what [Problem.Validate] is for, and it comes first.
+// the people, then the guests. It returns nothing for a problem that does
+// not hold together — that is what [Problem.Validate] is for, and it comes
+// first.
 //
 // The list is deliberately short of cases that merely cost time: a break
 // that shortens a window, two interviews that could be held jointly. A
@@ -65,8 +66,46 @@ func (p *Problem) Doubts(opts Options) []Doubt {
 	out = append(out, p.availabilityDoubts(o)...)
 	out = append(out, p.precedenceDoubts(o)...)
 	out = append(out, p.peopleDoubts()...)
+	out = append(out, p.guestDoubts(o)...)
 
 	return out
+}
+
+// guestDoubts reports the optional meetings nothing pays for. A guest costs
+// the time they spend like anybody, and the meetings held are the only
+// objective that counts them (see Request.Optional): when MaxMeetings is not
+// among the objectives, no guest is ever invited, which is hardly what
+// "optional" was written for. With it after the objectives on the
+// recruiters' time, a guest comes only where it costs nothing, and that may
+// well be what is meant: nothing is said then.
+func (p *Problem) guestDoubts(o Options) []Doubt {
+	if slices.Contains(o.Objectives, MaxMeetings) {
+		return nil
+	}
+
+	first, n := -1, 0
+
+	for r, req := range p.Requests {
+		if req.Optional {
+			n++
+
+			if first < 0 {
+				first = r
+			}
+		}
+	}
+
+	if n == 0 {
+		return nil
+	}
+
+	return []Doubt{{
+		About: "objectives",
+		Text: fmt.Sprintf("%s (the first: %s with %s) and nothing to hold them for: a guest costs their time "+
+			"like anybody, and only %q counts them — add it to the objectives, before those on the "+
+			"recruiters' time, or the guests all stay at home",
+			plural(n, "optional meeting"), candidateOf(p, first), recruiterOf(p, first), MaxMeetings.String()),
+	}}
 }
 
 // Validate checks the problem and the options without planning anything: it

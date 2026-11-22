@@ -101,7 +101,9 @@ Every key is in the [README](README.md#the-problem-file).
 - **The schedule**: one row per person, one colour per candidate, day by
   day. Hatched: a fixed appointment (see below).
 - **Under the schedule**: "All meetings are planned", or "To plan later",
-  the candidates who do not fit in the period, for the next one.
+  the candidates who do not fit in the period, for the next one. "Guests
+  who are not there" names those invited with `optional` who missed an
+  interview that took place: nothing is left to plan for them.
   "Impossible" points at somebody never available, or two people never free
   together long enough: the file needs a look, not the search.
 - **An error** says what is wrong, and the line at fault is selected in the

@@ -7,6 +7,122 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
+## [0.16.1] - 2026-11-22 "L'Arlésienne" 💃
+
+L'Arlésienne is the girl everybody in the play talks about, and who never
+appears on stage. A guest, in a problem file, is somebody invited with
+`optional`: the friend who joins a visit if she can. A visit was meant to be
+held without her when she cannot come, and in more than one place it went
+otherwise — a visit dropped because the friend was away, a schedule refused
+over a guest who stayed at home, a second friend kept at home by the
+absence of the first. This version goes through every place where a guest
+is counted, and checks them all against an exhaustive search.
+
+### Fixed
+
+- **A visit was dropped when its guest could not come**, as soon as the
+  objectives of the file did not count the meetings. The search held a
+  candidate complete only with every guest, where the score of the schedule
+  rightly holds them complete without: a visit whose guest was away was
+  worth nothing to the search, cost the time of its recruiters, and was
+  left out, with every hour of the period free. `example/trip.yaml` did it
+  with the friend away for the two days: neither the cathedral nor the
+  Christmas market was planned. A candidate is now complete, in the search
+  as on the scoreboard, when they hold everything they need.
+- **Each guest comes on their own account.** An interview with several
+  guests was offered with all of them or with none: one friend away for the
+  week, and the other was never asked. Every choice of guests is now on
+  offer, up to twelve guests in one interview.
+- **A required candidate whose guest stayed at home was refused**, as
+  "required, and left out of the schedule", with their interview in the
+  schedule. Required now means complete: with all they need.
+- **A required candidate is placed by the search**, and no longer left
+  where the opening dropped them. No objective says that a schedule holding
+  one more required candidate is better — they are out of the tallies — so
+  the search took back every move that put one in at a cost, could only put
+  one back at random, and refused a problem whose opening had left one out
+  although a schedule existed. Holding them is now the first thing the
+  search compares, before every objective.
+- **A candidate whose every meeting is optional is planned**, as the bonus
+  it is: held when the meetings count and there is room, never counted
+  among the candidates served, and not in the number they are counted out
+  of (`1/1`, not `1/2`). It was never planned at all, while the score of a
+  schedule holding it counted it as a candidate served. With `required` on
+  top, which leaves nothing to require, the file is refused.
+- **`-rest` kept a visit held without its guest.** The friend's meeting
+  was not held, so the candidate had something left, and a candidate is
+  kept whole: the file of the next day planned the cathedral again. A
+  candidate who holds all they need is gone, whether their guests came or
+  not. In the library, `Schedule.Remaining` no longer asks a guest again to
+  an interview that took place, and keeps the `Precedences`, which it
+  dropped.
+- **"To plan later" named the guests who were not there**, as if their
+  interview were still to hold. They are told apart: "Guests who are not
+  there: The cathedral (Friend)", after "All the meetings that were needed
+  are planned" when nothing else is left. The demo says both in French too.
+- **A visit held without its guest was refused when the search resumed
+  from it** (`-start`), as having "new meetings since the plan, with
+  Friend", and planned again from scratch: an appointment already
+  announced could move.
+- **A guest invited to a panel** let the panel sit without them in the
+  documentation only: the panel was held whole, or the candidate left out.
+  It follows the rule of every interview that gathers several people.
+- **A guest of an earlier rank held the later ranks back**: an assessor
+  invited first, with `optional`, and away for the day, and the candidate
+  could not meet the manager of the next rank at all. The ranks order the
+  interviews that take place; a guest who stays at home is not waited for.
+- In the library, **a guest invited to a meeting** (`Request.Optional` with
+  `Request.Meeting`) made `Search` fail every time: the checker asked for
+  everybody named in the meeting, and refused the schedule the search had
+  built. A meeting also counted all its requests as held, whoever came.
+- **`precedences` failed on any day of four interviews or more**, with
+  "the search built an invalid schedule": the search re-times such a day
+  by taking its interviews out and putting them back one by one, and the
+  order between candidates did not see those already put back. Two of them
+  then came in whatever order the re-timing took them, and the check at
+  the end refused the result. Found by crossing the guests with the other
+  rules, which is how the deep run below came about.
+
+### Changed
+
+- **The bound on the meetings counts what one schedule can hold**: a guest
+  who is never free when the others are is not counted, and of two guests
+  never free together only one is. A schedule holding one of them is then
+  proven the best there is, and the search stops as soon as every objective
+  is proven.
+- **`example/trip.yaml` has `meetings` among its objectives**, after the
+  priorities. It is what invites the friend: a guest costs their time like
+  anybody, and the meetings held are the only objective that counts them.
+  In the previous versions she came because the visit only counted with
+  her, which is the first defect above.
+- On a problem with `optional` or `required`, a seed no longer gives the
+  schedule it gave: the search does not compare the schedules as it did.
+  Elsewhere nothing changes.
+
+### Added
+
+- **`-check` reports the guests nothing pays for**: meetings marked
+  `optional` in a file whose `objectives` leave `meetings` out, where no
+  guest would ever be invited.
+- **A deep run of the tests every week** (`.github/workflows/deep.yml`,
+  `scripts/deep.sh`), on Sunday night: the comparisons with an exhaustive
+  search and the walks over random problems, on 2,000 problems each instead
+  of a few dozen, new ones every week. It changes nothing; when it fails it
+  opens an issue naming the seeds, and closes it once a later run passes.
+  The ordinary run stays as quick as it was.
+- **A comparison with an exhaustive search for the guests**, in the tests:
+  small random problems where guests are invited in every way there is —
+  alone, to an interview with everybody, to a meeting, to a panel, jointly,
+  several at once, as the whole of a candidate, beside required candidates
+  — on which the search must find the best schedule the checker accepts and
+  the scoreboard ranks. Another test walks a search over random problems
+  and compares, move after move, what the engine counts with what the
+  scoreboard counts: their disagreement is what kept the first defect above
+  out of sight since `optional` exists. A third crosses the guests with
+  rooms, `precedences`, `break-spread`, places, gaps and ranks. And every
+  schedule the search finds on those problems is handed back to it as a
+  start, every interview fixed, and must be kept as it is.
+
 ## [0.16.0] - 2026-11-21 "Jill Valentine" 🧟
 
 Eight slots in her inventory, six in Chris's: not every bag holds as much.

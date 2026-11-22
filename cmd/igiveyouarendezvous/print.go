@@ -180,33 +180,68 @@ func printSchedule(w io.Writer, p *planning.Problem, s *planning.Schedule, pe pe
 
 	printShortcuts(w, p)
 
+	printLeft(w, p, s)
+}
+
+// printLeft says what the schedule leaves: the meetings still to hold, for
+// another period, and apart from them the guests who are not there. A guest
+// (optional: true) who missed an interview that took place is not to plan
+// later: the interview is over, and the candidate served.
+func printLeft(w io.Writer, p *planning.Problem, s *planning.Schedule) {
 	if len(s.Unscheduled) == 0 {
 		fmt.Fprintln(w, "\nAll meetings are planned.")
 
 		return
 	}
 
-	missing := map[int][]string{}
+	// The requests left are those of the problem that remains, in the same
+	// order: the others are the guests.
+	rest := s.Remaining(p).Requests
+
+	var later, guests []planning.Request
+
+	for _, r := range s.Unscheduled {
+		if req := p.Requests[r]; len(rest) > 0 && rest[0] == req {
+			later, rest = append(later, req), rest[1:]
+		} else {
+			guests = append(guests, req)
+		}
+	}
+
+	if len(later) == 0 {
+		fmt.Fprintln(w, "\nAll the meetings that were needed are planned.")
+	} else {
+		fmt.Fprintf(w, "\nTo plan later: %s\n", byCandidate(p, later))
+	}
+
+	if len(guests) > 0 {
+		fmt.Fprintf(w, "Guests who are not there: %s\n", byCandidate(p, guests))
+	}
+
+	printImpossible(w, p, s)
+}
+
+// byCandidate lists requests as their candidates, in the order they first
+// appear, each with its recruiters: "A (R1, R2), B (R1)".
+func byCandidate(p *planning.Problem, requests []planning.Request) string {
+	recruiters := map[int][]string{}
 
 	var order []int
 
-	for _, r := range s.Unscheduled {
-		req := p.Requests[r]
-		if _, ok := missing[req.Candidate]; !ok {
+	for _, req := range requests {
+		if _, ok := recruiters[req.Candidate]; !ok {
 			order = append(order, req.Candidate)
 		}
 
-		missing[req.Candidate] = append(missing[req.Candidate], p.Recruiters[req.Recruiter].Name)
+		recruiters[req.Candidate] = append(recruiters[req.Candidate], p.Recruiters[req.Recruiter].Name)
 	}
 
 	parts := make([]string, len(order))
 	for i, c := range order {
-		parts[i] = fmt.Sprintf("%s (%s)", p.Candidates[c].Name, strings.Join(missing[c], ", "))
+		parts[i] = fmt.Sprintf("%s (%s)", p.Candidates[c].Name, strings.Join(recruiters[c], ", "))
 	}
 
-	fmt.Fprintf(w, "\nTo plan later: %s\n", strings.Join(parts, ", "))
-
-	printImpossible(w, p, s)
+	return strings.Join(parts, ", ")
 }
 
 // printShortcuts warns about the journeys that a way through other places
@@ -326,10 +361,13 @@ func label(sc planning.Score) string {
 func scoreText(p *planning.Problem, s *planning.Schedule, pe period, sc planning.Score) string {
 	switch sc.Objective {
 	case planning.MaxCompleteCandidates, planning.MaxPriorities, planning.MaxUrgency:
+		// Out of how many: those who need something. A candidate whose
+		// every meeting is optional is a bonus, counted among the meetings
+		// and never among the candidates served.
 		asked := map[int]bool{}
 
 		for _, req := range p.Requests {
-			if counted(p.Candidates[req.Candidate], sc) {
+			if !req.Optional && counted(p.Candidates[req.Candidate], sc) {
 				asked[req.Candidate] = true
 			}
 		}

@@ -2,6 +2,7 @@ package planning_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -93,4 +94,53 @@ func TestCheckPanels(t *testing.T) {
 
 	// Remaining keeps the panels and the joint groups.
 	require.Equal(t, p.Panels, (&planning.Schedule{Unscheduled: []int{0}}).Remaining(p).Panels)
+}
+
+// A panel is held without its guests like any interview that gathers
+// several people (see Request.Optional): the members the candidate needs,
+// and those of the others who are free at that time. An optional member
+// who was away once kept the whole panel from sitting, and the candidate
+// from being served.
+func TestAPanelDoesWithoutItsGuests(t *testing.T) {
+	t.Parallel()
+
+	sitting := func(free []planning.Interval) *planning.Problem {
+		return &planning.Problem{
+			Recruiters: []planning.Recruiter{{Name: "Chair"}, {Name: "Assessor", Availability: free}},
+			Candidates: []planning.Candidate{{Name: "A"}},
+			Requests: []planning.Request{
+				{Candidate: 0, Recruiter: 0},
+				{Candidate: 0, Recruiter: 1, Optional: true},
+			},
+			Panels: [][]int{{0, 1}},
+		}
+	}
+
+	o := planning.Options{
+		Day:        []planning.Interval{{Start: clock(9, 0), End: clock(11, 0)}},
+		Duration:   time.Hour,
+		Objectives: []planning.Objective{planning.MaxCompleteCandidates, planning.MaxMeetings},
+	}
+
+	// The assessor is away: the chair sits alone.
+	p := sitting([]planning.Interval{})
+	s := searchPeriod(t, p, o)
+	require.Len(t, s.Interviews, 1)
+	require.Equal(t, []int{0}, s.Interviews[0].Recruiters)
+	require.Equal(t, 1, s.Scores[0].Value, "the candidate is served")
+
+	// The assessor is there: the panel sits whole, in one interview.
+	p = sitting(nil)
+	s = searchPeriod(t, p, o)
+	require.Len(t, s.Interviews, 1)
+	require.Equal(t, []int{0, 1}, s.Interviews[0].Recruiters)
+
+	// The assessor never sits without the chair.
+	alone := &planning.Schedule{
+		Interviews: []planning.Interview{
+			{Candidate: 0, Recruiters: []int{1}, Requests: []int{1}, Start: clock(9, 0), End: clock(10, 0)},
+		},
+		Unscheduled: []int{0},
+	}
+	require.Error(t, planning.Check(p, o, alone))
 }

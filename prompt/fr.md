@@ -55,8 +55,14 @@ a des valeurs par défaut) :
   recruteurs de `meet`, dans sa forme en mapping :
   `meet: {Marché: {}, Annick: {optional: true}}`. Préférez-le à une
   rencontre séparée dès que quelqu'un se joint à une sortie ou à un
-  entretien qui a lieu de toute façon : une rencontre séparée coûte toute
-  sa durée, un invité ne coûte rien.
+  entretien qui a lieu de toute façon : la rencontre se tient sans l'invité
+  quand il n'est pas libre, et n'est jamais abandonnée pour lui. Un invité
+  est invité pour `meetings`, le seul objectif qui le compte : si vous
+  écrivez `objectives`, gardez-y `meetings`, avant les objectifs sur le
+  temps des recruteurs (`recruiters`, `recruiter-half-days`,
+  `recruiter-span`), sinon aucun invité ne viendra jamais. Ne rendez pas
+  facultatives toutes les rencontres d'un candidat, sauf s'il est un pur
+  bonus, et jamais avec `required`.
 - **Un trajet par défaut relie tous les couples de lieux.** Les trajets
   tiennent ensemble : un trajet par d'autres lieux compte quand il est plus
   court. Donc avec `default: 10m`, deux lieux ne sont jamais à plus de vingt

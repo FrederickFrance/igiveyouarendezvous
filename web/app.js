@@ -88,7 +88,9 @@ const texts = {
     legend: "One row per person, one colour per candidate. Hatched: a fixed appointment.",
     oneDay: "The day",
     allPlanned: "All meetings are planned.",
+    allNeeded: "All the meetings that were needed are planned.",
     planLater: "To plan later:",
+    guestsAway: "Guests who are not there:",
     absent: "Impossible, available at no time of the period:",
     impossible: "Impossible, never free together long enough:",
     empty: "No interview could be planned.",
@@ -172,7 +174,9 @@ const texts = {
     legend: "Une ligne par personne, une couleur par candidat. Hachuré : un rendez-vous figé.",
     oneDay: "La journée",
     allPlanned: "Toutes les rencontres sont planifiées.",
+    allNeeded: "Toutes les rencontres nécessaires sont planifiées.",
     planLater: "À planifier plus tard :",
+    guestsAway: "Invités absents :",
     absent: "Impossible, disponible à aucun moment de la période :",
     impossible: "Impossible, jamais libres ensemble assez longtemps :",
     empty: "Aucun entretien n'a pu être planifié.",
@@ -856,10 +860,12 @@ function showSchedule(result) {
       if (line === "All meetings are planned.") {
         return t("allPlanned");
       }
-      if (line.startsWith("To plan later:")) {
-        return `${t("planLater")}${line.slice("To plan later:".length)}`;
+      if (line === "All the meetings that were needed are planned.") {
+        return t("allNeeded");
       }
       for (const [key, prefix] of [
+        ["planLater", "To plan later:"],
+        ["guestsAway", "Guests who are not there:"],
         ["absent", "Impossible, available at no time of the period:"],
         ["impossible", "Impossible, never free together long enough:"],
       ]) {

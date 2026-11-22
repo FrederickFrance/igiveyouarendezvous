@@ -126,7 +126,10 @@ type Candidate struct {
 	// around and what carries no interest of its own — the train that was
 	// booked, the keys handed back at the hotel, the room that has to be
 	// given back at six. A Priority ranks what one would rather have; this
-	// says there is nothing to rank.
+	// says there is nothing to rank. They are held when they are complete:
+	// with all they need, whether their guests came or not (see
+	// Request.Optional), which leaves a candidate whose every request is
+	// optional with nothing to require, and such a problem is refused.
 	Required bool
 }
 
@@ -155,9 +158,27 @@ type Request struct {
 	// complete without this request, and holding it is a bonus the search
 	// looks for. It is the guest who comes along if they can — a friend on
 	// an outing, a second assessor if they are free, a manager who sits in
-	// on the interview when their day allows. With a Meeting, the interview
-	// is held with the guests who are free at that time and without the
-	// others; alone, it is simply an interview that may not happen.
+	// on the interview when their day allows.
+	//
+	// In an interview that gathers several people (a Meeting, a candidate
+	// met Together, a panel), the guests who are free at that time are
+	// there and the others are not, each on their own account: the
+	// interview is never given up for a guest, and one of them away does
+	// not keep the others at home. Once it is held, a guest who missed it
+	// is not asked again (Schedule.Remaining). Alone, an optional request
+	// is simply an interview that may not happen.
+	//
+	// A guest costs their time like anybody, and MaxMeetings is the only
+	// objective that counts them: they come when it ranks before the
+	// objectives their presence weighs on (MinRecruiters, MinRecruiterSpan
+	// and the like), only where they cost nothing when it ranks after
+	// them, and never when it is not among the objectives, which
+	// Problem.Doubts reports.
+	//
+	// A candidate whose every request is optional needs nothing: what they
+	// hold is a bonus from end to end, counted as meetings and never as a
+	// candidate served, and an interview made of guests only, having
+	// nobody to be held around, is held whole or not at all.
 	Optional bool
 }
 
@@ -661,6 +682,27 @@ func (p *Problem) checkRequests() error {
 		}
 	}
 
+	return p.checkRequired()
+}
+
+// checkRequired refuses a required candidate who needs nothing: with guests
+// only (see Request.Optional), there is no interview the schedule could be
+// refused for, and the two keys say opposite things.
+func (p *Problem) checkRequired() error {
+	asked := make([]bool, len(p.Candidates))
+	needs := make([]bool, len(p.Candidates))
+
+	for _, r := range p.Requests {
+		asked[r.Candidate] = true
+		needs[r.Candidate] = needs[r.Candidate] || !r.Optional
+	}
+
+	for c, cand := range p.Candidates {
+		if cand.Required && asked[c] && !needs[c] {
+			return fmt.Errorf("planning: %s is required, and every one of their meetings is optional", cand.Name)
+		}
+	}
+
 	return nil
 }
 
@@ -863,25 +905,34 @@ func (p *Problem) panelOf(h int) int {
 	return slices.IndexFunc(p.Panels, func(panel []int) bool { return slices.Contains(panel, h) })
 }
 
-// panelMembers returns the members of panel k that candidate c must meet,
-// sorted.
-func (p *Problem) panelMembers(c, k int) []int {
-	var members []int
-
+// panelMembers returns the members of panel k that candidate c is to meet,
+// sorted, and those among them the interview cannot be held without: all
+// but the guests (see Request.Optional), or everybody when they are all
+// guests.
+func (p *Problem) panelMembers(c, k int) (members, must []int) {
 	for _, r := range p.Requests { // outside meetings, which are as given
 		if r.Candidate == c && r.Meeting == 0 && slices.Contains(p.Panels[k], r.Recruiter) {
 			members = append(members, r.Recruiter)
+
+			if !r.Optional {
+				must = append(must, r.Recruiter)
+			}
 		}
 	}
 
 	slices.Sort(members)
+	slices.Sort(must)
 
-	return members
+	if len(must) == 0 {
+		must = members
+	}
+
+	return members, must
 }
 
 // panel tells whether recruiters, in one interview of candidate c, respect
-// the panels: the members of a panel that c must meet, all of them, and
-// nobody else.
+// the panels: the members of a panel that c is to meet, all of them but the
+// guests who are not there, and nobody else.
 func (p *Problem) panel(c int, recruiters []int) error {
 	if p.Candidates[c].Together {
 		return nil
@@ -893,9 +944,11 @@ func (p *Problem) panel(c int, recruiters []int) error {
 			continue
 		}
 
-		members := p.panelMembers(c, k)
-		if !slices.Equal(slices.Sorted(slices.Values(recruiters)), members) {
-			return fmt.Errorf("%s meets %s in one interview, without anybody else", p.Candidates[c].Name, recruiterNames(p, members))
+		members, must := p.panelMembers(c, k)
+
+		if slices.ContainsFunc(recruiters, func(h int) bool { return !slices.Contains(members, h) }) ||
+			slices.ContainsFunc(must, func(h int) bool { return !slices.Contains(recruiters, h) }) {
+			return fmt.Errorf("%s meets %s in one interview, without anybody else", p.Candidates[c].Name, recruiterNames(p, must))
 		}
 
 		return nil

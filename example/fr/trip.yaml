@@ -15,15 +15,22 @@
 #     journée s'écroule sans eux, donc le programme refuse un planning qui
 #     les abandonne au lieu de vous envoyer tranquillement au marché avec
 #     les valises.
-#   - optional : une amie qui se joint si elle peut. La visite ne l'attend
-#     jamais et ne dépend jamais d'elle.
+#   - optional : une amie qui se joint si elle peut. Aucune visite n'est
+#     abandonnée pour elle : elle se tient sans elle quand elle n'est pas
+#     libre.
 #   - priority : ce qu'on préfère voir, et ce qui est un bonus.
 
 from: 2026-12-21
 to: 2026-12-22
 day: 08:00-21:00
 max-gap: unlimited
-objectives: [priorities, recruiter-span, day-end]
+
+# « meetings » est ce qui invite l'amie. Une invitée coûte son temps comme
+# tout le monde, et les rencontres tenues sont le seul objectif qui la
+# compte : après les priorités, elle ne coûte jamais une visite ; avant le
+# temps des recruteurs, sa compagnie vaut une heure du sien. Sans lui elle
+# resterait chez elle, et -check le dirait.
+objectives: [priorities, meetings, recruiter-span, day-end]
 
 # Quatre trajets, et pas de défaut. Un défaut serait le piège ici : il relie
 # tous les couples de lieux, donc deux lieux ne sont jamais à plus de deux

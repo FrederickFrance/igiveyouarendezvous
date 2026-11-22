@@ -739,25 +739,30 @@ func (f *File) available(a Availability, date string) bool {
 }
 
 // Next returns the problem file of what is left, after schedule s of problem
-// p (from f.Problem): the candidates who met all their recruiters are gone,
-// the others stay, and the period, planned, is removed (from, to,
-// not-before), for the next one to be chosen. The rest is kept as it is,
-// comments included in YAML.
+// p (from f.Problem): the candidates who met all the recruiters they need
+// are gone, whether their guests came or not, the others stay, and the
+// period, planned, is removed (from, to, not-before), for the next one to
+// be chosen. The rest is kept as it is, comments included in YAML.
 func (f *File) Next(p *planning.Problem, s *planning.Schedule) (*File, error) {
 	if f.doc == nil {
 		return nil, errors.New("config: Next needs a file read by Load or Parse")
 	}
 
-	left := map[string]map[string]bool{} // candidate -> recruiters left
-	for _, r := range s.Unscheduled {
-		req := p.Requests[r]
-		name := p.Candidates[req.Candidate].Name
+	// Who is still to plan: the candidates with a request left to hold
+	// (planning.Schedule.Remaining), which a guest who missed an interview
+	// that took place is not. A candidate is kept or dropped whole, the file
+	// having no way to say half of one, so one who holds something is gone:
+	// it only matters for a candidate who needs nothing, made of optional
+	// meetings, and got some of them.
+	left := map[string]bool{}
+	for _, req := range s.Remaining(p).Requests {
+		left[p.Candidates[req.Candidate].Name] = true
+	}
 
-		if left[name] == nil {
-			left[name] = map[string]bool{}
+	for r, req := range p.Requests {
+		if !slices.Contains(s.Unscheduled, r) {
+			delete(left, p.Candidates[req.Candidate].Name)
 		}
-
-		left[name][p.Recruiters[req.Recruiter].Name] = true
 	}
 
 	doc := clone(f.doc)
@@ -778,9 +783,8 @@ func (f *File) Next(p *planning.Problem, s *planning.Schedule) (*File, error) {
 
 		for i := 0; i+1 < len(cands.Content); i += 2 {
 			key, cand := cands.Content[i], cands.Content[i+1]
-			rest := left[NormalizeName(key.Value)]
 
-			if len(rest) == 0 {
+			if !left[NormalizeName(key.Value)] {
 				continue // served, or nothing to do
 			}
 

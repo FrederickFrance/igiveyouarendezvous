@@ -31,7 +31,9 @@ golangci-lint run
 ```
 
 The CI runs them too, with `osv-scanner`, and the tests compiled to
-WebAssembly for the online demo (`.github/workflows/ci.yml`).
+WebAssembly for the online demo (`.github/workflows/ci.yml`). A test that
+draws random problems takes its seeds from `planning.DeepSeeds`: the weekly
+deep run (`scripts/deep.sh`) then plays it on thousands of other problems.
 
 The conventions of the project:
 
