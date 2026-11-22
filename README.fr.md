@@ -580,7 +580,7 @@ Pas seulement des entretiens, et pas seulement une journée de travail : le
 même fichier planifie [deux jours de voyage en train](example/fr/trip.yaml),
 où l'hôtel et les trains sont `required` — la journée s'écroule sans eux et
 ils ne sont aucun exploit — et où une amie se joint à deux visites en
-invitée, `optional`, sans que les visites l'attendent jamais.
+invitée, `optional` : aucune visite n'est abandonnée pour elle.
 
 **Un programme : une chose après l'autre.** Pour un colloque dans une seule
 salle, le colloque est le candidat et les intervenants ses recruteurs : il
@@ -736,13 +736,21 @@ qui en voient peu.
   Là où le compte l'atteint, la réponse est prouvée sans rien énumérer.
 - **`optional: true`** sur un des recruteurs de `meet` l'invite sans en
   avoir besoin : `meet: {Marché: {}, Annick: {optional: true}}`. Le
-  candidat est complet sans lui, la rencontre se tient avec les invités
-  libres à ce moment-là et sans les autres, et la tenir compte dans
-  `meetings`. C'est l'invité qui se joint s'il peut — une amie pendant une
-  sortie, un second évaluateur s'il est disponible, un manager qui passe
-  sur l'entretien quand sa journée le permet. Un invité ne prend jamais une
-  rencontre en otage : l'heure qui convient aux autres est gardée même s'il
-  ne pouvait venir qu'à un autre moment.
+  candidat est complet sans lui, et la rencontre se tient avec les invités
+  libres à ce moment-là et sans les autres, chacun pour son propre compte.
+  C'est l'invité qui se joint s'il peut — une amie pendant une sortie, un
+  second évaluateur s'il est disponible, un manager qui passe sur
+  l'entretien quand sa journée le permet. Une rencontre n'est jamais
+  abandonnée pour un invité : elle se tient sans lui quand il ne peut pas
+  être là à une heure qui convient aux autres. Une fois tenue, l'invité qui
+  l'a manquée n'est pas redemandé : le candidat est servi, et n'est pas
+  dans le fichier de ce qui reste (`-rest`). Un invité coûte son temps
+  comme tout le monde, et `meetings` est le seul objectif qui le compte :
+  il vient quand cet objectif passe avant ceux sur le temps des recruteurs,
+  comme c'est le cas par défaut, et jamais quand il n'est pas parmi les
+  `objectives`, ce que `-check` signale. Un candidat dont toutes les
+  rencontres sont facultatives est un bonus : compté dans `meetings`,
+  jamais parmi les candidats servis.
 - **`required: true`** fait d'un candidat une contrainte et non plus un
   objectif : le programme refuse de rendre un planning sans lui et le nomme
   à la place. C'est pour ce autour de quoi la journée se construit et qui
@@ -987,7 +995,13 @@ chaque push et pull request, et l'analyse à nouveau chaque semaine. Dependabot 
 mises à jour des modules Go et des actions ; ce qu'il ne voit pas, le Go de
 `go.mod` et la version de golangci-lint, un workflow hebdomadaire
 (`.github/workflows/versions.yml`) le surveille : il ouvre une issue quand une
-version plus récente sort, et la ferme une fois les deux montées. Un tag de version (`git tag
+version plus récente sort, et la ferme une fois les deux montées. Chaque
+dimanche soir, un passage profond (`.github/workflows/deep.yml`,
+`scripts/deep.sh`) rejoue les comparaisons avec une recherche exhaustive et
+les marches sur des problèmes aléatoires sur des milliers de problèmes,
+nouveaux chaque semaine, et ouvre une issue qui nomme la graine de celui qui
+échoue : `DEEP_FROM=<graine> DEEP_SEEDS=1 go test -run <test> ./planning/`
+le rejoue. Un tag de version (`git tag
 v0.1.0 && git push origin v0.1.0`) publie une version avec les zips prêts à
 l'emploi du tutoriel (`.github/workflows/release.yml`, `scripts/package.sh`).
 

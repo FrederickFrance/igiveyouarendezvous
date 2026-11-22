@@ -555,8 +555,8 @@ tables.
 Not only interviews, and not only a working day: the same file plans [two
 days away by train](example/trip.yaml), where the hotel and the trains are
 `required` — the day falls apart without them and they are no achievement —
-and a friend joins two of the visits as a guest, `optional`, without the
-visits ever waiting for her.
+and a friend joins two of the visits as a guest, `optional`: no visit is
+given up for her.
 
 **A programme: one thing after the other.** For a colloquium in one room,
 the colloquium is the candidate and the speakers its recruiters: it is in one
@@ -708,13 +708,20 @@ recruiters, `complete-candidates` first those who need few.
   enumerate.
 - **`optional: true`** on one of the recruiters of `meet` invites them
   without needing them: `meet: {Market: {}, Annick: {optional: true}}`. The
-  candidate is complete without them, the interview is held with the guests
-  who are free at that time and without the others, and holding it counts
-  in `meetings`. It is the guest who comes along if they can — a friend on
+  candidate is complete without them, and the interview is held with the
+  guests who are free at that time and without the others, each on their
+  own account. It is the guest who comes along if they can — a friend on
   an outing, a second assessor if they are free, a manager who sits in on
-  an interview when their day allows. A guest never holds an interview
-  hostage: the hour that suits the others is kept even when the guest could
-  only come at another time.
+  an interview when their day allows. An interview is never given up for a
+  guest: it is held without them when they cannot be there at an hour that
+  suits the others. Once it is held, the guest who missed it is not asked
+  again: the candidate is served, and is not in the file of what is left
+  (`-rest`). A guest costs their time like anybody, and `meetings` is the
+  only objective that counts them: they come when it ranks before the
+  objectives on the recruiters' time, as it does by default, and never
+  when it is not among the `objectives`, which `-check` reports. A
+  candidate whose every meeting is optional is a bonus: counted in
+  `meetings`, never among the candidates served.
 - **`required: true`** makes a candidate a constraint instead of an
   objective: the program refuses to return a schedule without them and
   names them instead. It is for what the day is built around and carries no
@@ -953,7 +960,12 @@ request, and the scan again every week. Dependabot proposes the
 updates of the Go modules and of the actions; what it does not see, the Go
 of `go.mod` and the version of golangci-lint, a weekly workflow
 (`.github/workflows/versions.yml`) watches, opening an issue when a newer one
-is out and closing it once both are raised. A version tag (`git tag v0.1.0
+is out and closing it once both are raised. Every Sunday night, a deep run
+(`.github/workflows/deep.yml`, `scripts/deep.sh`) plays the comparisons with
+an exhaustive search and the walks over random problems on thousands of
+problems, new ones each week, and opens an issue naming the seed of any
+that fails: `DEEP_FROM=<seed> DEEP_SEEDS=1 go test -run <test> ./planning/`
+plays it again. A version tag (`git tag v0.1.0
 && git push origin v0.1.0`) publishes a release with the ready-to-use zips of
 the tutorial (`.github/workflows/release.yml`, `scripts/package.sh`).
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -596,4 +597,68 @@ func TestWithoutAvailability(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, want, f.WithoutAvailability(), text)
 	}
+}
+
+// A visit that took place is not in the file of the rest, whether its
+// guest came or not. The friend who missed the cathedral once kept the
+// whole visit in the file of what was left: her meeting was not held, the
+// candidate therefore had something left, and a candidate is kept whole —
+// so the next day planned the cathedral again.
+func TestNextDropsAVisitHeldWithoutItsGuest(t *testing.T) {
+	t.Parallel()
+
+	f, err := Parse([]byte(`recruiters: {Us: , Friend: , Cathedral: , Museum: }
+candidates:
+  The cathedral:
+    meet: {Us: {}, Cathedral: {}, Friend: {optional: true}}
+    together: true
+  The museum:
+    meet: {Us: {}, Museum: {}, Friend: {optional: true}}
+    together: true
+  A drink:
+    meet: {Friend: {optional: true}}
+  A walk:
+    meet: {Friend: {optional: true}, Us: {optional: true}}
+`))
+	require.NoError(t, err)
+
+	p, _, err := f.Problem("", "")
+	require.NoError(t, err)
+
+	friend := func(candidate string) int {
+		return slices.IndexFunc(p.Requests, func(r planning.Request) bool {
+			return p.Candidates[r.Candidate].Name == candidate && r.Optional
+		})
+	}
+
+	// The cathedral was visited without the friend; the museum, the drink
+	// and the walk were not held at all.
+	var left []int
+
+	for r, req := range p.Requests {
+		if name := p.Candidates[req.Candidate].Name; name != "The cathedral" || r == friend(name) {
+			left = append(left, r)
+		}
+	}
+
+	candidates := func() []string {
+		next, err := f.Next(p, &planning.Schedule{Unscheduled: left})
+		require.NoError(t, err)
+
+		var names []string
+		for _, c := range next.Candidates {
+			names = append(names, c.Name)
+		}
+
+		return names
+	}
+
+	require.Equal(t, []string{"The museum", "A drink", "A walk"}, candidates(),
+		"the cathedral is visited: it is gone, the friend's absence changes nothing")
+
+	// Once the drink is held, it is gone too; and so is the walk once the
+	// friend has come, though not everybody did: a candidate is kept whole
+	// or not at all, and a walk that took place is not planned again.
+	left = slices.DeleteFunc(left, func(r int) bool { return r == friend("A drink") || r == friend("A walk") })
+	require.Equal(t, []string{"The museum"}, candidates())
 }

@@ -54,8 +54,14 @@ has defaults):
   one of the recruiters of `meet`, in its mapping form:
   `meet: {Market: {}, Annick: {optional: true}}`. Use it rather than a
   meeting of its own whenever somebody joins an outing or an interview that
-  happens anyway: a separate meeting costs its whole length, a guest costs
-  nothing.
+  happens anyway: the interview is held without the guest when they are
+  not free, and is never given up for them. A guest is invited for the
+  sake of `meetings`, the only objective that counts them: if you write
+  `objectives`, keep `meetings` among them, before the objectives on the
+  recruiters' time (`recruiters`, `recruiter-half-days`, `recruiter-span`),
+  or no guest will ever come. Do not make every meeting of a candidate
+  optional unless the candidate is a pure bonus, and never together with
+  `required`.
 - **A default journey links every pair of places.** The journeys hold
   together: one through other places counts when it is shorter. So with
   `default: 10m` no two places are ever more than twenty minutes apart,

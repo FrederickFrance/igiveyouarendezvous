@@ -15,15 +15,15 @@
 // day d runs from d*[DayLength], and every day has the hours of [Options.Day]
 // and the breaks of [Options.Breaks]. An interview never crosses midnight.
 //
-// A candidate meets all their recruiters in the period, or none of them:
-// [Schedule.Remaining] returns what is left for the next period. Between two
-// interviews of a candidate, the gap is at least [Options.MinGap] and at most
-// [Options.MaxGap], a duration or a number of calendar days ([Gap]); by
-// default, interviews follow each other. Two interviews of the same day never
-// lie on both sides of a break. A request may have a rank
-// ([Request.Rank]): the meetings of rank 1 come first, then those of rank 2,
-// and so on; rank 0 meets at any time. A joint interview never mixes two
-// ranks.
+// A candidate meets all the recruiters they need in the period, or none of
+// them: [Schedule.Remaining] returns what is left for the next period.
+// Between two interviews of a candidate, the gap is at least
+// [Options.MinGap] and at most [Options.MaxGap], a duration or a number of
+// calendar days ([Gap]); by default, interviews follow each other. Two
+// interviews of the same day never lie on both sides of a break. A request
+// may have a rank ([Request.Rank]): the meetings of rank 1 come first, then
+// those of rank 2, and so on; rank 0 meets at any time. A joint interview
+// never mixes two ranks.
 //
 // A candidate with [Candidate.Together] meets all their recruiters in one
 // single interview, or not at all: a meeting rather than interviews, such
@@ -32,6 +32,13 @@
 // such meetings too, as given, and a candidate may meet a recruiter in
 // several of them: the shoot of an episode, with the host and the camera
 // operator, then with them and a guest.
+//
+// A recruiter may be invited without being needed ([Request.Optional]): the
+// candidate is complete without them, and such a guest comes along when
+// they are free and the meetings held ([MaxMeetings]) are worth their time.
+// A candidate may also be what the period is built around
+// ([Candidate.Required]), a train or a room to give back: [Search] then
+// refuses to return a schedule without them.
 //
 // A recruiter may need time between two of their interviews, nights
 // included: [Recruiter.MinGap], to write notes for instance. When the

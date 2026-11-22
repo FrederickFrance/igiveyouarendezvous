@@ -75,7 +75,7 @@ func TestTheExactDayIsTheBestDay(t *testing.T) {
 
 	checked := 0
 
-	for seed := range uint64(80) {
+	for seed := range deepSeeds(t, 80) {
 		rnd := rand.New(rand.NewPCG(seed, 0x9e3779b97f4a7c15))
 		p, o := randomMeetings(rnd)
 
@@ -107,7 +107,9 @@ func TestTheExactDayIsTheBestDay(t *testing.T) {
 		}
 	}
 
-	require.Greater(t, checked, 100, "enough days were tried")
+	if usualSeeds() {
+		require.Greater(t, checked, 100, "enough days were tried")
+	}
 }
 
 // bruteBest tries every placement of the meetings of unit u in the free
@@ -181,7 +183,7 @@ func TestExactMovesKeepTheCountersAndTheRules(t *testing.T) {
 
 	exacted := 0
 
-	for seed := range uint64(40) {
+	for seed := range deepSeeds(t, 40) {
 		rnd := rand.New(rand.NewPCG(seed, 0x9e3779b97f4a7c15))
 
 		p, o := randomMeetings(rnd)
@@ -217,7 +219,9 @@ func TestExactMovesKeepTheCountersAndTheRules(t *testing.T) {
 		exacted += s.exacted
 	}
 
-	require.Greater(t, exacted, 100, "the exact move did run")
+	if usualSeeds() {
+		require.Greater(t, exacted, 100, "the exact move did run")
+	}
 }
 
 func TestASharePastOneOrBelowNoughtIsRefused(t *testing.T) {

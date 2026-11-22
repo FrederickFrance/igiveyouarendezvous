@@ -3,6 +3,7 @@ package planning
 import (
 	"fmt"
 	"math"
+	"math/bits"
 	"slices"
 	"time"
 )
@@ -115,7 +116,7 @@ func newInstance(p *Problem, opts Options) (*instance, error) {
 		return nil, err
 	}
 
-	in := &instance{p: p, o: o, crit: criteria(p, o.Objectives), trips: p.journeys()}
+	in := &instance{p: p, o: o, crit: searchCriteria(p, o.Objectives), trips: p.journeys()}
 	in.travel = in.trips.needed()
 
 	// Everything the grid must represent exactly, as times of day.
@@ -339,40 +340,33 @@ func (in *instance) addOptions(c int) error {
 	// interviews below.
 	order, meetings, others := in.meetingsOf(c)
 
-	// withAndWithoutGuests offers the interview as it is given, and again
-	// without the optional requests: the guests come along when they are
-	// free at that time, and the interview is held all the same when they
-	// are not (see Request.Optional).
-	withAndWithoutGuests := func(requests []int) {
-		add(requests)
-
-		var alone []int
-
-		for _, r := range requests {
-			if !in.p.Requests[r].Optional {
-				alone = append(alone, r)
-			}
+	// gather offers an interview that gathers several people, with every
+	// choice of its guests (see withGuests).
+	gather := func(requests []int) error {
+		choices, err := in.withGuests(c, requests)
+		for _, subset := range choices {
+			add(subset)
 		}
 
-		if len(alone) > 0 && len(alone) < len(requests) {
-			add(alone)
-		}
+		return err
 	}
 
 	for _, m := range order {
-		withAndWithoutGuests(meetings[m])
+		if err := gather(meetings[m]); err != nil {
+			return err
+		}
 	}
 
 	if in.p.Candidates[c].Together { // one interview with everybody
 		if len(others) > 0 {
-			withAndWithoutGuests(others)
+			return gather(others)
 		}
 
 		return nil
 	}
 
-	// The members of a panel, all at once; the others alone, or with the
-	// joint groups (which have no member of a panel).
+	// The members of a panel, all at once, but for its guests; the others
+	// alone, or with the joint groups (which have no member of a panel).
 	held := map[int]bool{}
 
 	for k := range in.p.Panels {
@@ -386,7 +380,9 @@ func (in *instance) addOptions(c int) error {
 		}
 
 		if len(members) > 0 {
-			add(members)
+			if err := gather(members); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -427,6 +423,57 @@ func (in *instance) addOptions(c int) error {
 	}
 
 	return nil
+}
+
+// withGuests returns the interviews on offer for requests of candidate c
+// held together: with everybody the interview cannot do without and, in
+// turn, every choice of its guests (see Request.Optional). Each guest comes
+// along when they are free at that time, and the interview is held all the
+// same without those who are not. The most guests come first, and the
+// interview without any of them last. An interview made of guests only has
+// nobody to be held around: it is offered whole.
+func (in *instance) withGuests(c int, requests []int) ([][]int, error) {
+	var guests []int
+
+	for _, r := range requests {
+		if in.p.Requests[r].Optional {
+			guests = append(guests, r)
+		}
+	}
+
+	if len(guests) == 0 || len(guests) == len(requests) {
+		return [][]int{requests}, nil
+	}
+
+	if !fewSubsets(len(guests), len(guests)) {
+		return nil, fmt.Errorf("planning: %s has %d guests in one interview, too many combinations",
+			in.p.Candidates[c].Name, len(guests))
+	}
+
+	// Every set of guests, as the bits of a number: sorted by how many
+	// come, then as the requests are given.
+	sets := make([]uint, 1<<len(guests))
+	for i := range sets {
+		sets[i] = uint(i)
+	}
+
+	slices.SortStableFunc(sets, func(a, b uint) int { return bits.OnesCount(b) - bits.OnesCount(a) })
+
+	out := make([][]int, 0, len(sets))
+
+	for _, set := range sets {
+		var subset []int
+
+		for _, r := range requests {
+			if k := slices.Index(guests, r); k < 0 || set>>k&1 == 1 {
+				subset = append(subset, r)
+			}
+		}
+
+		out = append(out, subset)
+	}
+
+	return out, nil
 }
 
 // fewSubsets tells whether a set of n items has at most maxOptionsPerGroup

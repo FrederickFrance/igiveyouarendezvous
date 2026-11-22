@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -151,5 +152,47 @@ func TestTheDemoLinksThePromptForAnAI(t *testing.T) {
 	for _, name := range []string{"en.md", "fr.md"} {
 		_, err := os.Stat(filepath.Join("..", "..", "prompt", name))
 		require.NoError(t, err, "prompt/%s", name)
+	}
+}
+
+// The demo shows the conclusion of the program in the language of the
+// page, by recognising its lines: a line worded otherwise on either side
+// simply disappears from the page, and nothing says so. Each conclusion
+// the program prints is therefore looked for in both.
+func TestTheDemoKnowsEveryConclusion(t *testing.T) {
+	t.Parallel()
+
+	demo, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	require.NoError(t, err)
+
+	program, err := os.ReadFile("print.go")
+	require.NoError(t, err)
+
+	for _, line := range []string{
+		"All meetings are planned.",
+		"All the meetings that were needed are planned.",
+		"To plan later:",
+		"Guests who are not there:",
+		"Impossible, available at no time of the period:",
+		"Impossible, never free together long enough:",
+	} {
+		require.Contains(t, string(program), line, "the program no longer prints this: the test is out of date")
+		require.Contains(t, string(demo), `"`+line+`"`, "the demo does not recognise this line of the program")
+	}
+
+	// And nothing else is printed after the objectives without the demo
+	// knowing: the lines of printLeft and printImpossible are those above.
+	from := bytes.Index(program, []byte("func printLeft("))
+	require.NotEqual(t, -1, from)
+
+	printed := regexp.MustCompile(`Fprint(?:f|ln)\(w, "(?:\\n)?([A-Z][^"%\\]*[.:])`).FindAllSubmatch(program[from:], -1)
+	require.NotEmpty(t, printed)
+
+	for _, m := range printed {
+		if bytes.HasPrefix(m[1], []byte("Journey shortened")) {
+			continue // a note, shown with the text output
+		}
+
+		require.Contains(t, string(demo), `"`+string(m[1])+`"`, "a conclusion the demo does not know")
 	}
 }

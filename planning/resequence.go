@@ -37,10 +37,12 @@ type retiming struct {
 
 	// chain holds, per candidate, the interviews of the earlier days and
 	// then the new ones; after holds those of the later days, which never
-	// move; masks holds the parts of chain.
+	// move; masks holds the parts of chain, and all those of the whole
+	// plan, as it was.
 	chain map[int][]placed
 	after map[int][]placed
 	masks map[int]uint64
+	all   map[int]uint64
 }
 
 // resequence re-times a random day. The plans of the other days stay as
@@ -60,6 +62,7 @@ func (s *searcher) resequence() bool {
 		chain: map[int][]placed{},
 		after: map[int][]placed{},
 		masks: map[int]uint64{},
+		all:   map[int]uint64{},
 	}
 
 	if !r.collect() {
@@ -69,7 +72,12 @@ func (s *searcher) resequence() bool {
 	r.reorder()
 	r.empty()
 
+	// The interviews put back are in the chains until the retiming is
+	// over, and not in the plans: the order between candidates must see
+	// them there.
+	s.ahead = r.chain
 	done := r.fill()
+	s.ahead = nil
 
 	for _, pl := range r.held {
 		s.hold(s.in.options[pl.option].candidate, pl, false)
@@ -117,6 +125,8 @@ func (r *retiming) collect() bool {
 		var block []int
 
 		for _, pl := range plan {
+			r.all[c] |= s.optMask[pl.option]
+
 			switch {
 			case pl.start < r.from:
 				r.chain[c] = append(r.chain[c], pl)
@@ -273,9 +283,13 @@ func (r *retiming) release(c int) bool {
 	return true
 }
 
-// ready tells whether every interview that u must follow is placed.
+// ready tells whether every interview that u must follow is placed: what
+// its candidate needs before it, and whatever else they hold of a lower
+// rank, such as a guest who came.
 func (r *retiming) ready(u unit) bool {
-	return r.s.before[u.options[0]]&^r.masks[u.candidate] == 0
+	o, c := u.options[0], u.candidate
+
+	return (r.s.before[o]|r.s.lower[o]&r.all[c])&^r.masks[c] == 0
 }
 
 // follows tells whether the interviews of the later days still come after

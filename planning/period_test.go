@@ -27,7 +27,7 @@ func TestPeriodsAgainstBruteForce(t *testing.T) {
 		t.Skip("exhaustive search")
 	}
 
-	for seed := range uint64(80) {
+	for seed := range planning.DeepSeeds(t, 80) {
 		t.Run("", func(t *testing.T) {
 			t.Parallel()
 

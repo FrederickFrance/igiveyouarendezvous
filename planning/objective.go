@@ -203,6 +203,28 @@ func ParseObjectives(list string) ([]Objective, error) {
 type criterion struct {
 	obj   Objective
 	level int
+	// required marks the criterion the search puts before every objective
+	// when some candidates are required (Candidate.Required): how many of
+	// them the schedule holds. They are out of the tallies of the
+	// objectives — a given is not an achievement — so no objective says
+	// that a schedule holding one more of them is better; without this the
+	// search could not tell, and holding one where it cost anything looked
+	// like a move to take back. It is the search's own: it stands for no
+	// objective and has no Score.
+	required bool
+}
+
+// searchCriteria returns the criteria the search compares schedules on:
+// those of the objectives, after one of its own when some candidates are
+// required (see criterion.required).
+func searchCriteria(p *Problem, objectives []Objective) []criterion {
+	crit := criteria(p, objectives)
+
+	if slices.ContainsFunc(p.Candidates, func(c Candidate) bool { return c.Required }) {
+		crit = slices.Insert(crit, 0, criterion{required: true})
+	}
+
+	return crit
 }
 
 // criteria expands the objectives into criteria: MaxPriorities stands for

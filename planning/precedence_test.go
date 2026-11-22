@@ -211,3 +211,54 @@ func TestDoubtsAcceptAnOrderTheHoursAllow(t *testing.T) {
 		require.NotContains(t, d.Text, "the order asked for cannot be held", "about %q", d.About)
 	}
 }
+
+// The order holds on a busy day too. With four interviews or more, the
+// search re-times a whole day: it takes the interviews out and puts them
+// back one by one, marked busy ahead of the plans, and the order between
+// candidates read the plans — where the candidates of that day had nothing
+// left. Two of them were then put back in whatever order the retiming took
+// them, the result was often the best schedule found, and Search refused
+// it in the end: "the search built an invalid schedule". Any file with an
+// order and a day of four interviews failed, every time.
+//
+// The test above could not see it: three interviews are no day to re-time.
+func TestARetimedDayKeepsTheOrder(t *testing.T) {
+	t.Parallel()
+
+	// Six candidates and three recruiters, two candidates each: a first,
+	// then b, then c; and d before e.
+	p := &planning.Problem{}
+	for i := range 3 {
+		p.Recruiters = append(p.Recruiters, planning.Recruiter{Name: string(rune('A' + i))})
+	}
+
+	for c := range 6 {
+		p.Candidates = append(p.Candidates, planning.Candidate{Name: string(rune('a' + c))})
+		p.Requests = append(p.Requests, planning.Request{Candidate: c, Recruiter: c % 3})
+	}
+
+	p.Precedences = []planning.Precedence{{Before: 0, After: 1}, {Before: 1, After: 2}, {Before: 3, After: 4}}
+
+	o := planning.Options{
+		Day:      []planning.Interval{{Start: clock(9, 0), End: clock(17, 0)}},
+		Duration: time.Hour,
+		MaxGap:   planning.Gap{Duration: planning.NoLimit},
+	}
+
+	for seed := range uint64(20) {
+		s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Seed: seed, Iterations: 2000})
+		require.NoError(t, err, "seed %d", seed)
+		require.NoError(t, planning.Check(p, o, s), "seed %d", seed)
+		require.Empty(t, s.Unscheduled, "seed %d", seed)
+
+		at := map[int]planning.Interview{}
+		for _, iv := range s.Interviews {
+			at[iv.Candidate] = iv
+		}
+
+		for _, pr := range p.Precedences {
+			require.LessOrEqual(t, at[pr.Before].End, at[pr.After].Start,
+				"seed %d: %s before %s", seed, p.Candidates[pr.Before].Name, p.Candidates[pr.After].Name)
+		}
+	}
+}

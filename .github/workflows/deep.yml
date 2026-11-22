@@ -1,0 +1,31 @@
+# The deep run of the tests, every week at night: the comparisons with an
+# exhaustive search and the walks over random problems, on thousands of
+# problems instead of a few dozen, and on new ones every week. A defect that
+# one problem in a thousand shows is out of reach of the ordinary run, which
+# must stay quick enough to run on every pull request; see scripts/deep.sh.
+# It changes nothing in the repository: on failure it opens an issue, and
+# closes it when a later run passes.
+name: Deep
+
+on:
+  schedule:
+    - cron: "23 1 * * 0" # Sunday night
+  workflow_dispatch: # "Run workflow" button, to try it
+
+permissions:
+  contents: read
+  issues: write # to open, update and close its one issue
+
+jobs:
+  deep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: The tests, on many more problems
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: sh scripts/deep.sh

@@ -25,7 +25,7 @@ func TestAgainstBruteForce(t *testing.T) {
 		t.Skip("exhaustive search")
 	}
 
-	for seed := range uint64(60) {
+	for seed := range planning.DeepSeeds(t, 60) {
 		t.Run(fmt.Sprint("seed ", seed), func(t *testing.T) {
 			t.Parallel()
 
@@ -67,7 +67,7 @@ func TestSearchKeepsAnOptimalStart(t *testing.T) {
 		t.Skip("exhaustive search")
 	}
 
-	for seed := range uint64(60) {
+	for seed := range planning.DeepSeeds(t, 60) {
 		t.Run(fmt.Sprint("seed ", seed), func(t *testing.T) {
 			t.Parallel()
 
@@ -275,7 +275,9 @@ func bestSchedule(t *testing.T, p *planning.Problem, o planning.Options) ([]int,
 				}
 			}
 
-			if planning.Check(p, o, s) != nil {
+			// A schedule without a required candidate is no answer: Search
+			// refuses to return one, so it is not among those to rank.
+			if planning.Check(p, o, s) != nil || !requiredServed(p, held) {
 				return
 			}
 
@@ -326,6 +328,18 @@ func bestSchedule(t *testing.T, p *planning.Problem, o planning.Options) ([]int,
 	walk(0)
 
 	return best, bestSched
+}
+
+// requiredServed tells whether every required candidate holds all they
+// cannot do without, counted here without the help of the library.
+func requiredServed(p *planning.Problem, held []bool) bool {
+	for r, req := range p.Requests {
+		if p.Candidates[req.Candidate].Required && !req.Optional && !held[r] {
+			return false
+		}
+	}
+
+	return true
 }
 
 // better compares lexicographically; the first two objectives are maximised.

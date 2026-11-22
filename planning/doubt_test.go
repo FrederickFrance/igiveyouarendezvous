@@ -63,3 +63,52 @@ func TestDoubtsReportARequiredCandidateWithoutRoom(t *testing.T) {
 	require.Len(t, doubts, 1)
 	require.Contains(t, doubts[0].Text, "they cannot be served at all")
 }
+
+// A guest is invited for the meetings held and for nothing else: without
+// that objective no guest ever comes, and the file that says "optional"
+// plans as if the word were not there. It is said once, with the first of
+// them, and not at all when the objective is there or when nobody is
+// optional.
+func TestDoubtsReportGuestsNothingPaysFor(t *testing.T) {
+	t.Parallel()
+
+	p := &planning.Problem{
+		Recruiters: []planning.Recruiter{{Name: "Us"}, {Name: "Cathedral"}, {Name: "Friend"}},
+		Candidates: []planning.Candidate{
+			{Name: "The cathedral", Together: true, Duration: time.Hour},
+			{Name: "A drink", Duration: time.Hour},
+		},
+		Requests: []planning.Request{
+			{Candidate: 0, Recruiter: 0},
+			{Candidate: 0, Recruiter: 1},
+			{Candidate: 0, Recruiter: 2, Optional: true},
+			{Candidate: 1, Recruiter: 2, Optional: true},
+		},
+	}
+
+	o := planning.Options{
+		Day:        []planning.Interval{{Start: clock(9, 0), End: clock(18, 0)}},
+		Objectives: []planning.Objective{planning.MaxPriorities, planning.MinRecruiterSpan, planning.MinDayEnds},
+	}
+
+	doubts := p.Doubts(o)
+	require.Len(t, doubts, 1)
+	require.Equal(t, "objectives", doubts[0].About)
+	require.Equal(t, `2 optional meetings (the first: The cathedral with Friend) and nothing to hold them for: `+
+		`a guest costs their time like anybody, and only "meetings" counts them — add it to the objectives, `+
+		`before those on the recruiters' time, or the guests all stay at home`, doubts[0].Text)
+
+	// With the meetings among the objectives, wherever they rank.
+	o.Objectives = append(o.Objectives, planning.MaxMeetings)
+	require.Empty(t, p.Doubts(o))
+
+	// With the objectives of the program, which count the meetings.
+	o.Objectives = nil
+	require.Empty(t, p.Doubts(o))
+
+	// Without a guest: the friend is needed, at the cathedral and for the
+	// drink.
+	o.Objectives = []planning.Objective{planning.MaxPriorities}
+	p.Requests[2].Optional, p.Requests[3].Optional = false, false
+	require.Empty(t, p.Doubts(o))
+}

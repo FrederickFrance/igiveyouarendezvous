@@ -301,7 +301,7 @@
                         },
                         "optional": {
                           "type": "boolean",
-                          "description": "Invites the recruiter without needing them (false by default): the candidate is complete without this meeting, and holding it is a bonus the search looks for. The guest who comes along if they can — a friend on an outing, a second assessor if they are free. The meeting is held with the guests who are free at that time and without the others."
+                          "description": "Invites the recruiter without needing them (false by default): the candidate is complete without this meeting, and holding it is a bonus the search looks for. The guest who comes along if they can — a friend on an outing, a second assessor if they are free. The meeting is held with the guests who are free at that time and without the others, and is never given up for a guest. Guests are invited for the sake of the objective \"meetings\": keep it among the objectives, before those on the recruiters' time."
                         }
                       }
                     }
