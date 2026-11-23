@@ -3,7 +3,6 @@ package planning
 import (
 	"fmt"
 	"math"
-	"math/bits"
 	"slices"
 	"time"
 )
@@ -322,11 +321,18 @@ func (in *instance) addOptions(c int) error {
 	add := func(subset []int) {
 		rank := 0
 
-		for _, r := range subset { // never two ranks in one interview
+		for i, r := range subset { // never two ranks in one interview
 			if k := in.p.Requests[r].Rank; k > 0 && rank > 0 && k != rank {
 				return
 			} else if k > 0 {
 				rank = k
+			}
+
+			// Never two alternatives of one choice: one is enough.
+			if ch := in.p.Requests[r].Choice; ch > 0 && slices.ContainsFunc(subset[:i], func(q int) bool {
+				return in.p.Requests[q].Choice == ch && in.p.Requests[q].Meeting == in.p.Requests[r].Meeting
+			}) {
+				return
 			}
 		}
 
@@ -427,53 +433,99 @@ func (in *instance) addOptions(c int) error {
 
 // withGuests returns the interviews on offer for requests of candidate c
 // held together: with everybody the interview cannot do without and, in
-// turn, every choice of its guests (see Request.Optional). Each guest comes
-// along when they are free at that time, and the interview is held all the
-// same without those who are not. The most guests come first, and the
-// interview without any of them last. An interview made of guests only has
-// nobody to be held around: it is offered whole.
+// turn, every choice of its guests (see Request.Optional) and of the
+// alternatives of its choices (see Request.Choice). Each guest comes along
+// when they are free at that time, and the interview is held all the same
+// without those who are not; each choice is made by one of its
+// alternatives, or by nobody for a choice of guests. The most people come
+// first, and the interview without any guest last. An interview made of
+// guests only has nobody to be held around: it is offered whole.
 func (in *instance) withGuests(c int, requests []int) ([][]int, error) {
-	var guests []int
+	// The places of the interview: a request, or the alternatives of a
+	// choice, which fill one place between them.
+	type place struct {
+		requests []int
+		guest    bool
+	}
+
+	var places []place
+
+	guests := true
 
 	for _, r := range requests {
-		if in.p.Requests[r].Optional {
-			guests = append(guests, r)
-		}
-	}
+		req := in.p.Requests[r]
+		guests = guests && req.Optional
 
-	if len(guests) == 0 || len(guests) == len(requests) {
-		return [][]int{requests}, nil
-	}
+		if req.Choice > 0 {
+			if k := slices.IndexFunc(places, func(pl place) bool {
+				q := in.p.Requests[pl.requests[0]]
 
-	if !fewSubsets(len(guests), len(guests)) {
-		return nil, fmt.Errorf("planning: %s has %d guests in one interview, too many combinations",
-			in.p.Candidates[c].Name, len(guests))
-	}
+				return q.Choice == req.Choice && q.Meeting == req.Meeting
+			}); k >= 0 {
+				places[k].requests = append(places[k].requests, r)
 
-	// Every set of guests, as the bits of a number: sorted by how many
-	// come, then as the requests are given.
-	sets := make([]uint, 1<<len(guests))
-	for i := range sets {
-		sets[i] = uint(i)
-	}
-
-	slices.SortStableFunc(sets, func(a, b uint) int { return bits.OnesCount(b) - bits.OnesCount(a) })
-
-	out := make([][]int, 0, len(sets))
-
-	for _, set := range sets {
-		var subset []int
-
-		for _, r := range requests {
-			if k := slices.Index(guests, r); k < 0 || set>>k&1 == 1 {
-				subset = append(subset, r)
+				continue
 			}
 		}
 
-		out = append(out, subset)
+		places = append(places, place{requests: []int{r}, guest: req.Optional})
 	}
 
-	return out, nil
+	// Each place takes one of its requests, or nobody for a guest: way[i]
+	// from 0 to len(requests), the last one being nobody.
+	total := 1
+
+	for i := range places {
+		places[i].guest = places[i].guest && !guests
+
+		ways := len(places[i].requests)
+		if places[i].guest {
+			ways++
+		}
+
+		total *= ways
+		if total > maxOptionsPerGroup {
+			return nil, fmt.Errorf("planning: %s has more than %d ways to gather one interview, with its guests and its choices: too many combinations",
+				in.p.Candidates[c].Name, maxOptionsPerGroup)
+		}
+	}
+
+	type gathering struct {
+		requests []int
+		present  int
+	}
+
+	out := make([]gathering, 0, total)
+
+	for n := range total {
+		var g gathering
+
+		for _, pl := range places {
+			ways := len(pl.requests)
+			if pl.guest {
+				ways++
+			}
+
+			if k := n % ways; k < len(pl.requests) {
+				g.requests = append(g.requests, pl.requests[k])
+				g.present++
+			}
+
+			n /= ways
+		}
+
+		slices.Sort(g.requests)
+		out = append(out, g)
+	}
+
+	slices.SortStableFunc(out, func(a, b gathering) int { return b.present - a.present })
+
+	choices := make([][]int, len(out))
+	for i, g := range out {
+		choices[i] = g.requests
+	}
+
+	return choices, nil
 }
 
 // fewSubsets tells whether a set of n items has at most maxOptionsPerGroup
@@ -570,24 +622,41 @@ func count(flags []bool) int {
 
 // parts returns the part of each request in its candidate's plan, as an
 // index from 0, and the number of parts of each candidate: a request
-// outside meetings is a part, a whole meeting is one (see Request.Meeting).
+// outside meetings is a part, a whole meeting is one (see Request.Meeting),
+// and so are the alternatives of a choice outside meetings (see
+// Request.Choice): a plan holds each part once, so it holds one of them.
 func (in *instance) parts() (part, parts []int) {
 	part = make([]int, len(in.p.Requests))
 	parts = make([]int, len(in.p.Candidates))
 
 	for c, requests := range in.requestsOf {
 		meeting := map[int]int{} // the part of each meeting
+		choice := map[int]int{}  // the part of each choice outside meetings
 
 		for _, r := range requests {
-			m := in.p.Requests[r].Meeting
-			if k, ok := meeting[m]; ok && m > 0 {
+			req := in.p.Requests[r]
+
+			if k, ok := meeting[req.Meeting]; ok && req.Meeting > 0 {
+				part[r] = k
+
+				continue
+			}
+
+			if k, ok := choice[req.Choice]; ok && req.Meeting == 0 && req.Choice > 0 {
 				part[r] = k
 
 				continue
 			}
 
 			part[r] = parts[c]
-			meeting[m] = parts[c]
+
+			switch {
+			case req.Meeting > 0:
+				meeting[req.Meeting] = parts[c]
+			case req.Choice > 0:
+				choice[req.Choice] = parts[c]
+			}
+
 			parts[c]++
 		}
 	}

@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=../../schema/problem.schema.json
+#
+# Un recruteur parmi plusieurs. Chaque candidat voit d'abord le manager,
+# puis un évaluateur technique : n'importe lequel des trois convient, et la
+# recherche prend celui qui arrange la journée. Demander un des trois au lieu
+# des trois, c'est ce qui fait tenir neuf candidats en deux jours avec des
+# évaluateurs présents chacun la moitié du temps. Le candidat qui a un
+# entretien en allemand a besoin de la seule évaluatrice qui le parle : pour
+# lui, pas de choix.
+
+from: 2026-11-24
+to: 2026-11-25
+day: 09:00-17:00
+breaks: 12:00-13:00
+duration: 45m
+max-gap: 2h
+
+objectives: [priorities, recruiter-span, candidate-wait]
+
+recruiters:
+  Marc (manager):
+    duration: 30m
+  Ada:
+    availability:
+      2026-11-24: 09:00-12:00
+      2026-11-25: 13:00-17:00
+  Ben:
+    availability:
+      2026-11-24: 13:00-17:00
+      2026-11-25: none
+  Cléo:
+    availability: 09:00-12:00
+
+candidates:
+  # La liste dans la liste est le choix : un parmi Ada, Ben ou Cléo. Le rang
+  # 1 puis le rang 2 mettent le manager en premier : dans la forme en
+  # mapping, les alternatives portent le même choix, et partagent leur rang.
+  Lena:
+    meet: {Marc (manager): 1, Ada: {rank: 2, choice: évaluateur}, Ben: {rank: 2, choice: évaluateur}, Cléo: {rank: 2, choice: évaluateur}}
+  Omar:
+    meet: {Marc (manager): 1, Ada: {rank: 2, choice: évaluateur}, Ben: {rank: 2, choice: évaluateur}, Cléo: {rank: 2, choice: évaluateur}}
+  Pia:
+    meet: [Marc (manager), [Ada, Ben, Cléo]]
+  Quentin:
+    meet: [Marc (manager), [Ada, Ben, Cléo]]
+  Rui:
+    meet: [Marc (manager), [Ada, Ben, Cléo]]
+  Sara:
+    meet: [Marc (manager), [Ada, Ben, Cléo]]
+  Tariq:
+    meet: [Marc (manager), [Ada, Ben, Cléo]]
+    priority: 2
+  Uma:
+    meet: [Marc (manager), [Ada, Ben]]   # Cléo l'a déjà vue
+  Viktor:
+    meet: [Marc (manager), Ada]          # l'entretien en allemand : Ada seule

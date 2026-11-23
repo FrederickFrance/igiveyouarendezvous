@@ -565,7 +565,7 @@ func TestTooManyGuestsInOneInterviewAreRefused(t *testing.T) {
 		Objectives: []planning.Objective{planning.MaxCompleteCandidates, planning.MaxMeetings},
 	}
 
-	require.ErrorContains(t, party(13).Validate(o), "Party has 13 guests in one interview, too many combinations")
+	require.ErrorContains(t, party(13).Validate(o), "Party has more than 4096 ways to gather one interview, with its guests and its choices: too many combinations")
 
 	// Twelve are planned, and all of them come.
 	s := searchPeriod(t, party(12), o)

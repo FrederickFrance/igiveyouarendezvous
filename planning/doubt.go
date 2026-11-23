@@ -404,8 +404,9 @@ func (p *Problem) roomDoubt(c int, o Options) []Doubt {
 
 // interviews returns the length of each interview candidate c is asked to
 // attend: one for everybody at once when Together, one per meeting, and one
-// per request held on its own. Joint groups may still gather some of them,
-// which only shortens the total, so the sum is an upper estimate.
+// per request held on its own, a choice counting for its shortest
+// alternative. Joint groups may still gather some of them, which only
+// shortens the total.
 func (p *Problem) interviews(c int, o Options) []time.Duration {
 	var alone []time.Duration
 
@@ -413,8 +414,21 @@ func (p *Problem) interviews(c int, o Options) []time.Duration {
 
 	var own []int
 
+	// One alternative of each choice, the shortest: a candidate who cannot
+	// be served with it cannot be served at all.
+	unit, _ := p.units()
+	shortest := map[int]int{}
+
 	for r, req := range p.Requests {
-		if req.Candidate != c || req.Optional {
+		if req.Candidate == c && req.Choice > 0 {
+			if q, ok := shortest[unit[r]]; !ok || p.requestDuration(r, o) < p.requestDuration(q, o) {
+				shortest[unit[r]] = r
+			}
+		}
+	}
+
+	for r, req := range p.Requests {
+		if req.Candidate != c || req.Optional || req.Choice > 0 && shortest[unit[r]] != r {
 			continue
 		}
 

@@ -73,9 +73,10 @@ func (s *Schedule) Proven() bool {
 // Remaining returns the problem left: the same people, with the same
 // availabilities, and only the requests still to hold. Those are the
 // requests that were not held, but for the optional ones (see
-// Request.Optional) of the candidates who are complete: their interviews
+// Request.Optional) of the candidates who are complete — their interviews
 // took place, and a guest who missed one is not asked again to an interview
-// that is over.
+// that is over — and for the alternatives of a choice made (see
+// Request.Choice).
 func (s *Schedule) Remaining(p *Problem) *Problem {
 	next := &Problem{
 		Recruiters:  slices.Clone(p.Recruiters),
@@ -93,8 +94,15 @@ func (s *Schedule) Remaining(p *Problem) *Problem {
 
 	complete := completeCandidates(p, held)
 
+	unit, n := p.units()
+	chosen := make([]bool, n) // a choice made: its other alternatives are not to plan
+
+	for r, h := range held {
+		chosen[unit[r]] = chosen[unit[r]] || h
+	}
+
 	for _, r := range s.Unscheduled {
-		if req := p.Requests[r]; !req.Optional || !complete[req.Candidate] {
+		if req := p.Requests[r]; !chosen[unit[r]] && (!req.Optional || !complete[req.Candidate]) {
 			next.Requests = append(next.Requests, req)
 		}
 	}
@@ -476,14 +484,8 @@ func checkGathering(p *Problem, o Options, iv Interview, recruiters []int, meeti
 			}
 		}
 
-		if must := gathering(p, all); !holds(iv.Requests, must) {
-			var names []int
-
-			for _, r := range must {
-				names = append(names, p.Requests[r].Recruiter)
-			}
-
-			return fmt.Errorf("%s meets %s in one interview, without anybody else", candidate, recruiterNames(p, slices.Sorted(slices.Values(names))))
+		if ok, who := gathered(p, all, iv.Requests); !ok {
+			return fmt.Errorf("%s meets %s in one interview, without anybody else", candidate, who)
 		}
 
 		return nil
@@ -506,7 +508,7 @@ func checkGathering(p *Problem, o Options, iv Interview, recruiters []int, meeti
 			}
 		}
 
-		if !holds(iv.Requests, gathering(p, all)) {
+		if ok, _ := gathered(p, all, iv.Requests); !ok {
 			return fmt.Errorf("%s meets everybody together, in one interview", candidate)
 		}
 	}
@@ -514,53 +516,118 @@ func checkGathering(p *Problem, o Options, iv Interview, recruiters []int, meeti
 	return nil
 }
 
-// gathering returns who an interview gathering the requests of all cannot
-// be held without: everybody but the guests (see Request.Optional), each of
-// whom comes along when they are free at that time. A gathering made of
-// guests only has nobody to be held around: it is held whole.
-func gathering(p *Problem, all []int) []int {
-	var must []int
+// gathered tells whether an interview holding the requests held gathers
+// everybody the requests of all cannot do without: everybody but the guests
+// (see Request.Optional), each of whom comes along when they are free at
+// that time, and one alternative of each choice (see Request.Choice). A
+// gathering made of guests only has nobody to be held around: it is held
+// whole. It also returns who is needed, in words, for a message.
+func gathered(p *Problem, all, held []int) (bool, string) {
+	unit, _ := p.units()
+
+	guests := true // all of them: then nobody is let off
+	for _, r := range all {
+		guests = guests && p.Requests[r].Optional
+	}
+
+	// The units needed, each with its recruiters, in the order of the
+	// recruiters, and whether the interview holds one of them.
+	type need struct {
+		names []int
+		in    bool
+	}
+
+	var (
+		order []int
+		needs = map[int]*need{}
+	)
 
 	for _, r := range all {
-		if !p.Requests[r].Optional {
-			must = append(must, r)
+		if p.Requests[r].Optional && !guests {
+			continue
 		}
+
+		u := unit[r]
+		if needs[u] == nil {
+			needs[u] = &need{}
+			order = append(order, u)
+		}
+
+		needs[u].names = append(needs[u].names, p.Requests[r].Recruiter)
+		needs[u].in = needs[u].in || slices.Contains(held, r)
 	}
 
-	if len(must) == 0 {
-		return all
+	slices.SortStableFunc(order, func(a, b int) int { return slices.Min(needs[a].names) - slices.Min(needs[b].names) })
+
+	ok := true
+	words := make([]string, 0, len(order))
+
+	for _, u := range order {
+		ok = ok && needs[u].in
+
+		names := slices.Sorted(slices.Values(needs[u].names))
+		if len(names) == 1 {
+			words = append(words, p.Recruiters[names[0]].Name)
+
+			continue
+		}
+
+		alternatives := make([]string, len(names))
+		for i, h := range names {
+			alternatives[i] = p.Recruiters[h].Name
+		}
+
+		words = append(words, "one of "+strings.Join(alternatives, " or "))
 	}
 
-	return must
+	return ok, joinNames(words)
 }
 
-// holds tells whether the requests held include all those of must.
-func holds(held, must []int) bool {
-	for _, r := range must {
-		if !slices.Contains(held, r) {
-			return false
-		}
+// joinNames joins names as recruiterNames does: "A and B", "A, B and C".
+func joinNames(names []string) string {
+	if len(names) < 3 {
+		return strings.Join(names, " and ")
 	}
 
-	return true
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
 }
 
 // checkCandidates verifies "all or nothing", and the gaps and the order of
 // the interviews of each candidate.
 func checkCandidates(p *Problem, o Options, s *Schedule, held []int, breaks []Interval) error {
-	needed := make([]int, len(p.Candidates)) // the requests that are not optional
+	unit, n := p.units()
+	needed := make([]int, len(p.Candidates)) // the units that are not optional
 	got := make([]int, len(p.Candidates))    // every request held, guests included
-	kept := make([]int, len(p.Candidates))   // the ones that are not optional
+	kept := make([]int, len(p.Candidates))   // the units held that are not optional
+	first := make([]int, n)                  // the request held of each unit, or -1
+	counted := make([]bool, n)
+
+	for u := range first {
+		first[u] = -1
+	}
 
 	for r, req := range p.Requests {
-		if !req.Optional { // a guest may be missing without the rest failing
+		u := unit[r]
+		if !counted[u] && !req.Optional { // a guest may be missing without the rest failing
+			counted[u] = true
 			needed[req.Candidate]++
 		}
 
-		got[req.Candidate] += held[r]
+		if held[r] == 0 {
+			continue
+		}
+
+		got[req.Candidate]++
+
+		if q := first[u]; q >= 0 { // one alternative is enough, and two are one too many
+			return fmt.Errorf("%s meets %s and %s, one choice of which is enough",
+				p.Candidates[req.Candidate].Name, recruiterOf(p, q), recruiterOf(p, r))
+		}
+
+		first[u] = r
 
 		if !req.Optional {
-			kept[req.Candidate] += held[r]
+			kept[req.Candidate]++
 		}
 	}
 
@@ -977,11 +1044,19 @@ func waitScore(p *Problem, s *Schedule, obj Objective) int {
 // requests held. A guest invited with Request.Optional and unable to come
 // does not make the candidate incomplete — that is the whole point of the
 // guest — so only the requests that are not optional are counted, exactly
-// as checkCandidates counts them for "all or nothing". A candidate whose
-// every request is optional needs nothing and is never complete, whatever
-// they hold: their interviews are a bonus, counted as meetings and not as
-// a candidate served.
+// as checkCandidates counts them for "all or nothing", and one alternative
+// of a choice holds the whole choice (see Request.Choice). A candidate
+// whose every request is optional needs nothing and is never complete,
+// whatever they hold: their interviews are a bonus, counted as meetings and
+// not as a candidate served.
 func completeCandidates(p *Problem, held []bool) []bool {
+	unit, n := p.units()
+	got := make([]bool, n)
+
+	for r, h := range held {
+		got[unit[r]] = got[unit[r]] || h
+	}
+
 	missing := make([]int, len(p.Candidates))
 	needs := make([]bool, len(p.Candidates))
 
@@ -992,7 +1067,7 @@ func completeCandidates(p *Problem, held []bool) []bool {
 
 		needs[req.Candidate] = true
 
-		if !held[r] {
+		if !got[unit[r]] {
 			missing[req.Candidate]++
 		}
 	}

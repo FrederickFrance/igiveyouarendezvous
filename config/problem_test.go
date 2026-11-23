@@ -491,7 +491,7 @@ func TestMeetingsOfTheFile(t *testing.T) {
 		"    meetings: [[Host]]":                                                       "Episode: line 5: a meeting is {with: [recruiters], duration: 1h}, with times or a rank if needed",
 		"    meetings: [{duration: 1h}]":                                               "Episode: line 5: a meeting without anybody: with lists the recruiters met at once",
 		"    meetings: [{with: []}]":                                                   "Episode: line 5: a meeting without anybody: with lists the recruiters met at once",
-		"    meetings: [{with: Host}]":                                                 "Episode: line 5: with lists the recruiters met at once, such as [Host, Camera]",
+		"    meetings: [{with: Host}]":                                                 "Episode: line 5: with lists the recruiters met at once, such as [Host, Camera], or [Host, [Camera 1, Camera 2]] for one camera of two",
 		"    meetings: [{with: [Host], times: 0}]":                                     "Episode: line 5: times is the number of such meetings, 1 or more",
 		"    meetings: [{with: [Host], duration: 2}]":                                  "Episode: line 5: the duration of a meeting has its unit, such as 45m or 1h",
 		"    meetings: [{with: [Host], rank: first}]":                                  "Episode: line 5: the rank of a meeting is 1, 2... or X for any time",
@@ -661,4 +661,78 @@ candidates:
 	// or not at all, and a walk that took place is not planned again.
 	left = slices.DeleteFunc(left, func(r int) bool { return r == friend("A drink") || r == friend("A walk") })
 	require.Equal(t, []string{"The museum"}, candidates())
+}
+
+// One recruiter among several reaches the library as a choice of the
+// candidate, numbered from 1 for each candidate, whether written as a list
+// within the list, with the key choice, or in a meeting.
+func TestAChoiceOfTheFile(t *testing.T) {
+	t.Parallel()
+
+	f, err := Parse([]byte(`
+recruiters: {Manager: , Ada: , Ben: , Cleo: , Host: , Camera 1: , Camera 2: }
+candidates:
+  A:
+    meet: [Manager, [Ada, Ben, Cleo]]
+  B:
+    meet: {Manager: 1, Ada: {rank: 2, choice: assessor}, Ben: {rank: 2, choice: assessor}}
+  Shoot:
+    meetings: [{with: [Host, [Camera 1, Camera 2]], times: 2}]
+`))
+	require.NoError(t, err)
+
+	p, _, err := f.Problem("", "")
+	require.NoError(t, err)
+
+	type request struct {
+		candidate, recruiter string
+		meeting, choice      int
+	}
+
+	var got []request
+	for _, r := range p.Requests {
+		got = append(got, request{p.Candidates[r.Candidate].Name, p.Recruiters[r.Recruiter].Name, r.Meeting, r.Choice})
+	}
+
+	require.Equal(t, []request{
+		{"A", "Manager", 0, 0}, {"A", "Ada", 0, 1}, {"A", "Ben", 0, 1}, {"A", "Cleo", 0, 1},
+		{"B", "Manager", 0, 0}, {"B", "Ada", 0, 1}, {"B", "Ben", 0, 1},
+		{"Shoot", "Host", 1, 0}, {"Shoot", "Camera 1", 1, 1}, {"Shoot", "Camera 2", 1, 1},
+		{"Shoot", "Host", 2, 0}, {"Shoot", "Camera 1", 2, 1}, {"Shoot", "Camera 2", 2, 1},
+	}, got)
+
+	// The alternatives of one choice share their rank: the library says so.
+	f, err = Parse([]byte("recruiters: {Ada: , Ben: }\ncandidates:\n  A: {meet: {Ada: {rank: 1, choice: x}, Ben: {rank: 2, choice: x}}}\n"))
+	require.NoError(t, err)
+
+	p, o, err := f.Problem("", "")
+	require.NoError(t, err)
+	require.ErrorContains(t, p.Validate(o), "the alternatives Ada and Ben of one choice differ in rank or in being optional")
+}
+
+// A choice needs one of its alternatives on a day, not all of them: the
+// days left of a candidate who meets Ada or Ben are those on which either is
+// there.
+func TestDaysLeftWithAChoice(t *testing.T) {
+	t.Parallel()
+
+	f, err := Parse([]byte(`
+recruiters:
+  Manager:
+  Ada:
+    availability: {2026-11-03: 09:00-12:00, 2026-11-04: none, 2026-11-05: 09:00-12:00, 2026-11-06: none}
+  Ben:
+    availability: {2026-11-03: none, 2026-11-04: 09:00-12:00, 2026-11-05: none, 2026-11-06: 09:00-12:00}
+candidates:
+  Either: {meet: [Manager, [Ada, Ben]]}
+  Both: {meet: [Manager, Ada, Ben]}
+  Named: {meet: {Manager: , Ada: {choice: one}, Ben: {choice: one}}}
+`))
+	require.NoError(t, err)
+
+	p, _, err := f.Problem("2026-11-04", "")
+	require.NoError(t, err)
+	require.Equal(t, 3, p.Candidates[0].DaysLeft, "the 4th with Ben, the 5th with Ada, the 6th with Ben")
+	require.Equal(t, 0, p.Candidates[1].DaysLeft, "never both")
+	require.Equal(t, 3, p.Candidates[2].DaysLeft)
 }

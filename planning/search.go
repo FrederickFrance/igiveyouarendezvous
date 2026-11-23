@@ -370,6 +370,7 @@ type searcher struct {
 	fewest        [][]int8 // [candidate][mask]: fewest interviews holding the parts of mask
 	optMask       []uint64 // parts of each option
 	fullMask      []uint64 // every part of each candidate
+	unitOf        []int    // [request]: the meeting it counts as (see Problem.units)
 	// needMask[candidate]: the parts the candidate cannot do without, which
 	// is every part but those made only of optional requests (see
 	// Request.Optional). Complete means holding these, no more.
@@ -528,6 +529,7 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 	s.indexPrecedences()
 
 	part, parts := in.parts()
+	s.unitOf, _ = in.p.units()
 
 	if err := s.maskParts(part, parts); err != nil {
 		return nil, err
@@ -743,15 +745,32 @@ func (s *searcher) capacity() int {
 		eligible++
 		cost := 0
 		of := make([]int, len(free))
+		shortest := map[int]int{} // of each choice (see Request.Choice), by unit
 
 		for _, r := range s.in.requestsOf[c] {
-			if s.in.p.Requests[r].Optional {
+			req := s.in.p.Requests[r]
+			if req.Optional {
 				continue
 			}
 
 			length := int(s.in.p.length([]int{r}, s.in.o) / time.Minute)
+
+			// A choice takes the time of one of its alternatives, the
+			// shortest at least, and of none of them in particular.
+			if req.Choice > 0 {
+				if k, ok := shortest[s.unitOf[r]]; !ok || length < k {
+					shortest[s.unitOf[r]] = length
+				}
+
+				continue
+			}
+
 			cost += length
-			of[s.in.p.Requests[r].Recruiter] += length
+			of[req.Recruiter] += length
+		}
+
+		for _, length := range shortest {
+			cost += length
 		}
 
 		costs = append(costs, cost)
@@ -1206,29 +1225,49 @@ func prepare(in *instance, start *Schedule) (*prepared, error) {
 	}
 
 	// The fixed plans first, one by one: a plan that breaks a rule, with the
-	// plans added before, is left out.
+	// plans added before, is left out. The spread of the breaks
+	// (Options.BreakSpread) is a rule of the whole schedule and not of a
+	// plan: a part of the plans may break it where all of them keep it, so
+	// it is checked on all of them, and plan by plan only when they break it
+	// together. Checked plan by plan in any case, it once refused a schedule
+	// the search had given, when the search resumed from it.
 	others := map[int][]Interview{}
 
-	for _, c := range order {
-		plan := byCandidate[c]
-		if !fixed[c] {
-			others[c] = plan
+	before := slices.Clone(pr.rejected) // the plans refused for other reasons, before
 
-			continue
+	accept := func(o Options) {
+		pr.fixed, pr.rejected = nil, slices.Clone(before)
+
+		for _, c := range order {
+			plan := byCandidate[c]
+			if !fixed[c] {
+				others[c] = plan
+
+				continue
+			}
+
+			for i := range plan {
+				plan[i].Fixed = true
+			}
+
+			if reason := fixedProblem(p, o, pr.fixed, c, plan); reason != "" {
+				pr.rejected = append(pr.rejected, Rejected{c, plan, reason})
+
+				continue
+			}
+
+			pr.fixed = append(pr.fixed, plan...)
+			pr.pinned[c] = true
 		}
+	}
 
-		for i := range plan {
-			plan[i].Fixed = true
-		}
+	loose := in.o
+	loose.BreakSpread = nil
+	accept(loose)
 
-		if reason := fixedProblem(p, in.o, pr.fixed, c, plan); reason != "" {
-			pr.rejected = append(pr.rejected, Rejected{c, plan, reason})
-
-			continue
-		}
-
-		pr.fixed = append(pr.fixed, plan...)
-		pr.pinned[c] = true
+	if checkSpread(p, in.o, &Schedule{Interviews: pr.fixed}) != nil {
+		clear(pr.pinned)
+		accept(in.o)
 	}
 
 	s, err := newSearcher(in, 0)

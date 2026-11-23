@@ -40,6 +40,8 @@
 //	  candidate B:
 //	    meet: {recruiter 1: 1, recruiter 2: X, recruiter 3: 2}   # recruiter 1, then 3; 2 any time
 //	    duration: 45m                        # in place of the recruiters' durations
+//	  candidate C:
+//	    meet: [recruiter 1, [recruiter 2, recruiter 3]]   # recruiter 1, and one of 2 or 3
 //	  a meeting:
 //	    meet: [recruiter 1, recruiter 2]
 //	    together: true                       # everybody at once, or not at all
@@ -521,6 +523,7 @@ func (f *File) Problem(from, to string) (*planning.Problem, planning.Options, er
 		p.Candidates = append(p.Candidates, cand)
 
 		met := map[int]bool{}
+		choices := map[string]int{} // the number of each choice, from 1
 
 		for _, m := range e.Value.Meet {
 			h, ok := recruiters[NormalizeName(m.Recruiter)]
@@ -533,7 +536,17 @@ func (f *File) Problem(from, to string) (*planning.Problem, planning.Options, er
 			}
 
 			met[h] = true
-			p.Requests = append(p.Requests, planning.Request{Candidate: c, Recruiter: h, Rank: m.Rank, Duration: m.Duration, Optional: m.Optional})
+			req := planning.Request{Candidate: c, Recruiter: h, Rank: m.Rank, Duration: m.Duration, Optional: m.Optional}
+
+			if m.Choice != "" {
+				if _, ok := choices[m.Choice]; !ok {
+					choices[m.Choice] = len(choices) + 1
+				}
+
+				req.Choice = choices[m.Choice]
+			}
+
+			p.Requests = append(p.Requests, req)
 		}
 
 		if p.Requests, err = meetings(p.Requests, c, e, recruiters, o.Duration); err != nil {
@@ -667,8 +680,8 @@ func meetings(requests []planning.Request, c int, e Entry[Candidate], recruiters
 		for range m.Times {
 			number++
 
-			for _, h := range hs {
-				requests = append(requests, planning.Request{Candidate: c, Recruiter: h, Rank: m.Rank, Duration: length, Meeting: number})
+			for i, h := range hs {
+				requests = append(requests, planning.Request{Candidate: c, Recruiter: h, Rank: m.Rank, Duration: length, Meeting: number, Choice: m.Choice[i]})
 			}
 		}
 	}
@@ -700,27 +713,49 @@ func groups(key string, names [][]string, recruiters map[string]int) ([][]int, e
 }
 
 // daysLeft counts the working dates of the file, from date on, on which
-// candidate c and all their recruiters are available (for the objective
-// "urgency"); 0 when none of them has an availability by date. It does not
-// check that they are free at the same time.
+// candidate c and all their recruiters are available, one of each choice
+// being enough (for the objective "urgency"); 0 when none of them has an
+// availability by date. It does not check that they are free at the same
+// time.
 func (f *File) daysLeft(c Candidate, date string) int {
-	people := []Availability{c.Availability}
+	// Each group is somebody to have: the candidate, a recruiter, or the
+	// recruiters of one choice, any of whom will do.
+	groups := [][]Availability{{c.Availability}}
+	choice := map[string]int{} // the group of each choice
 
 	for _, m := range c.Meet {
-		if i := slices.IndexFunc(f.Recruiters, func(e Entry[Recruiter]) bool { return e.Name == NormalizeName(m.Recruiter) }); i >= 0 {
-			people = append(people, f.Recruiters[i].Value.Availability)
+		i := slices.IndexFunc(f.Recruiters, func(e Entry[Recruiter]) bool { return e.Name == NormalizeName(m.Recruiter) })
+		if i < 0 {
+			continue
 		}
+
+		a := f.Recruiters[i].Value.Availability
+
+		if k, ok := choice[m.Choice]; ok && m.Choice != "" {
+			groups[k] = append(groups[k], a)
+
+			continue
+		}
+
+		if m.Choice != "" {
+			choice[m.Choice] = len(groups)
+		}
+
+		groups = append(groups, []Availability{a})
 	}
 
-	if date == "" || !slices.ContainsFunc(people, func(a Availability) bool { return a.Dates != nil }) {
+	if date == "" || !slices.ContainsFunc(groups, func(g []Availability) bool {
+		return slices.ContainsFunc(g, func(a Availability) bool { return a.Dates != nil })
+	}) {
 		return 0
 	}
 
 	days := 0
 
 	for _, d := range f.Dates() {
-		if d >= date && f.working(d) &&
-			!slices.ContainsFunc(people, func(a Availability) bool { return !f.available(a, d) }) {
+		if d >= date && f.working(d) && !slices.ContainsFunc(groups, func(g []Availability) bool {
+			return !slices.ContainsFunc(g, func(a Availability) bool { return f.available(a, d) })
+		}) {
 			days++
 		}
 	}

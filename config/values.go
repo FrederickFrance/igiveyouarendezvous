@@ -210,6 +210,10 @@ type Meet struct {
 	// Optional invites the recruiter without needing them (see
 	// planning.Request): the guest who comes along if they can.
 	Optional bool
+	// Choice names the choice the recruiter is one alternative of (see
+	// planning.Request.Choice): the candidate meets one of the recruiters
+	// with the same Choice. Empty for a recruiter to meet in any case.
+	Choice string
 }
 
 // Meets lists the recruiters to meet: a list, in any order, or a mapping of
@@ -220,7 +224,11 @@ type Meet struct {
 //	meet: {recruiter 1: 1, recruiter 2: X, recruiter 3: 2}
 //	meet: {recruiter 1: 15m, recruiter 2: {rank: 1, duration: 1h}}
 //
-// A bare number is a rank: a duration needs its unit.
+// A bare number is a rank: a duration needs its unit. One recruiter among
+// several is a list within the list, or the same choice in the mapping:
+//
+//	meet: [recruiter 1, [assessor 1, assessor 2, assessor 3]]
+//	meet: {recruiter 1: 1, assessor 1: {rank: 2, choice: assessor}, assessor 2: {rank: 2, choice: assessor}}
 type Meets []Meet
 
 // UnmarshalYAML implements yaml.Unmarshaler.
@@ -229,12 +237,21 @@ func (m *Meets) UnmarshalYAML(n *yaml.Node) error {
 
 	switch n.Kind {
 	case yaml.SequenceNode:
-		for _, item := range n.Content {
-			if item.Kind != yaml.ScalarNode {
-				return fmt.Errorf("line %d: a recruiter name is expected", item.Line)
+		for i, item := range n.Content {
+			if item.Kind == yaml.ScalarNode {
+				out = append(out, Meet{Recruiter: item.Value})
+
+				continue
 			}
 
-			out = append(out, Meet{Recruiter: item.Value})
+			names, err := readChoice(item)
+			if err != nil {
+				return err
+			}
+
+			for _, name := range names { // a choice named by its place in the list
+				out = append(out, Meet{Recruiter: name, Choice: fmt.Sprintf("#%d", i+1)})
+			}
 		}
 	case yaml.MappingNode:
 		for i := 0; i+1 < len(n.Content); i += 2 {
@@ -273,8 +290,12 @@ func readMeet(key, value *yaml.Node) (Meet, error) {
 				meet.Duration, err = readMeetDuration(v)
 			case "optional":
 				meet.Optional, err = readBool(v)
+			case "choice":
+				if meet.Choice = strings.TrimSpace(v.Value); v.Kind != yaml.ScalarNode || meet.Choice == "" {
+					return meet, fmt.Errorf("line %d: %s: choice names the choice, the same for the recruiters of whom the candidate meets one", v.Line, key.Value)
+				}
 			default:
-				return meet, fmt.Errorf("line %d: %s: unknown key %q (known: duration, rank, optional)", k.Line, key.Value, k.Value)
+				return meet, fmt.Errorf("line %d: %s: unknown key %q (known: choice, duration, rank, optional)", k.Line, key.Value, k.Value)
 			}
 
 			if err != nil {
@@ -612,6 +633,7 @@ func (j *Journey) UnmarshalYAML(n *yaml.Node) error {
 // (see planning.Request.Meeting).
 type Meeting struct {
 	With     []string // normalised (see NormalizeName)
+	Choice   []int    // of each of With: 0, or the choice it is one alternative of, from 1
 	Duration time.Duration
 	Times    int // how many such meetings, 1 by default
 	Rank     int // 1, 2...; 0 for any time
@@ -633,7 +655,7 @@ func (m *Meeting) UnmarshalYAML(n *yaml.Node) error {
 
 		switch k.Value {
 		case "with":
-			meeting.With, err = readNames(v)
+			meeting.With, meeting.Choice, err = readWith(v)
 		case "duration":
 			meeting.Duration, err = readMeetDuration(v)
 			if err != nil {
@@ -654,7 +676,7 @@ func (m *Meeting) UnmarshalYAML(n *yaml.Node) error {
 		}
 
 		if err != nil {
-			return fmt.Errorf("line %d: with lists the recruiters met at once, such as [Host, Camera]", v.Line)
+			return fmt.Errorf("line %d: with lists the recruiters met at once, such as [Host, Camera], or [Host, [Camera 1, Camera 2]] for one camera of two", v.Line)
 		}
 	}
 
@@ -667,24 +689,65 @@ func (m *Meeting) UnmarshalYAML(n *yaml.Node) error {
 	return nil
 }
 
-// readNames reads a non-empty list of names.
-func readNames(n *yaml.Node) ([]string, error) {
-	if n.Kind != yaml.SequenceNode {
-		return nil, errors.New("a list of names is expected")
+// readChoice reads a choice written as a list within a list: the names of
+// two recruiters or more, of whom the candidate meets one.
+func readChoice(n *yaml.Node) ([]string, error) {
+	wrong := fmt.Errorf("line %d: a recruiter, or a list of two or more of whom one is met, such as [Ada, Ben], is expected", n.Line)
+	if n.Kind != yaml.SequenceNode || len(n.Content) < 2 {
+		return nil, wrong
 	}
 
 	names := make([]string, 0, len(n.Content))
 
 	for _, item := range n.Content {
-		name := NormalizeName(item.Value)
-		if item.Kind != yaml.ScalarNode || name == "" {
-			return nil, errors.New("a list of names is expected")
+		if item.Kind != yaml.ScalarNode || NormalizeName(item.Value) == "" {
+			return nil, wrong
 		}
 
-		names = append(names, name)
+		names = append(names, item.Value)
 	}
 
 	return names, nil
+}
+
+// readWith reads the recruiters of a meeting: names, and lists of names of
+// whom one comes, each list being a choice numbered from 1.
+func readWith(n *yaml.Node) ([]string, []int, error) {
+	if n.Kind != yaml.SequenceNode {
+		return nil, nil, errors.New("a list of names is expected")
+	}
+
+	var (
+		names  []string
+		choice []int
+		k      int
+	)
+
+	for _, item := range n.Content {
+		if item.Kind == yaml.ScalarNode {
+			name := NormalizeName(item.Value)
+			if name == "" {
+				return nil, nil, errors.New("a list of names is expected")
+			}
+
+			names, choice = append(names, name), append(choice, 0)
+
+			continue
+		}
+
+		alternatives, err := readChoice(item)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		k++
+
+		for _, name := range alternatives {
+			names, choice = append(names, NormalizeName(name)), append(choice, k)
+		}
+	}
+
+	return names, choice, nil
 }
 
 // readBool reads true or false.

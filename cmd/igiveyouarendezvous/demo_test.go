@@ -196,3 +196,50 @@ func TestTheDemoKnowsEveryConclusion(t *testing.T) {
 		require.Contains(t, string(demo), `"`+string(m[1])+`"`, "a conclusion the demo does not know")
 	}
 }
+
+// A choice is named "one of A, B or C" in the lists of the conclusion, and
+// the demo in French says "un parmi A, B ou C": the two must stay worded
+// alike, or the choice stays in English on a French page.
+func TestTheDemoTranslatesAChoice(t *testing.T) {
+	t.Parallel()
+
+	program, err := os.ReadFile("print.go")
+	require.NoError(t, err)
+	require.Contains(t, string(program), `"one of "+strings.Join(g.names[:n-1], ", ")+" or "+g.names[n-1]`)
+
+	demo, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	require.NoError(t, err)
+	require.Contains(t, string(demo), "/one of ([^(),]+(?:, [^(),]+)*) or ([^(),]+)/g")
+	require.Contains(t, string(demo), "`un parmi ${first} ou ${last}`")
+}
+
+// The demo offers the examples that scripts/web.sh copies to the site, and
+// nothing else: an example listed in the page and not copied is a button that
+// loads nothing, and the one example added since was, until this test.
+func TestTheDemoOffersTheExamplesItCopies(t *testing.T) {
+	t.Parallel()
+
+	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	require.NoError(t, err)
+
+	var offered []string
+	for _, m := range regexp.MustCompile(`\{ file: "([a-z-]+)\.yaml"`).FindAllSubmatch(app, -1) {
+		offered = append(offered, string(m[1]))
+	}
+
+	script, err := os.ReadFile(filepath.Join("..", "..", "scripts", "web.sh"))
+	require.NoError(t, err)
+
+	m := regexp.MustCompile(`(?m)^for example in ([a-z -]+); do$`).FindSubmatch(script)
+	require.NotNil(t, m, "the loop over the examples in scripts/web.sh")
+
+	copied := strings.Fields(string(m[1]))
+	require.NotEmpty(t, offered)
+	require.ElementsMatch(t, offered, copied)
+
+	for _, name := range copied {
+		for _, dir := range []string{"example", filepath.Join("example", "fr")} {
+			require.FileExists(t, filepath.Join("..", "..", dir, name+".yaml"))
+		}
+	}
+}

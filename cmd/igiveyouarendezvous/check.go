@@ -38,7 +38,7 @@ func checkProblem(w io.Writer, f *config.File, p *planning.Problem, o planning.O
 
 	fmt.Fprintf(w, "%s, %s, %s over %s",
 		count(len(p.Candidates), "candidate"), count(len(p.Recruiters), "recruiter"),
-		count(len(p.Requests), "meeting"), count(pe.open, "open day"))
+		count(meetingsAsked(p), "meeting"), count(pe.open, "open day"))
 
 	if len(pe.dates) > 0 {
 		fmt.Fprintf(w, ", from %s to %s", pe.dates[0], pe.dates[len(pe.dates)-1])

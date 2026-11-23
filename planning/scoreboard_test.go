@@ -173,6 +173,23 @@ func randomOuting(rnd *rand.Rand) (*Problem, Options) {
 			}
 		}
 
+		// One recruiter among two, now and then (see Request.Choice): two
+		// requests of the same meeting, outside the ranks.
+		if rnd.IntN(3) == 0 {
+			var pair []int
+
+			for r, req := range p.Requests {
+				if req.Candidate == c && req.Rank == 0 && (len(pair) == 0 || p.Requests[pair[0]].Meeting == req.Meeting) {
+					pair = append(pair, r)
+				}
+			}
+
+			if len(pair) >= 2 {
+				p.Requests[pair[0]].Choice, p.Requests[pair[1]].Choice = 1, 1
+				p.Requests[pair[1]].Optional = p.Requests[pair[0]].Optional
+			}
+		}
+
 		// Required, now and then, when there is something to require.
 		if rnd.IntN(6) == 0 && slices.ContainsFunc(p.Requests, func(r Request) bool { return r.Candidate == c && !r.Optional }) {
 			cand.Required = true

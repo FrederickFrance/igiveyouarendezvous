@@ -194,8 +194,11 @@ func TestMeets(t *testing.T) {
 		"{R1: {rank: 0}}":        "a rank is expected",
 		"{R1: {duration: 30}}":   "a rank is expected",
 		"{R1: {duration: [1h]}}": "a rank is expected",
-		"{R1: {length: 1h}}":     `line 1: R1: unknown key "length" (known: duration, rank, optional)`,
-		"[[R1]]":                 "a recruiter name is expected",
+		"{R1: {length: 1h}}":     `line 1: R1: unknown key "length" (known: choice, duration, rank, optional)`,
+		"[[R1]]":                 "line 1: a recruiter, or a list of two or more of whom one is met, such as [Ada, Ben], is expected",
+		"[R1, [R2, [R3]]]":       "a list of two or more of whom one is met",
+		"{R1: {choice: }}":       "line 1: R1: choice names the choice",
+		"{R1: {choice: [a]}}":    "choice names the choice",
 		"R1":                     "the recruiters to meet are expected",
 	} {
 		_, err := decodeYAML[Meets](t, text)
@@ -306,4 +309,32 @@ func TestAGuestIsReadFromTheMeeting(t *testing.T) {
 
 	require.False(t, byName["Market"].Optional)
 	require.True(t, byName["Annick"].Optional, "the guest who comes along if she can")
+}
+
+// One recruiter among several is a list within the list of meet, numbered by
+// its place, or the same choice named in the mapping, with a rank and the
+// rest; and a list within with, in a meeting.
+func TestMeetsWithAChoice(t *testing.T) {
+	t.Parallel()
+
+	m, err := decodeYAML[Meets](t, "[Manager, [Ada, Ben, Cleo], Lab]")
+	require.NoError(t, err)
+	require.Equal(t, Meets{
+		{Recruiter: "Manager"},
+		{Recruiter: "Ada", Choice: "#2"}, {Recruiter: "Ben", Choice: "#2"}, {Recruiter: "Cleo", Choice: "#2"},
+		{Recruiter: "Lab"},
+	}, m)
+
+	m, err = decodeYAML[Meets](t, "{Manager: 1, Ada: {rank: 2, choice: assessor}, Ben: {rank: 2, choice: assessor, duration: 45m}}")
+	require.NoError(t, err)
+	require.Equal(t, Meets{
+		{Recruiter: "Manager", Rank: 1},
+		{Recruiter: "Ada", Rank: 2, Choice: "assessor"},
+		{Recruiter: "Ben", Rank: 2, Choice: "assessor", Duration: 45 * time.Minute},
+	}, m)
+
+	meeting, err := decodeYAML[Meeting](t, "{with: [Host, [Camera 1, Camera 2], [Sound 1, Sound 2]], duration: 1h}")
+	require.NoError(t, err)
+	require.Equal(t, []string{"Host", "Camera 1", "Camera 2", "Sound 1", "Sound 2"}, meeting.With)
+	require.Equal(t, []int{0, 1, 1, 2, 2}, meeting.Choice)
 }

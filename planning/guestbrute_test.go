@@ -17,7 +17,8 @@ import (
 // small random problems where guests are invited in every way there is
 // (see Request.Optional): to an interview of their own, to one with
 // everybody, to a meeting, to a panel, jointly, several at once, and as the
-// whole of a candidate; some candidates are required as well. Every
+// whole of a candidate; some candidates are required as well, and some meet
+// one recruiter of two (see Request.Choice), a guest or not. Every
 // possible schedule is generated, Check keeps the valid ones and Evaluate
 // ranks them, so the rules of the guests are tested as much as the search:
 // what the engine holds a candidate complete for, which guests it can
@@ -53,12 +54,7 @@ func TestGuestsAgainstBruteForce(t *testing.T) {
 			require.NoError(t, err, "seed %d", seed)
 			require.NoError(t, planning.Check(p, o, s), "seed %d", seed)
 
-			got := make([]int, len(s.Scores))
-			for i, sc := range s.Scores {
-				got[i] = sc.Value
-			}
-
-			require.Equal(t, best, got, "seed %d, objectives %v, problem %+v", seed, o.Objectives, p)
+			requireBest(t, best, s.Scores, "seed %d, objectives %v, problem %+v", seed, o.Objectives, p)
 
 			// A bound is a value no schedule beats: not even the best of all.
 			for i, sc := range s.Scores {
@@ -139,6 +135,11 @@ func randomGuests(rnd *rand.Rand) (*planning.Problem, planning.Options) {
 		// Keeps the exhaustive search short.
 		p.Requests = p.Requests[:min(len(p.Requests), max(from+1, 6-(2-c)))]
 
+		// One of two recruiters, now and then (see Request.Choice).
+		if rnd.IntN(3) == 0 {
+			choose(p, from, rnd)
+		}
+
 		// Required, now and then, when there is something to require.
 		if rnd.IntN(6) == 0 && slices.ContainsFunc(p.Requests[from:], func(r planning.Request) bool { return !r.Optional }) {
 			cand.Required = true
@@ -175,4 +176,31 @@ func randomGuests(rnd *rand.Rand) (*planning.Problem, planning.Options) {
 	}
 
 	return p, o
+}
+
+// choose makes a choice of two requests of the candidate whose requests
+// start at from, when two of them can be one: in the same meeting, and
+// outside the panels. The second takes the optional of the first, which a
+// choice shares.
+func choose(p *planning.Problem, from int, rnd *rand.Rand) {
+	var free []int
+
+	for r := from; r < len(p.Requests); r++ {
+		if !slices.ContainsFunc(p.Panels, func(panel []int) bool { return slices.Contains(panel, p.Requests[r].Recruiter) }) {
+			free = append(free, r)
+		}
+	}
+
+	rnd.Shuffle(len(free), func(i, j int) { free[i], free[j] = free[j], free[i] })
+
+	for i, a := range free {
+		for _, b := range free[i+1:] {
+			if p.Requests[a].Meeting == p.Requests[b].Meeting {
+				p.Requests[a].Choice, p.Requests[b].Choice = 1, 1
+				p.Requests[b].Optional, p.Requests[b].Rank = p.Requests[a].Optional, p.Requests[a].Rank
+
+				return
+			}
+		}
+	}
 }

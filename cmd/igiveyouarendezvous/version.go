@@ -11,9 +11,9 @@ import "fmt"
 // TestVersionMatchesTheChangelog keeps them equal to the first section of
 // CHANGELOG.md: raising one and forgetting the other fails the tests.
 const (
-	version     = "0.16.1"
-	releaseName = "L'Arlésienne"
-	releaseMark = "💃"
+	version     = "0.17.0"
+	releaseName = "X-Or, le shérif de l'espace"
+	releaseMark = "⚡"
 )
 
 // release is the version as the release page writes it: v0.15.0 "Bullseye" 🎯.

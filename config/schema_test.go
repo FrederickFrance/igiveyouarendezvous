@@ -147,6 +147,10 @@ func TestTheSchemaRejectsWhatTheCodeRejects(t *testing.T) {
 		"recruiters: {}\ncandidates: {}\ntravel: {journeys: [[Paris, Lyon, 2]]}",
 		"recruiters: {}\ncandidates: {}\ntravel: {journeys: [[Paris, Lyon, 2h, 3h]]}",
 		"recruiters: {}\ncandidates: {}\ntravel: {journeys: [Paris, Lyon, 2h]}",
+		"recruiters: {R: }\ncandidates:\n  A: {meet: [[R]]}",
+		"recruiters: {R: , S: }\ncandidates:\n  A: {meet: [R, [S, [R]]]}",
+		"recruiters: {R: }\ncandidates:\n  A: {meet: {R: {choice: }}}",
+		"recruiters: {R: , S: }\ncandidates:\n  A: {meetings: [{with: [R, [S]]}]}",
 	} {
 		require.Error(t, problem.Validate(asJSON(t, []byte(text))), text)
 

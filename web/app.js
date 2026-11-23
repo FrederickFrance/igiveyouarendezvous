@@ -8,6 +8,7 @@ const examples = [
   { file: "problem.yaml", en: "A week of interviews", fr: "Une semaine d'entretiens" },
   { file: "simple.yaml", en: "A day of interviews", fr: "Une journée d'entretiens" },
   { file: "panel.yaml", en: "A selection panel", fr: "Une commission de recrutement" },
+  { file: "assessors.yaml", en: "One assessor among three", fr: "Un évaluateur parmi trois" },
   { file: "show.yaml", en: "Recordings of a show", fr: "Les enregistrements d'une émission" },
   { file: "colloquium.yaml", en: "A colloquium", fr: "Un colloque" },
   { file: "roleplay.yaml", en: "Role-playing games", fr: "Des parties de jeu de rôle" },
@@ -849,6 +850,15 @@ function addNote(text) {
   $("notes").hidden = false;
 }
 
+// oneOf translates the choices the program names in a list of candidates,
+// "one of Ada, Ben or Cleo", within the brackets of each candidate.
+function oneOf(text) {
+  if (lang !== "fr") {
+    return text;
+  }
+  return text.replace(/one of ([^(),]+(?:, [^(),]+)*) or ([^(),]+)/g, (_, first, last) => `un parmi ${first} ou ${last}`);
+}
+
 function showSchedule(result) {
   const { text, plan } = result;
   renderBoard(plan);
@@ -870,7 +880,7 @@ function showSchedule(result) {
         ["impossible", "Impossible, never free together long enough:"],
       ]) {
         if (line.startsWith(prefix)) {
-          return `${t(key)}${line.slice(prefix.length)}`;
+          return `${t(key)}${oneOf(line.slice(prefix.length))}`;
         }
       }
       return "";

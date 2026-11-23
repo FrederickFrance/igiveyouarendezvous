@@ -42,7 +42,7 @@ func TestPeriodsAgainstBruteForce(t *testing.T) {
 			require.NoError(t, planning.Check(p, o, s))
 
 			best, start := bestSchedule(t, p, o)
-			require.Equal(t, best, values(s.Scores), "seed %d, options %+v, requests %+v", seed, o, p.Requests)
+			requireBest(t, best, s.Scores, "seed %d, options %+v, requests %+v", seed, o, p.Requests)
 
 			// The optimum, as a start, is kept.
 			s, err = planning.Search(ctx, p, o, planning.SearchOptions{Seed: seed, Iterations: 1, Start: start})

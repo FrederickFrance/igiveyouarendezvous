@@ -751,6 +751,20 @@ qui en voient peu.
   `objectives`, ce que `-check` signale. Un candidat dont toutes les
   rencontres sont facultatives est un bonus : compté dans `meetings`,
   jamais parmi les candidats servis.
+- **Un recruteur parmi plusieurs** s'écrit avec une liste dans la liste de
+  `meet` : `meet: [Manager, [Ada, Ben, Cléo]]` fait voir le manager et un
+  des trois évaluateurs, celui qui arrange le planning. Dans la forme en
+  mapping, les alternatives portent le même `choice`, un nom au choix, et
+  partagent leur rang : `{Manager: 1, Ada: {rank: 2, choice: évaluateur},
+  Ben: {rank: 2, choice: évaluateur}}`. Dans une réunion, c'est une liste
+  dans `with` : `{with: [Animateur, [Caméra 1, Caméra 2]]}`. Le candidat
+  est complet avec n'importe lequel d'entre eux, le choix compte pour une
+  rencontre dans `meetings`, et les autres ne sont pas à planifier plus
+  tard : on n'en avait pas besoin. Avec `optional: true` sur chacun, le
+  choix est un invité qui peut être n'importe lequel, ou personne. Un choix
+  n'est jamais vu deux fois dans une même rencontre, même conjointe, et ses
+  alternatives ne sont pas membres d'un panel, qui se voit entier. Voir
+  [example/fr/assessors.yaml](example/fr/assessors.yaml).
 - **`required: true`** fait d'un candidat une contrainte et non plus un
   objectif : le programme refuse de rendre un planning sans lui et le nomme
   à la place. C'est pour ce autour de quoi la journée se construit et qui

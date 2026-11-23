@@ -7,6 +7,58 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
+## [0.17.0] - 2026-11-23 "X-Or, le shérif de l'espace" ⚡
+
+X-Or is the name the French gave to Space Sheriff Gavan, and XOR is the
+exclusive or: one of them, and only one. That is what this version adds —
+a candidate who meets one recruiter among several, whoever suits the
+schedule: one assessor of three, one restaurant near the visit, one of two
+camera operators for a shoot.
+
+### Added
+
+- **One recruiter among several.** In `meet`, a list within the list:
+  `meet: [Manager, [Ada, Ben, Cleo]]` meets the manager and one of the three
+  assessors. In the mapping form, the alternatives carry the same `choice`,
+  any name, and share their rank: `{Manager: 1, Ada: {rank: 2, choice:
+  assessor}, Ben: {rank: 2, choice: assessor}}`. In a meeting, a list within
+  `with`: `{with: [Host, [Camera 1, Camera 2]]}`. Exactly one alternative is
+  held when the candidate is served; the choice counts as one meeting in
+  `meetings` and in the totals of the schedule and of `-check`; the others
+  are not to plan later, nor in the file of what is left (`-rest`), nor
+  "guests who are not there". With `optional: true`, a choice is a guest who
+  may be any of them, or nobody. A choice is never held twice in one
+  interview, jointly or not, and its alternatives are not members of a panel,
+  which is met whole. The days left of the objective `urgency` count a day
+  on which one alternative is available. In the library: `Request.Choice`.
+- **`example/assessors.yaml`** (and its French version): nine candidates who
+  each meet the manager, then one technical assessor of three, over two
+  days. It is in the demo too.
+
+### Fixed
+
+- **A schedule the search had found was refused when the search resumed
+  from it** (`-start`), with `break-spread`: the fixed plans were checked
+  one by one, each with those accepted before it, and a part of them can
+  break the spread of the breaks where all of them keep it. It is now
+  checked on all of them. Found by the first deep run of the tests (issue
+  #35); it dates from `break-spread`.
+- **The deployment of the demo can be run again**: run again in the job that
+  uploaded it, the site was uploaded twice, and the deployment refused to
+  choose. It is now built in one job and deployed in another.
+
+### Changed
+
+- **The deep run fails on defects only**: a schedule that breaks a rule, a
+  bound that a schedule beats, a schedule refused when the search resumes
+  from it, a schedule better than the exhaustive search. A best schedule the
+  search misses, out of thousands of problems, is a miss of a heuristic: the
+  deep run counts them and shows them in the summary of the run, from week
+  to week, and the ordinary run still requires the best schedule on the
+  problems it draws. The first deep run found 1 defect and 10 misses.
+- The bound on the hours counts a choice as its shortest alternative, and as
+  nobody's time in particular.
+
 ## [0.16.1] - 2026-11-22 "L'Arlésienne" 💃
 
 L'Arlésienne is the girl everybody in the play talks about, and who never

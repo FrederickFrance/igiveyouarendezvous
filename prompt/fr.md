@@ -63,6 +63,12 @@ a des valeurs par défaut) :
   `recruiter-span`), sinon aucun invité ne viendra jamais. Ne rendez pas
   facultatives toutes les rencontres d'un candidat, sauf s'il est un pur
   bonus, et jamais avec `required`.
+- **Un recruteur parmi plusieurs** s'écrit avec une liste dans la liste de
+  `meet` : `meet: [Manager, [Ada, Ben, Cléo]]`, ou dans une réunion
+  `with: [Animateur, [Caméra 1, Caméra 2]]`. Utilisez-le dès que la
+  personne dit « l'un des », « n'importe lequel », « celui qui est libre » :
+  les demander tous ferait voir chacun d'eux au candidat. Dans la forme en
+  mapping, donnez aux alternatives le même `choice: <nom>` et le même rang.
 - **Un trajet par défaut relie tous les couples de lieux.** Les trajets
   tiennent ensemble : un trajet par d'autres lieux compte quand il est plus
   court. Donc avec `default: 10m`, deux lieux ne sont jamais à plus de vingt

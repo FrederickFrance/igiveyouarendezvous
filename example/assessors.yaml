@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=../schema/problem.schema.json
+#
+# One recruiter among several. Each candidate meets the manager first, then
+# one technical assessor: any of the three will do, and the search picks
+# whoever suits the day. Asking for one of three instead of the three is
+# what lets nine candidates fit in two days with assessors who are each
+# there half the time. The candidate who has a German interview needs the
+# one assessor who speaks it, so that meeting is no choice.
+
+from: 2026-11-24
+to: 2026-11-25
+day: 09:00-17:00
+breaks: 12:00-13:00
+duration: 45m
+max-gap: 2h
+
+objectives: [priorities, recruiter-span, candidate-wait]
+
+recruiters:
+  Marc (manager):
+    duration: 30m
+  Ada:
+    availability:
+      2026-11-24: 09:00-12:00
+      2026-11-25: 13:00-17:00
+  Ben:
+    availability:
+      2026-11-24: 13:00-17:00
+      2026-11-25: none
+  Cleo:
+    availability: 09:00-12:00
+
+candidates:
+  # The list within the list is the choice: one of Ada, Ben or Cleo. Rank 1
+  # then rank 2 put the manager first: in the mapping form, the alternatives
+  # carry the same choice, and share their rank.
+  Lena:
+    meet: {Marc (manager): 1, Ada: {rank: 2, choice: assessor}, Ben: {rank: 2, choice: assessor}, Cleo: {rank: 2, choice: assessor}}
+  Omar:
+    meet: {Marc (manager): 1, Ada: {rank: 2, choice: assessor}, Ben: {rank: 2, choice: assessor}, Cleo: {rank: 2, choice: assessor}}
+  Pia:
+    meet: [Marc (manager), [Ada, Ben, Cleo]]
+  Quentin:
+    meet: [Marc (manager), [Ada, Ben, Cleo]]
+  Rui:
+    meet: [Marc (manager), [Ada, Ben, Cleo]]
+  Sara:
+    meet: [Marc (manager), [Ada, Ben, Cleo]]
+  Tariq:
+    meet: [Marc (manager), [Ada, Ben, Cleo]]
+    priority: 2
+  Uma:
+    meet: [Marc (manager), [Ada, Ben]]   # Cleo has seen her already
+  Viktor:
+    meet: [Marc (manager), Ada]          # the interview in German: Ada only

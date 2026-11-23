@@ -245,13 +245,20 @@
         "additionalProperties": false,
         "properties": {
           "meet": {
-            "description": "The recruiters to meet: a list, in any order, or the recruiters with their ranks (1 first, then 2..., X any time), the length of the meeting (15m, 1h30: a bare number is a rank), or both: {rank: 1, duration: 15m}.",
+            "description": "The recruiters to meet: a list, in any order, or the recruiters with their ranks (1 first, then 2..., X any time), the length of the meeting (15m, 1h30: a bare number is a rank), or both: {rank: 1, duration: 15m}. One recruiter among several is a list within the list, [Manager, [Ada, Ben, Cleo]], or the same choice in the mapping: {Ada: {choice: assessor}, Ben: {choice: assessor}}.",
             "oneOf": [
               {
                 "type": "array",
                 "uniqueItems": true,
                 "items": {
-                  "$ref": "#/$defs/name"
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/name"
+                    },
+                    {
+                      "$ref": "#/$defs/choice"
+                    }
+                  ]
                 }
               },
               {
@@ -302,6 +309,11 @@
                         "optional": {
                           "type": "boolean",
                           "description": "Invites the recruiter without needing them (false by default): the candidate is complete without this meeting, and holding it is a bonus the search looks for. The guest who comes along if they can — a friend on an outing, a second assessor if they are free. The meeting is held with the guests who are free at that time and without the others, and is never given up for a guest. Guests are invited for the sake of the objective \"meetings\": keep it among the objectives, before those on the recruiters' time."
+                        },
+                        "choice": {
+                          "description": "Names a choice: the candidate meets one of the recruiters with the same choice, whoever suits the schedule. They share their rank and optional.",
+                          "type": "string",
+                          "minLength": 1
                         }
                       }
                     }
@@ -321,12 +333,19 @@
               "additionalProperties": false,
               "properties": {
                 "with": {
-                  "description": "The recruiters met at once.",
+                  "description": "The recruiters met at once; a list within it is one of them: [Host, [Camera 1, Camera 2]].",
                   "type": "array",
                   "minItems": 1,
                   "uniqueItems": true,
                   "items": {
-                    "$ref": "#/$defs/name"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/name"
+                      },
+                      {
+                        "$ref": "#/$defs/choice"
+                      }
+                    ]
                   }
                 },
                 "duration": {
@@ -489,6 +508,15 @@
       "type": "string",
       "minLength": 1,
       "pattern": "\\S"
+    },
+    "choice": {
+      "description": "One recruiter among several: the candidate meets one of them, whoever suits the schedule.",
+      "type": "array",
+      "minItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/name"
+      }
     }
   }
 }
