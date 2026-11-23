@@ -40,13 +40,8 @@ func TestAgainstBruteForce(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, planning.Check(p, o, s))
 
-			got := make([]int, len(s.Scores))
-			for i, sc := range s.Scores {
-				got[i] = sc.Value
-			}
-
 			best, _ := exhaustive(t, seed, p, o)
-			require.Equal(t, best, got, "seed %d, objectives %v, options %+v", seed, o.Objectives, o)
+			requireBest(t, best, s.Scores, "seed %d, objectives %v, options %+v", seed, o.Objectives, o)
 
 			// A bound is a value no schedule beats: not even the best of all.
 			for i, sc := range s.Scores {
@@ -331,15 +326,62 @@ func bestSchedule(t *testing.T, p *planning.Problem, o planning.Options) ([]int,
 }
 
 // requiredServed tells whether every required candidate holds all they
-// cannot do without, counted here without the help of the library.
+// cannot do without, counted here without the help of the library: each
+// request that is not optional, and one alternative of each such choice.
 func requiredServed(p *planning.Problem, held []bool) bool {
+	type choice struct{ candidate, meeting, choice int }
+
+	made := map[choice]bool{}
+
 	for r, req := range p.Requests {
-		if p.Candidates[req.Candidate].Required && !req.Optional && !held[r] {
+		if req.Choice > 0 && held[r] {
+			made[choice{req.Candidate, req.Meeting, req.Choice}] = true
+		}
+	}
+
+	for r, req := range p.Requests {
+		if !p.Candidates[req.Candidate].Required || req.Optional || held[r] {
+			continue
+		}
+
+		if req.Choice == 0 || !made[choice{req.Candidate, req.Meeting, req.Choice}] {
 			return false
 		}
 	}
 
 	return true
+}
+
+// requireBest requires the search to have found the best schedule, best,
+// which an exhaustive search gave. A schedule better than the best is a
+// defect, of the search or of the exhaustive search, wherever the problem
+// comes from. A worse one fails the tests on the problems they always draw,
+// where the search is known to find the best; in a deep run, on thousands of
+// other problems, it is a miss of the heuristic, recorded and counted (see
+// planning.DeepMissed), not a failure.
+func requireBest(t *testing.T, best []int, scores []planning.Score, format string, args ...any) {
+	t.Helper()
+
+	got := make([]int, len(scores))
+	for i, sc := range scores {
+		got[i] = sc.Value
+	}
+
+	if slices.Equal(best, got) {
+		return
+	}
+
+	if better(scores, best) {
+		t.Fatalf("the search beat the exhaustive search: %v against %v; "+format, append([]any{got, best}, args...)...)
+	}
+
+	if planning.UsualSeeds() {
+		require.Equal(t, best, got, append([]any{format}, args...)...)
+
+		return
+	}
+
+	planning.DeepMissed(t, "%v instead of %v; "+format, append([]any{got, best}, args...)...)
 }
 
 // better compares lexicographically; the first two objectives are maximised.

@@ -18,11 +18,12 @@ concurrency: # one publication at a time, none cancelled halfway
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  # Built in one job and deployed in another, so that a deployment that fails
+  # can be run again alone ("Re-run failed jobs"): run again in the job that
+  # uploads it, the site is uploaded twice, and the deployment refuses to
+  # choose between two artifacts named github-pages.
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -33,5 +34,13 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         with:
           path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v5

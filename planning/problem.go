@@ -180,6 +180,22 @@ type Request struct {
 	// candidate served, and an interview made of guests only, having
 	// nobody to be held around, is held whole or not at all.
 	Optional bool
+	// Choice makes alternatives of the requests of a candidate with the
+	// same non-zero Choice, in the same Meeting: the candidate meets one of
+	// their recruiters, whichever suits the schedule, and is complete with
+	// any of them — one assessor among three, one restaurant among those
+	// near the visit, one camera operator for the shoot. Exactly one is
+	// held, or none when the candidate is not served; the others are left
+	// out, and are not to plan later (Schedule.Remaining). The choice counts
+	// as one meeting in MaxMeetings.
+	//
+	// The alternatives of one choice share their Meeting, Rank and
+	// Optional: an optional choice is a guest who may be any of them, or
+	// nobody. Their Duration may differ. A choice is made in an interview of
+	// its own, in an interview with everybody (Candidate.Together) or in a
+	// Meeting, and jointly as JointGroups allow, never with two of its
+	// alternatives; not among the members of a panel.
+	Choice int
 }
 
 // Problem is what has to be planned.
@@ -634,7 +650,8 @@ func (p *Problem) checkRequests() error {
 	type key struct{ candidate, meeting, recruiter int }
 
 	seen := map[key]bool{}
-	rank := map[key]int{} // of each meeting, without its recruiter
+	rank := map[key]int{}        // of each meeting, without its recruiter
+	alternative := map[key]int{} // the first request of each choice
 
 	for i, r := range p.Requests {
 		if r.Candidate < 0 || r.Candidate >= len(p.Candidates) || r.Recruiter < 0 || r.Recruiter >= len(p.Recruiters) {
@@ -660,6 +677,23 @@ func (p *Problem) checkRequests() error {
 			return fmt.Errorf("planning: %s: negative meeting", name)
 		case r.Meeting > 0 && p.Candidates[r.Candidate].Together:
 			return fmt.Errorf("planning: %s meets everybody together: no other meetings", name)
+		case r.Choice < 0:
+			return fmt.Errorf("planning: %s: negative choice", name)
+		case r.Choice > 0 && p.panelOf(r.Recruiter) >= 0:
+			return fmt.Errorf("planning: %s meets %s as one choice among others, and %s is in a panel, which is met whole",
+				name, p.Recruiters[r.Recruiter].Name, p.Recruiters[r.Recruiter].Name)
+		}
+
+		if r.Choice > 0 {
+			k := key{r.Candidate, r.Meeting, -1 - r.Choice}
+			if first, ok := alternative[k]; ok {
+				if q := p.Requests[first]; q.Rank != r.Rank || q.Optional != r.Optional {
+					return fmt.Errorf("planning: %s: the alternatives %s and %s of one choice differ in rank or in being optional",
+						name, p.Recruiters[q.Recruiter].Name, p.Recruiters[r.Recruiter].Name)
+				}
+			} else {
+				alternative[k] = i
+			}
 		}
 
 		k := key{r.Candidate, r.Meeting, r.Recruiter}
@@ -683,6 +717,36 @@ func (p *Problem) checkRequests() error {
 	}
 
 	return p.checkRequired()
+}
+
+// units returns, for each request, the meeting it stands for in a count of
+// the meetings, as an index from 0, and the number of units: a request is
+// a unit of its own, but for the alternatives of one choice (see
+// Request.Choice), which make one unit together. A unit is held when one
+// of its requests is.
+func (p *Problem) units() (unit []int, n int) {
+	type key struct{ candidate, meeting, choice int }
+
+	unit = make([]int, len(p.Requests))
+	seen := map[key]int{}
+
+	for r, req := range p.Requests {
+		if req.Choice > 0 {
+			k := key{req.Candidate, req.Meeting, req.Choice}
+			if u, ok := seen[k]; ok {
+				unit[r] = u
+
+				continue
+			}
+
+			seen[k] = n
+		}
+
+		unit[r] = n
+		n++
+	}
+
+	return unit, n
 }
 
 // checkRequired refuses a required candidate who needs nothing: with guests

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand/v2"
+	"slices"
 	"testing"
 	"time"
 
@@ -52,12 +53,7 @@ func TestCrossingsAgainstBruteForce(t *testing.T) {
 			require.NoError(t, err, "seed %d, options %+v, problem %+v", seed, o, p)
 			require.NoError(t, planning.Check(p, o, s), "seed %d", seed)
 
-			got := make([]int, len(s.Scores))
-			for i, sc := range s.Scores {
-				got[i] = sc.Value
-			}
-
-			require.Equal(t, best, got, "seed %d, options %+v, problem %+v", seed, o, p)
+			requireBest(t, best, s.Scores, "seed %d, options %+v, problem %+v", seed, o, p)
 
 			// A bound is a value no schedule beats: not even the best of all.
 			for i, sc := range s.Scores {
@@ -108,6 +104,15 @@ func randomCrossing(rnd *rand.Rand) (*planning.Problem, planning.Options) {
 		for r, req := range p.Requests {
 			if !p.Candidates[req.Candidate].Together && req.Meeting == 0 {
 				p.Requests[r].Rank = rnd.IntN(3)
+			}
+		}
+
+		// The alternatives of a choice share their rank.
+		for r, req := range p.Requests {
+			if q := slices.IndexFunc(p.Requests, func(q planning.Request) bool {
+				return req.Choice > 0 && q.Candidate == req.Candidate && q.Choice == req.Choice && q.Meeting == req.Meeting
+			}); q >= 0 {
+				p.Requests[r].Rank = p.Requests[q].Rank
 			}
 		}
 	}

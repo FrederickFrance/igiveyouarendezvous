@@ -8,7 +8,11 @@
 # printed below plays that one again.
 #
 # When it fails, it opens one issue, or updates the one already open; when
-# it passes again, it closes it.
+# it passes again, it closes it. It fails on defects only: a schedule that
+# breaks a rule, a bound some schedule beats, a schedule refused when the
+# search resumes from it. A best schedule the search does not find, out of
+# thousands of problems, is a miss of a heuristic: those are counted and
+# shown in the summary of the run, and fail nothing.
 #
 #   scripts/deep.sh                    # in the Deep workflow, with GH_TOKEN
 #   DRY_RUN=1 scripts/deep.sh          # runs the tests, and prints what it would do with the issue
@@ -22,14 +26,34 @@ week=$(date -u +%G%V) # such as 202647
 seeds=${DEEP_SEEDS:-2000}
 from=${DEEP_FROM:-$(( (week % 1000) * 100000 ))}
 log=$(mktemp)
+misses=$(mktemp)
 
 echo "Deep run: $seeds problems per test, from seed $from (week $week)"
 
 status=0
-(cd "$root" && DEEP_SEEDS=$seeds DEEP_FROM=$from go test -count=1 -timeout 300m ./...) >"$log" 2>&1 || status=$?
+(cd "$root" && DEEP_SEEDS=$seeds DEEP_FROM=$from DEEP_MISSES=$misses go test -count=1 -timeout 300m ./...) >"$log" 2>&1 || status=$?
 
 # The failures, and nothing of the thousands of subtests that passed.
 grep -v -e '^=== ' -e '--- PASS' -e '^PASS$' "$log" | tail -n 200 || true
+
+# The best schedules the search missed: a measure of the heuristic, not a
+# defect, so they are counted and shown, and fail nothing (see
+# planning.DeepMissed).
+missed=$(wc -l <"$misses" | tr -d ' ')
+report="Best schedules missed by the search: $missed, out of $seeds problems per comparison with an exhaustive search."
+echo "$report"
+sort "$misses" | cut -c1-300 | head -n 50
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+  {
+    echo "### Deep run, week $week"
+    echo
+    echo "$report"
+    echo
+    echo '```'
+    sort "$misses" | cut -c1-300 | head -n 50
+    echo '```'
+  } >>"$GITHUB_STEP_SUMMARY"
+fi
 
 open=""
 if [ -z "${DRY_RUN:-}" ]; then
@@ -61,20 +85,22 @@ To play one again, with the seed its message names:
 DEEP_FROM=<seed> DEEP_SEEDS=1 go test -run '<the test>' ./planning/
 \`\`\`
 
-The whole output is in the run of the Deep workflow. Opened by scripts/deep.sh, which closes this issue once a deep run passes."
+The whole output is in the run of the Deep workflow. $report
+
+Opened by scripts/deep.sh, which closes this issue once a deep run passes."
   if [ -n "$open" ]; then
     run gh issue edit "$open" --body "$body"
   else
     run gh issue create --title "$title" --body "$body"
   fi
 
-  rm -f "$log"
+  rm -f "$log" "$misses"
   exit "$status"
 fi
 
 if [ -n "$open" ]; then
-  run gh issue close "$open" --comment "The deep run of $(date -u +%Y-%m-%d) passed: $seeds problems per test, from seed $from."
+  run gh issue close "$open" --comment "The deep run of $(date -u +%Y-%m-%d) passed: $seeds problems per test, from seed $from. $report"
 fi
 
-rm -f "$log"
+rm -f "$log" "$misses"
 echo "Deep run passed."

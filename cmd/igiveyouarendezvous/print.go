@@ -195,22 +195,37 @@ func printLeft(w io.Writer, p *planning.Problem, s *planning.Schedule) {
 	}
 
 	// The requests left are those of the problem that remains, in the same
-	// order: the others are the guests.
+	// order. Of the others, the guests are those of a choice nobody made:
+	// an alternative passed over for another one (see Request.Choice) was
+	// not invited, and is nobody missing.
 	rest := s.Remaining(p).Requests
+
+	made := map[choiceOf]bool{}
+
+	for _, iv := range s.Interviews {
+		for _, r := range iv.Requests {
+			made[choiceOfRequest(p, r)] = true
+		}
+	}
 
 	var later, guests []planning.Request
 
 	for _, r := range s.Unscheduled {
-		if req := p.Requests[r]; len(rest) > 0 && rest[0] == req {
+		switch req := p.Requests[r]; {
+		case len(rest) > 0 && rest[0] == req:
 			later, rest = append(later, req), rest[1:]
-		} else {
+		case req.Choice > 0 && made[choiceOfRequest(p, r)]:
+		default:
 			guests = append(guests, req)
 		}
 	}
 
-	if len(later) == 0 {
+	switch {
+	case len(later) == 0 && len(guests) == 0: // only the alternatives passed over
+		fmt.Fprintln(w, "\nAll meetings are planned.")
+	case len(later) == 0:
 		fmt.Fprintln(w, "\nAll the meetings that were needed are planned.")
-	} else {
+	default:
 		fmt.Fprintf(w, "\nTo plan later: %s\n", byCandidate(p, later))
 	}
 
@@ -221,24 +236,79 @@ func printLeft(w io.Writer, p *planning.Problem, s *planning.Schedule) {
 	printImpossible(w, p, s)
 }
 
+// meetingsAsked returns the number of meetings problem p asks for: one per
+// request, a choice counting once, whoever holds it.
+func meetingsAsked(p *planning.Problem) int {
+	asked := map[choiceOf]bool{}
+
+	for r := range p.Requests {
+		asked[choiceOfRequest(p, r)] = true
+	}
+
+	return len(asked)
+}
+
+// choiceOf is what a request stands for in a count of meetings: itself, or
+// the choice it is one alternative of (see planning.Request.Choice).
+type choiceOf struct{ candidate, meeting, choice, request int }
+
+func choiceOfRequest(p *planning.Problem, r int) choiceOf {
+	if req := p.Requests[r]; req.Choice > 0 {
+		return choiceOf{req.Candidate, req.Meeting, req.Choice, -1}
+	}
+
+	return choiceOf{p.Requests[r].Candidate, p.Requests[r].Meeting, 0, r}
+}
+
 // byCandidate lists requests as their candidates, in the order they first
-// appear, each with its recruiters: "A (R1, R2), B (R1)".
+// appear, each with its recruiters, the alternatives of a choice together:
+// "A (R1, R2), B (R1, one of R2 or R3)".
 func byCandidate(p *planning.Problem, requests []planning.Request) string {
-	recruiters := map[int][]string{}
+	type group struct {
+		choice int // with the meeting, 0 for a recruiter alone
+		names  []string
+	}
+
+	groups := map[int][]group{}
 
 	var order []int
 
 	for _, req := range requests {
-		if _, ok := recruiters[req.Candidate]; !ok {
+		if _, ok := groups[req.Candidate]; !ok {
 			order = append(order, req.Candidate)
 		}
 
-		recruiters[req.Candidate] = append(recruiters[req.Candidate], p.Recruiters[req.Recruiter].Name)
+		name := p.Recruiters[req.Recruiter].Name
+		key := req.Choice*1000 + req.Meeting // a choice of a meeting is not one outside it
+
+		if k := slices.IndexFunc(groups[req.Candidate], func(g group) bool { return req.Choice > 0 && g.choice == key }); k >= 0 {
+			groups[req.Candidate][k].names = append(groups[req.Candidate][k].names, name)
+
+			continue
+		}
+
+		g := group{names: []string{name}}
+		if req.Choice > 0 {
+			g.choice = key
+		}
+
+		groups[req.Candidate] = append(groups[req.Candidate], g)
 	}
 
 	parts := make([]string, len(order))
+
 	for i, c := range order {
-		parts[i] = fmt.Sprintf("%s (%s)", p.Candidates[c].Name, strings.Join(recruiters[c], ", "))
+		var names []string
+
+		for _, g := range groups[c] {
+			if n := len(g.names); n == 1 {
+				names = append(names, g.names[0])
+			} else {
+				names = append(names, "one of "+strings.Join(g.names[:n-1], ", ")+" or "+g.names[n-1])
+			}
+		}
+
+		parts[i] = fmt.Sprintf("%s (%s)", p.Candidates[c].Name, strings.Join(names, ", "))
 	}
 
 	return strings.Join(parts, ", ")
@@ -380,7 +450,7 @@ func scoreText(p *planning.Problem, s *planning.Schedule, pe period, sc planning
 
 		return fmt.Sprintf("%d/%d", sc.Value, len(asked))
 	case planning.MaxMeetings:
-		return fmt.Sprintf("%d/%d", sc.Value, len(p.Requests))
+		return fmt.Sprintf("%d/%d", sc.Value, meetingsAsked(p))
 	case planning.MinRecruiters: // recruiters and days
 		return fmt.Sprintf("%d/%d", sc.Value, len(p.Recruiters)*max(1, pe.open))
 	case planning.MinRecruiterHalfDays:

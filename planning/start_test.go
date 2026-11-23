@@ -491,3 +491,56 @@ func TestAnUnfairFixedPlanIsLeftOut(t *testing.T) {
 		require.NoError(t, planning.Check(p, o, s), "seed %d", seed)
 	}
 }
+
+// The spread of the breaks is a rule of the whole schedule: fixed plans
+// that keep it together are kept, though some of them alone break it.
+// Checked plan by plan, as it once was, the plan of B — which gives R1 a
+// break that only C's gives R2 too — was refused, and a schedule the search
+// had found could not be resumed.
+func TestFixedPlansKeepTheBreakSpreadTogether(t *testing.T) {
+	t.Parallel()
+
+	p := &planning.Problem{
+		Recruiters: []planning.Recruiter{{Name: "R1"}, {Name: "R2"}},
+		Candidates: []planning.Candidate{{Name: "A"}, {Name: "B"}, {Name: "C"}},
+		Requests: []planning.Request{
+			{Candidate: 0, Recruiter: 0}, {Candidate: 0, Recruiter: 1},
+			{Candidate: 1, Recruiter: 0}, {Candidate: 1, Recruiter: 1},
+			{Candidate: 2, Recruiter: 1},
+		},
+	}
+
+	spread := 0
+	o := planning.Options{
+		Day:         []planning.Interval{{Start: clock(9, 0), End: clock(12, 0)}},
+		Duration:    30 * time.Minute,
+		MaxGap:      planning.Gap{Duration: planning.NoLimit},
+		BreakSpread: &spread,
+	}
+
+	at := func(c, r int, h, m int) planning.Interview {
+		return planning.Interview{
+			Candidate: c, Recruiters: []int{p.Requests[r].Recruiter}, Requests: []int{r},
+			Start: clock(h, m), End: clock(h, m) + 30*time.Minute, Fixed: true,
+		}
+	}
+
+	all := []planning.Interview{
+		at(0, 0, 9, 0), at(0, 1, 9, 30), // A
+		at(1, 3, 9, 0), at(1, 2, 10, 0), // B: R1 waits from 9:30 to 10:00
+		at(2, 4, 10, 30), // C: and R2 from 10:00 to 10:30
+	}
+
+	cleaned, err := planning.Clean(p, o, &planning.Schedule{Interviews: all})
+	require.NoError(t, err)
+	require.Empty(t, cleaned.Rejected, "one break each: the spread is kept")
+	require.Len(t, cleaned.Schedule.Interviews, 5)
+
+	// Without C, R1 has a break and R2 none: B is the plan that breaks the
+	// rule, and is refused as before.
+	cleaned, err = planning.Clean(p, o, &planning.Schedule{Interviews: all[:4]})
+	require.NoError(t, err)
+	require.Len(t, cleaned.Rejected, 1)
+	require.Equal(t, 1, cleaned.Rejected[0].Candidate)
+	require.Contains(t, cleaned.Rejected[0].Reason, "break spread of 0")
+}

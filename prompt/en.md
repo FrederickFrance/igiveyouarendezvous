@@ -62,6 +62,12 @@ has defaults):
   or no guest will ever come. Do not make every meeting of a candidate
   optional unless the candidate is a pure bonus, and never together with
   `required`.
+- **One recruiter among several** is a list within the list of `meet`:
+  `meet: [Manager, [Ada, Ben, Cleo]]`, or in a meeting
+  `with: [Host, [Camera 1, Camera 2]]`. Use it whenever the person says
+  "one of", "any of", "whoever is free": asking for all of them would make
+  the candidate meet each one. In the mapping form, give the alternatives
+  the same `choice: <name>` and the same rank.
 - **A default journey links every pair of places.** The journeys hold
   together: one through other places counts when it is shorter. So with
   `default: 10m` no two places are ever more than twenty minutes apart,

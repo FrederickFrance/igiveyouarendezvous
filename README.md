@@ -722,6 +722,19 @@ recruiters, `complete-candidates` first those who need few.
   when it is not among the `objectives`, which `-check` reports. A
   candidate whose every meeting is optional is a bonus: counted in
   `meetings`, never among the candidates served.
+- **One recruiter among several** is a list within the list of `meet`:
+  `meet: [Manager, [Ada, Ben, Cleo]]` meets the manager and one of the
+  three assessors, whoever suits the schedule. In the mapping form, the
+  alternatives carry the same `choice`, any name, and share their rank:
+  `{Manager: 1, Ada: {rank: 2, choice: assessor}, Ben: {rank: 2, choice:
+  assessor}}`. In a meeting, it is a list within `with`: `{with: [Host,
+  [Camera 1, Camera 2]]}`. The candidate is complete with any one of them,
+  the choice counts as one meeting in `meetings`, and the others are not to
+  plan later: they were not needed. With `optional: true` on all of them,
+  the choice is a guest who may be any of them, or nobody. A choice is
+  never met twice in one interview, even jointly, and its alternatives are
+  not members of a panel, which is met whole. See
+  [example/assessors.yaml](example/assessors.yaml).
 - **`required: true`** makes a candidate a constraint instead of an
   objective: the program refuses to return a schedule without them and
   names them instead. It is for what the day is built around and carries no
