@@ -1,6 +1,7 @@
 package planning_test
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -64,8 +65,8 @@ func TestDoubtsReportARequiredCandidateWithoutRoom(t *testing.T) {
 	require.Contains(t, doubts[0].Text, "they cannot be served at all")
 }
 
-// A guest is invited for the meetings held and for nothing else: without
-// that objective no guest ever comes, and the file that says "optional"
+// A guest is invited for the meetings held or for the time spent with them,
+// and for nothing else: without either objective no guest ever comes, and the file that says "optional"
 // plans as if the word were not there. It is said once, with the first of
 // them, and not at all when the objective is there or when nobody is
 // optional.
@@ -95,11 +96,17 @@ func TestDoubtsReportGuestsNothingPaysFor(t *testing.T) {
 	require.Len(t, doubts, 1)
 	require.Equal(t, "objectives", doubts[0].About)
 	require.Equal(t, `2 optional meetings (the first: The cathedral with Friend) and nothing to hold them for: `+
-		`a guest costs their time like anybody, and only "meetings" counts them — add it to the objectives, `+
-		`before those on the recruiters' time, or the guests all stay at home`, doubts[0].Text)
+		`a guest costs their time like anybody, and only "meetings" and "guest-time" count them — add one `+
+		`of them to the objectives, before those on the recruiters' time, or the guests all stay at home`,
+		doubts[0].Text)
 
-	// With the meetings among the objectives, wherever they rank.
-	o.Objectives = append(o.Objectives, planning.MaxMeetings)
+	// With the meetings among the objectives, wherever they rank, or the
+	// guests' time.
+	objectives := o.Objectives
+	o.Objectives = append(slices.Clone(objectives), planning.MaxMeetings)
+	require.Empty(t, p.Doubts(o))
+
+	o.Objectives = append(slices.Clone(objectives), planning.MaxGuestTime)
 	require.Empty(t, p.Doubts(o))
 
 	// With the objectives of the program, which count the meetings.

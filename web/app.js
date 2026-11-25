@@ -22,6 +22,7 @@ const objectives = [
   { name: "priorities", en: "Priorities first", fr: "Les priorités d'abord" },
   { name: "urgency", en: "The most urgent first", fr: "Les plus urgents d'abord" },
   { name: "complete-candidates", en: "Candidates who meet everybody", fr: "Candidats qui voient tout le monde" },
+  { name: "guest-time", en: "Most time with the guests", fr: "Le plus de temps avec les invités" },
   { name: "meetings", en: "Meetings held", fr: "Rencontres tenues" },
   { name: "recruiters", en: "Fewest recruiters, day by day", fr: "Le moins de recruteurs, jour par jour" },
   { name: "recruiter-half-days", en: "Fewest half-days for recruiters", fr: "Le moins de demi-journées pour les recruteurs" },

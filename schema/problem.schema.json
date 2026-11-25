@@ -179,6 +179,7 @@
           "priorities",
           "urgency",
           "complete-candidates",
+          "guest-time",
           "meetings",
           "recruiters",
           "recruiter-half-days",
@@ -218,6 +219,10 @@
           "min-gap": {
             "description": "The shortest time between two interviews of the recruiter, from the end of one to the start of the next, nights included: to write notes, to pack the gear (30m, 1h); the journeys between places come on top (see travel). 0 means none. In place of recruiter-min-gap.",
             "$ref": "#/$defs/duration"
+          },
+          "continuous": {
+            "description": "For a guest (optional: true somewhere): once away from a visit of the day, away for the rest of it, rather than coming back to a later one. Without it, coming back is only avoided, between schedules as good on every objective.",
+            "type": "boolean"
           }
         }
       }
@@ -314,6 +319,10 @@
                           "description": "Names a choice: the candidate meets one of the recruiters with the same choice, whoever suits the schedule. They share their rank and optional.",
                           "type": "string",
                           "minLength": 1
+                        },
+                        "place": {
+                          "description": "For one of a choice: where the candidate is met when this recruiter is the one chosen, in place of the candidate's place, for the journeys before and after (lunch at the bistro in the old town or at the market).",
+                          "$ref": "#/$defs/name"
                         }
                       }
                     }

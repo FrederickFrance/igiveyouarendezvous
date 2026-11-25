@@ -24,12 +24,13 @@ to: 2026-12-22
 day: 08:00-21:00
 max-gap: unlimited
 
-# "meetings" is what invites the friend. A guest costs her own time like
-# anybody, and the meetings held are the only objective that counts her:
+# "guest-time" is what invites the friend, for as long as she can be with
+# us; "meetings" then counts how often she comes. A guest costs her own
+# time like anybody, and these two are the only objectives that count her:
 # after the priorities, she never costs a visit; before the time of the
-# recruiters, her company is worth an hour of hers. Without it she would
+# recruiters, her company is worth an hour of hers. Without them she would
 # stay at home, and -check would say so.
-objectives: [priorities, meetings, recruiter-span, day-end]
+objectives: [priorities, guest-time, meetings, recruiter-span, day-end]
 
 # Four journeys, and no default. A default would be the trap here: it links
 # every pair of places, so two places are never more than twice the default
@@ -90,6 +91,12 @@ recruiters:
   Next town market:
     availability: {2026-12-22: 11:00-18:00}
 
+  # Two places to have lunch on the first day: one of them will do.
+  Hotel restaurant:
+    availability: {2026-12-21: 12:00-14:30}
+  Bistro:
+    availability: {2026-12-21: 12:00-15:00}
+
 candidates:
   # ---- what the day is built around: no interest, and no day without it
   Bags dropped at the hotel:
@@ -129,6 +136,17 @@ candidates:
     together: true
     duration: 1h10
     required: true
+
+  # Lunch on the first day, at the hotel restaurant or at the bistro in the
+  # old town: one choice, and each of its two has its place, so the
+  # journeys before and after are those of the one chosen. Lunch at the
+  # hotel goes with dropping the bags; lunch at the bistro with the market.
+  Lunch:
+    meet: {Us: {}, Hotel restaurant: {choice: lunch, place: Hotel}, Bistro: {choice: lunch, place: Old town}}
+    together: true
+    duration: 45m
+    required: true
+    availability: {2026-12-21: 12:40-14:30}
 
   # ---- the visits. The friend comes along to two of them if she can.
   The Christmas market:

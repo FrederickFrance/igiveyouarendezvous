@@ -194,7 +194,7 @@ func TestMeets(t *testing.T) {
 		"{R1: {rank: 0}}":        "a rank is expected",
 		"{R1: {duration: 30}}":   "a rank is expected",
 		"{R1: {duration: [1h]}}": "a rank is expected",
-		"{R1: {length: 1h}}":     `line 1: R1: unknown key "length" (known: choice, duration, rank, optional)`,
+		"{R1: {length: 1h}}":     `line 1: R1: unknown key "length" (known: choice, duration, rank, optional, place)`,
 		"[[R1]]":                 "line 1: a recruiter, or a list of two or more of whom one is met, such as [Ada, Ben], is expected",
 		"[R1, [R2, [R3]]]":       "a list of two or more of whom one is met",
 		"{R1: {choice: }}":       "line 1: R1: choice names the choice",

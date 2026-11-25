@@ -45,8 +45,7 @@ default, without the holidays; the candidates who do not fit are written to
 the problem file of the next period.
 
 Not only interviews: the recordings of a show with guests who are hard to
-gather, the programme of a colloquium, role-playing games… see [Other
-uses](#other-uses).
+gather, the programme of a colloquium, role-playing games… see [By use](#by-use).
 
 ## Your first schedule, step by step
 
@@ -272,6 +271,7 @@ candidates:
 | `recruiters.<name>.duration` | `duration` | length of the interviews with this recruiter; a joint interview lasts as long as its longest part |
 | `recruiters.<name>.availability` | `day` | time spans of the recruiter (`none`: absent), every day or by date (see below) |
 | `recruiters.<name>.min-gap` | `recruiter-min-gap` | the shortest time between two interviews of this recruiter, from the end of one to the start of the next, nights included: to write notes (`30m`), to rest (`12h`); the journeys come on top (see `travel`); `0`: none |
+| `recruiters.<name>.continuous` | `false` | for a guest: once away from the visits of a day, they stay away that day (see the guests, below) |
 | `recruiter-min-gap` | `0` | the `min-gap` of every recruiter without one of their own, such as `10m` of break for everybody |
 | `candidates.<name>.meet` | mandatory without `meetings` | the recruiters to meet, one interview each, in any order, or with their ranks and the lengths of the meetings (see below) |
 | `candidates.<name>.meetings` | none | meetings with several recruiters at once, each held as given; a recruiter may come back in several (see below) |
@@ -279,7 +279,7 @@ candidates:
 | `candidates.<name>.priority` | `1` | the higher, the more important (objective `priorities`) |
 | `candidates.<name>.required` | `false` | `true`: a constraint and no longer an objective — a schedule without this candidate is refused and they are named (see below) |
 | `candidates.<name>.duration` | the recruiters' | length of the interviews of this candidate, in place of the recruiters' ones (the length of a meeting in `meet` still wins) |
-| `candidates.<name>.together` | `false` | `true`: a meeting, all the recruiters at once in one interview, or not at all (see [Other uses](#other-uses)) |
+| `candidates.<name>.together` | `false` | `true`: a meeting, all the recruiters at once in one interview, or not at all (see [By use](#by-use)) |
 | `candidates.<name>.place` | none | where the candidate is met, such as the city of a shoot; none: no journey to or from them, such as a call (see below) |
 | `travel` | none | the journeys between the places: `default`, and `journeys`, such as `[Paris, Lyon, 2h]` (see below) |
 
@@ -473,6 +473,18 @@ On the time grid, the journeys are rounded up to 5 minutes: `2h07` counts
 as `2h10`, rather than making a grid of one minute. Full example: [a
 tour](example/tour.yaml).
 
+**Journeys hold together.** A journey through other places counts when it
+is shorter, so the times you give have to be consistent: Paris to Dijon
+cannot take longer than Paris to Lyon and then Lyon to Dijon. Two things
+follow, and both surprise. A **default journey links every pair of
+places**, so with a default of ten minutes no two places are ever more
+than twenty minutes apart, whatever the file says — a long journey given
+to forbid a link is void. And **a default of zero is not "no link", it is
+a free link**: every pair you leave out of the file becomes a way through
+at no cost. A place named in `journeys` is a place even when no candidate
+is met there, so a misspelt name opens a way nobody wanted. The program
+reports every journey a way through makes shorter than you gave it.
+
 **The next period.** `-rest` writes the problem file again, with the
 candidates served removed; the others keep all their meetings. The period
 (`from`, `to`, `not-before`), planned, is removed, for the next one to be
@@ -513,11 +525,37 @@ Whatever you type goes to the assistant's provider: give placeholders
 (`Candidate 1`, initials), and put the real names back in the file
 afterwards. The demo and the program send nothing anywhere.
 
-## Other uses
+## By use
 
 The program places "candidates" who must meet "recruiters", each in one
 place at a time. Many other plannings fit this mould: the names of the keys
 stay, only their meaning changes.
+
+Most of the keys below serve one use only; left out, they change nothing for
+the others.
+
+### Recruiting
+
+Interviews proper: candidates, recruiters, ranks, joint interviews and
+panels (see [the problem file](#the-problem-file)), priorities and urgency.
+See [example/problem.yaml](example/problem.yaml),
+[example/panel.yaml](example/panel.yaml) and
+[example/assessors.yaml](example/assessors.yaml).
+
+**One recruiter among several** is a list within the list of `meet`: `meet:
+[Manager, [Ada, Ben, Cleo]]` meets the manager and one of the three
+assessors, whoever suits the schedule. In the mapping form, the alternatives
+carry the same `choice`, any name, and share their rank: `{Manager: 1, Ada:
+{rank: 2, choice: assessor}, Ben: {rank: 2, choice: assessor}}`. In a
+meeting, it is a list within `with`: `{with: [Host, [Camera 1, Camera 2]]}`.
+The candidate is complete with any one of them, the choice counts as one
+meeting in `meetings`, and the others are not to plan later: they were not
+needed. With `optional: true` on all of them, the choice is a guest who may
+be any of them, or nobody. A choice is never met twice in one interview,
+even jointly, and its alternatives are not members of a panel, which is met
+whole. See [example/assessors.yaml](example/assessors.yaml).
+
+### Meetings, recordings and shoots
 
 **Meetings: everybody at once.** With `together: true`, a candidate meets all
 their recruiters in one single interview, whatever the joint groups, or not
@@ -552,37 +590,6 @@ Full examples ([in French](example/fr) too): [the recordings of a show](example/
 [role-playing games](example/roleplay.yaml) whose game master runs two
 tables.
 
-Not only interviews, and not only a working day: the same file plans [two
-days away by train](example/trip.yaml), where the hotel and the trains are
-`required` — the day falls apart without them and they are no achievement —
-and a friend joins two of the visits as a guest, `optional`: no visit is
-given up for her.
-
-**A programme: one thing after the other.** For a colloquium in one room,
-the colloquium is the candidate and the speakers its recruiters: it is in one
-place at a time, so the talks follow each other. Each speaker's `duration` is
-the length of their talk, the ranks put the opening first and the closing
-last, and their availabilities fix their days ([full
-example](example/colloquium.yaml)):
-
-```yaml
-day: 09:00-12:00, 14:00-17:00   # lunch as a gap in the day: talks before and after
-max-gap: unlimited
-objectives: [complete-candidates, earliest]
-candidates:
-  colloquium:
-    meet: {opening: 1, Ada: 2, Blaise: 2, Grace: 2, closing: 3}
-```
-
-Some traps:
-- the lunch goes in `day`, not in `breaks`: a break forbids the interviews of
-  a candidate on both sides of it on the same day, so a day would have talks
-  in the morning or in the afternoon only;
-- the objective `candidate-wait` counts the lunch as waiting, and packs the
-  talks into the mornings: leave it out;
-- all or nothing: a speaker who cannot be placed leaves the whole colloquium
-  unplanned (the output says who); one room only.
-
 **A shoot over several days in a row.** The shoot is one candidate; each
 person appears once per day (`Ada day 1`, `Ada day 2`…, with their
 availabilities); the people of a day form a panel, so that each day gathers
@@ -612,6 +619,99 @@ journeys of `travel`, which may include the time to pack the gear: a
 `min-gap` would also apply between two meetings of the same shoot. See [the
 example of a tour](example/tour.yaml).
 
+### A programme: colloquia and games
+
+**A programme: one thing after the other.** For a colloquium in one room,
+the colloquium is the candidate and the speakers its recruiters: it is in one
+place at a time, so the talks follow each other. Each speaker's `duration` is
+the length of their talk, the ranks put the opening first and the closing
+last, and their availabilities fix their days ([full
+example](example/colloquium.yaml)):
+
+```yaml
+day: 09:00-12:00, 14:00-17:00   # lunch as a gap in the day: talks before and after
+max-gap: unlimited
+objectives: [complete-candidates, earliest]
+candidates:
+  colloquium:
+    meet: {opening: 1, Ada: 2, Blaise: 2, Grace: 2, closing: 3}
+```
+
+Some traps:
+- the lunch goes in `day`, not in `breaks`: a break forbids the interviews of
+  a candidate on both sides of it on the same day, so a day would have talks
+  in the morning or in the afternoon only;
+- the objective `candidate-wait` counts the lunch as waiting, and packs the
+  talks into the mornings: leave it out;
+- all or nothing: a speaker who cannot be placed leaves the whole colloquium
+  unplanned (the output says who); one room only.
+
+Role-playing games work the same way: each game is a candidate, the players
+and the game master its recruiters. See
+[example/roleplay.yaml](example/roleplay.yaml) and
+[example/colloquium.yaml](example/colloquium.yaml).
+
+### Outings and trips
+
+Not only interviews, and not only a working day: the same file plans [two
+days away by train](example/trip.yaml), commented line by line. The model
+turns around: the family or the group is a recruiter, which is in one place
+at a time; every place is a recruiter too, whose availability is its opening
+hours; every visit is a candidate, a meeting between the two. The hotel and
+the trains are `required`, a friend joins some of the visits as a guest, and
+the lunch is at one of two places.
+
+**`required: true`** makes a candidate a constraint instead of an
+objective: the program refuses to return a schedule without them and
+names them instead. It is for what the day is built around and carries no
+interest of its own — the train that was booked, the keys handed back at
+the hotel, the room given back at six. A `priority` ranks what one would
+rather have; this says there is nothing to rank, so a required candidate
+stays out of the tallies of candidates served.
+
+**`optional: true`** on one of the recruiters of `meet` invites them
+without needing them: `meet: {Market: {}, Annick: {optional: true}}`. The
+candidate is complete without them, and the interview is held with the
+guests who are free at that time and without the others, each on their
+own account. It is the guest who comes along if they can — a friend on
+an outing, a second assessor if they are free, a manager who sits in on
+an interview when their day allows. An interview is never given up for a
+guest: it is held without them when they cannot be there at an hour that
+suits the others. Once it is held, the guest who missed it is not asked
+again: the candidate is served, and is not in the file of what is left
+(`-rest`). A guest costs their time like anybody, and `meetings` and
+`guest-time` are the only objectives that count them, how often and how
+long: they come when one of them ranks before the objectives on the
+recruiters' time, as `meetings` does by default, and never when neither is
+among the `objectives`, which `-check` reports. A candidate whose every
+meeting is optional is a bonus: counted in `meetings`, never among the
+candidates served.
+
+In a visit (`together: true`), a guest may have a length of their own, the
+visit's when they come: `meet: {Us: {}, Museum: {}, Guide: {optional: true,
+duration: 1h30m}}` with `duration: 1h` is an hour's visit, an hour and a
+half with the guide; the longer one is held with the guide only where it
+fits. The same holds for one of a choice (the lunch that takes longer at
+the market). A visit lasts as long as its longest part there, so such a
+length only lengthens it.
+
+Between two schedules as good on every objective, the one where a guest
+does not leave the day's visits and come back to a later one is preferred: the friend is with us at the
+market and the cathedral, not at the market, away for the cathedral and
+back for the museum. To forbid it outright, give the guest
+`continuous: true` among the recruiters: once away from the day's visits,
+they stay away that day (they may still come late or leave early). A
+visit that needs them, where they are not optional, counts like the
+others: missing the cathedral, the friend who has the museum tickets
+cannot be there for the museum, so the search keeps her with us or away
+until the museum, never both.
+
+Each of a choice may say where the candidate is met when it is the one
+chosen, for the journeys: `Lunch: {meet: {Us: {}, Bistro: {choice: lunch,
+place: Old town}, Café: {choice: lunch, place: Next town}}, together: true}`
+is lunch at the bistro or at the café, whichever the journeys before and
+after allow. Only the alternatives of one choice of a candidate have places.
+
 ## Objectives
 
 | Name | Meaning |
@@ -619,6 +719,7 @@ example of a tour](example/tour.yaml).
 | `priorities` | maximise the candidates who meet all their recruiters, priority level by priority level, the highest first |
 | `urgency` | among them, prefer the candidates with the fewest days left (see below) |
 | `complete-candidates` | maximise the candidates who meet all their recruiters, whatever their priority |
+| `guest-time` | maximise the time the guests (`optional: true`) spend in the interviews they come to: a guest with you for a long visit counts more than one who looks in on a short one |
 | `meetings` | maximise the meetings held |
 | `recruiters` | minimise the recruiters who have at least one interview, day by day: a recruiter who comes on two days counts two |
 | `recruiter-half-days` | minimise the half-days (morning, afternoon) in which recruiters have an interview, summed over the recruiters and the days |
@@ -706,53 +807,6 @@ recruiters, `complete-candidates` first those who need few.
   interviews with her is all the day can hold, however free the others are.
   Where the count reaches it, the answer is proven with nothing to
   enumerate.
-- **`optional: true`** on one of the recruiters of `meet` invites them
-  without needing them: `meet: {Market: {}, Annick: {optional: true}}`. The
-  candidate is complete without them, and the interview is held with the
-  guests who are free at that time and without the others, each on their
-  own account. It is the guest who comes along if they can — a friend on
-  an outing, a second assessor if they are free, a manager who sits in on
-  an interview when their day allows. An interview is never given up for a
-  guest: it is held without them when they cannot be there at an hour that
-  suits the others. Once it is held, the guest who missed it is not asked
-  again: the candidate is served, and is not in the file of what is left
-  (`-rest`). A guest costs their time like anybody, and `meetings` is the
-  only objective that counts them: they come when it ranks before the
-  objectives on the recruiters' time, as it does by default, and never
-  when it is not among the `objectives`, which `-check` reports. A
-  candidate whose every meeting is optional is a bonus: counted in
-  `meetings`, never among the candidates served.
-- **One recruiter among several** is a list within the list of `meet`:
-  `meet: [Manager, [Ada, Ben, Cleo]]` meets the manager and one of the
-  three assessors, whoever suits the schedule. In the mapping form, the
-  alternatives carry the same `choice`, any name, and share their rank:
-  `{Manager: 1, Ada: {rank: 2, choice: assessor}, Ben: {rank: 2, choice:
-  assessor}}`. In a meeting, it is a list within `with`: `{with: [Host,
-  [Camera 1, Camera 2]]}`. The candidate is complete with any one of them,
-  the choice counts as one meeting in `meetings`, and the others are not to
-  plan later: they were not needed. With `optional: true` on all of them,
-  the choice is a guest who may be any of them, or nobody. A choice is
-  never met twice in one interview, even jointly, and its alternatives are
-  not members of a panel, which is met whole. See
-  [example/assessors.yaml](example/assessors.yaml).
-- **`required: true`** makes a candidate a constraint instead of an
-  objective: the program refuses to return a schedule without them and
-  names them instead. It is for what the day is built around and carries no
-  interest of its own — the train that was booked, the keys handed back at
-  the hotel, the room given back at six. A `priority` ranks what one would
-  rather have; this says there is nothing to rank, so a required candidate
-  stays out of the tallies of candidates served.
-- **Journeys hold together.** A journey through other places counts when it
-  is shorter, so the times you give have to be consistent: Paris to Dijon
-  cannot take longer than Paris to Lyon and then Lyon to Dijon. Two things
-  follow, and both surprise. A **default journey links every pair of
-  places**, so with a default of ten minutes no two places are ever more
-  than twenty minutes apart, whatever the file says — a long journey given
-  to forbid a link is void. And **a default of zero is not "no link", it is
-  a free link**: every pair you leave out of the file becomes a way through
-  at no cost. A place named in `journeys` is a place even when no candidate
-  is met there, so a misspelt name opens a way nobody wanted. The program
-  reports every journey a way through makes shorter than you gave it.
 - **Following**: `-progress` prints the objectives at every improvement, with
   the time elapsed. `-progress-json` prints the same thing as one JSON object
   per line, for a program: `{"seconds":4.7,"iterations":812345,"scores":
@@ -976,8 +1030,10 @@ of `go.mod` and the version of golangci-lint, a weekly workflow
 is out and closing it once both are raised. Every Sunday night, a deep run
 (`.github/workflows/deep.yml`, `scripts/deep.sh`) plays the comparisons with
 an exhaustive search and the walks over random problems on thousands of
-problems, new ones each week, and opens an issue naming the seed of any
-that fails: `DEEP_FROM=<seed> DEEP_SEEDS=1 go test -run <test> ./planning/`
+problems, new ones each week, searches a hundred big ones, of up to two
+hundred candidates, and ten of a thousand and more, where no best schedule
+is known but every rule must hold, and opens an issue naming the seed of
+any that fails: `DEEP_FROM=<seed> DEEP_SEEDS=1 go test -run <test> ./planning/`
 plays it again. A version tag (`git tag v0.1.0
 && git push origin v0.1.0`) publishes a release with the ready-to-use zips of
 the tutorial (`.github/workflows/release.yml`, `scripts/package.sh`).

@@ -69,14 +69,22 @@ func requireScoreboard(t *testing.T, s *searcher, o Options, seed uint64, move i
 	scores, err := Evaluate(s.in.p, o, sched)
 	require.NoError(t, err)
 
-	// The search's own criterion, when some candidates are required, comes
-	// before those of the objectives and has no score: it counts the
-	// required candidates who hold all they need.
+	// The search's own criteria have no score: before the objectives, when
+	// some candidates are required, how many of them hold all they need;
+	// after them, when some recruiters are guests, how many times a guest
+	// comes back after missing a visit.
 	inside := s.score()
-	own := len(inside) - len(scores)
-	require.GreaterOrEqual(t, own, 0)
+	own := 0
 
-	if own > 0 {
+	if own < len(s.crit) && s.crit[own].broken {
+		require.Equal(t, returnsOf(s.in.p, sched, true), inside[own],
+			"the continuous guests' returns, seed %d after move %d", seed, move)
+		require.Zero(t, inside[own], "a continuous guest came back, seed %d after move %d", seed, move)
+
+		own++
+	}
+
+	if own < len(s.crit) && s.crit[own].required {
 		held := make([]bool, len(s.in.p.Requests))
 
 		for _, iv := range sched.Interviews {
@@ -93,11 +101,19 @@ func requireScoreboard(t *testing.T, s *searcher, o Options, seed uint64, move i
 			}
 		}
 
-		require.Equal(t, required, -inside[0], "the required candidates held, seed %d after move %d", seed, move)
+		require.Equal(t, required, -inside[own], "the required candidates held, seed %d after move %d", seed, move)
+
+		own++
 	}
 
-	for i, cr := range s.crit[own:] {
-		if !countsCandidates(cr.obj) && cr.obj != MaxMeetings {
+	if last := len(s.crit) - 1; last >= 0 && s.crit[last].returns {
+		require.Equal(t, returnsOf(s.in.p, sched, false), inside[last], "the guests' returns, seed %d after move %d", seed, move)
+	}
+
+	require.Len(t, scores, len(s.crit)-own-count([]bool{len(s.crit) > 0 && s.crit[len(s.crit)-1].returns}))
+
+	for i, cr := range s.crit[own : own+len(scores)] {
+		if !countsCandidates(cr.obj) && cr.obj != MaxMeetings && cr.obj != MaxGuestTime {
 			continue
 		}
 
@@ -106,6 +122,74 @@ func requireScoreboard(t *testing.T, s *searcher, o Options, seed uint64, move i
 			"%s (level %d): the scoreboard and the engine disagree, seed %d after move %d",
 			cr.obj, cr.level, seed, move)
 	}
+}
+
+// returnsOf counts the guests' returns of a schedule from its interviews,
+// on its own: for each guest and day, the interviews of the candidates who
+// meet them, as a guest or not, in the order of time, and each time the guest is back after
+// one without them, having been in one before. With continuous, only the
+// Recruiter.Continuous guests.
+func returnsOf(p *Problem, s *Schedule, continuous bool) int {
+	n := 0
+
+	for g := range p.Recruiters {
+		if continuous && !p.Recruiters[g].Continuous {
+			continue
+		}
+
+		inviting, guest := map[int]bool{}, p.Recruiters[g].Continuous
+
+		for _, r := range p.Requests {
+			if r.Recruiter == g {
+				inviting[r.Candidate] = true
+				guest = guest || r.Optional
+			}
+		}
+
+		if !guest {
+			continue
+		}
+
+		byDay := map[int][]Interview{}
+
+		for _, iv := range s.Interviews {
+			if inviting[iv.Candidate] {
+				d := int(iv.Start / DayLength)
+				byDay[d] = append(byDay[d], iv)
+			}
+		}
+
+		for _, day := range byDay {
+			slices.SortFunc(day, func(a, b Interview) int { return int(a.Start - b.Start) })
+
+			seen, away := false, false
+
+			// The visits that start together are read together, and do
+			// not hide one another: in one, the guest is away from the rest.
+			for i := 0; i < len(day); {
+				with, without := false, false
+
+				j := i
+				for ; j < len(day) && day[j].Start == day[i].Start; j++ {
+					if slices.Contains(day[j].Recruiters, g) {
+						with = true
+					} else {
+						without = true
+					}
+				}
+
+				if with && seen && away {
+					n++
+				}
+
+				seen = seen || with
+				away = without
+				i = j
+			}
+		}
+	}
+
+	return n
 }
 
 // randomOuting draws a problem where guests are invited in every way there
@@ -133,6 +217,8 @@ func randomOuting(rnd *rand.Rand) (*Problem, Options) {
 			}}
 		default:
 		}
+
+		r.Continuous = rnd.IntN(3) == 0 // as a guest, once away, away for the day
 
 		p.Recruiters = append(p.Recruiters, r)
 	}

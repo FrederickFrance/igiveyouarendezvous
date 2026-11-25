@@ -173,7 +173,89 @@ func Check(p *Problem, opts Options, s *Schedule) error {
 		return err
 	}
 
+	if err := checkContinuous(p, s); err != nil {
+		return err
+	}
+
 	return checkCandidates(p, o, s, held, breaks)
+}
+
+// checkContinuous tells whether every continuous guest (see
+// Recruiter.Continuous), once away from a visit they are invited to, stays
+// away for the rest of the day.
+func checkContinuous(p *Problem, s *Schedule) error {
+	for g, r := range p.Recruiters {
+		if !r.Continuous {
+			continue
+		}
+
+		if day, back := comesBack(p, s.Interviews, g); back {
+			return fmt.Errorf("%s leaves the visits of day %d and comes back to a later one, and is continuous",
+				r.Name, day+1)
+		}
+	}
+
+	return nil
+}
+
+// comesBack tells whether guest g, on some day, is in a visit, away from a
+// later one and back at a later one still; and on which day first. The
+// visits are the interviews of the candidates who meet g, as a guest or
+// not, in the order of time. Those that start together are read together,
+// whichever is listed first, and do not hide one another: in one of them, g
+// is still away from the others, and back if in a later one. Read so, a
+// schedule that keeps the rule keeps it with any of its interviews taken
+// out, which resuming from a part of it relies on.
+func comesBack(p *Problem, interviews []Interview, g int) (int, bool) {
+	inviting := map[int]bool{}
+
+	for _, r := range p.Requests {
+		if r.Recruiter == g {
+			inviting[r.Candidate] = true
+		}
+	}
+
+	var visits []Interview
+
+	for _, iv := range interviews {
+		if inviting[iv.Candidate] {
+			visits = append(visits, iv)
+		}
+	}
+
+	slices.SortFunc(visits, func(a, b Interview) int { return cmp.Compare(a.Start, b.Start) })
+
+	first := -1
+
+	seen, away := false, false
+
+	for i := 0; i < len(visits); {
+		day := int(visits[i].Start / DayLength)
+		if i > 0 && day != int(visits[i-1].Start/DayLength) {
+			seen, away = false, false
+		}
+
+		with, without := false, false
+
+		j := i
+		for ; j < len(visits) && visits[j].Start == visits[i].Start; j++ {
+			if slices.Contains(visits[j].Recruiters, g) {
+				with = true
+			} else {
+				without = true
+			}
+		}
+
+		if with && away && (first < 0 || day < first) {
+			first = day
+		}
+
+		seen = seen || with
+		away = seen && without
+		i = j
+	}
+
+	return first, first >= 0
 }
 
 // checkPrecedences tells whether every candidate asked to come before
@@ -403,7 +485,7 @@ func checkOverlaps(p *Problem, s *Schedule) error {
 
 // checkRecruiterGaps verifies the time between any two interviews of each
 // recruiter, nights included: their gap, and the journey between the places
-// of the candidates.
+// of the interviews (that of the candidate, or of the alternative held).
 func checkRecruiterGaps(p *Problem, s *Schedule) error {
 	j := p.journeys()
 	travel := j.needed()
@@ -411,6 +493,7 @@ func checkRecruiterGaps(p *Problem, s *Schedule) error {
 	type meeting struct {
 		iv        Interval
 		candidate int
+		place     int
 	}
 
 	for h, r := range p.Recruiters {
@@ -422,7 +505,7 @@ func checkRecruiterGaps(p *Problem, s *Schedule) error {
 
 		for _, iv := range s.Interviews {
 			if slices.Contains(iv.Recruiters, h) {
-				list = append(list, meeting{Interval{iv.Start, iv.End}, iv.Candidate})
+				list = append(list, meeting{Interval{iv.Start, iv.End}, iv.Candidate, j.placeOfInterview(p, iv)})
 			}
 		}
 
@@ -434,9 +517,9 @@ func checkRecruiterGaps(p *Problem, s *Schedule) error {
 					break // and so are the next ones
 				}
 
-				journey := j.between(a.candidate, b.candidate)
+				journey := j.apart(a.place, b.place)
 				if gap := b.iv.Start - a.iv.End; gap < r.MinGap+journey {
-					return gapError(p, r, gap, a.iv, b.iv, a.candidate, b.candidate, journey)
+					return gapError(r, gap, a.iv, b.iv, j.places, a.place, b.place, journey)
 				}
 			}
 		}
@@ -446,8 +529,8 @@ func checkRecruiterGaps(p *Problem, s *Schedule) error {
 }
 
 // gapError tells that recruiter r has only gap between interviews a and b,
-// with candidates ca and cb.
-func gapError(p *Problem, r Recruiter, gap time.Duration, a, b Interval, ca, cb int, journey time.Duration) error {
+// at places pa and pb (indices into places).
+func gapError(r Recruiter, gap time.Duration, a, b Interval, places []string, pa, pb int, journey time.Duration) error {
 	if journey == 0 {
 		return fmt.Errorf("%s has %s between two interviews (%s and %s), less than their gap of %s",
 			r.Name, gap, a, b, r.MinGap)
@@ -459,7 +542,7 @@ func gapError(p *Problem, r Recruiter, gap time.Duration, a, b Interval, ca, cb 
 	}
 
 	return fmt.Errorf("%s has %s between two interviews (%s in %s and %s in %s), less than %s",
-		r.Name, gap, a, p.Candidates[ca].Place, b, p.Candidates[cb].Place, need)
+		r.Name, gap, a, places[pa], b, places[pb], need)
 }
 
 // checkGathering verifies who meets candidate c in interview iv: the whole
@@ -916,6 +999,18 @@ func evaluate(p *Problem, o Options, s *Schedule, cr criterion, held []bool) int
 		return n
 	case MaxMeetings:
 		return count(held)
+	case MaxGuestTime:
+		total := time.Duration(0)
+
+		for _, iv := range s.Interviews {
+			for _, r := range iv.Requests {
+				if p.Requests[r].Optional {
+					total += iv.End - iv.Start
+				}
+			}
+		}
+
+		return int(total / time.Minute)
 	case MinInterviews:
 		return len(s.Interviews)
 	case MinRecruiterSpan, MinCandidateWait, MinRecruiterBreaks, MinCandidateBreaks,

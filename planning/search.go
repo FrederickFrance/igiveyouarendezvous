@@ -336,12 +336,21 @@ type searcher struct {
 	// counts.
 	idleAt       int
 	idleSpreadAt int
-	idle         []int // [unit]: free slots between first and last
-	dayMeets     []int // [unit]: interviews of the recruiter that day
-	usedAt       int   // index of MinRecruiters in crit, or -1
-	halfAt       int   // index of MinRecruiterHalfDays in crit, or -1
-	endAt        int   // index of MinDayEnds in crit, or -1
-	wholeAt      int   // index of MinSpan in crit, or -1
+	returnsAt    int     // index of the guests' returns in crit, or -1
+	brokenAt     int     // index of the continuous guests' returns in crit, or -1
+	invited      [][]int // [recruiter]: for a guest somewhere, the candidates who meet them
+	// fixedVisits[recruiter]: for a guest, the fixed interviews of the
+	// candidates who meet them, which no plan holds (see guestReturns). Nil
+	// without a fixed interview.
+	fixedVisits [][]guestVisit
+	// invitesContinuous[c]: candidate c invites a Recruiter.Continuous guest.
+	invitesContinuous []bool
+	idle              []int // [unit]: free slots between first and last
+	dayMeets          []int // [unit]: interviews of the recruiter that day
+	usedAt            int   // index of MinRecruiters in crit, or -1
+	halfAt            int   // index of MinRecruiterHalfDays in crit, or -1
+	endAt             int   // index of MinDayEnds in crit, or -1
+	wholeAt           int   // index of MinSpan in crit, or -1
 	// completeFirst: complete candidates rank before meetings.
 	completeFirst bool
 	completeAt    int // index of the first criterion counting complete candidates, or -1
@@ -487,6 +496,9 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 		gapAt:        indexOf(in.crit, MinRecruiterBreaks),
 		idleAt:       indexOf(in.crit, MinRecruiterIdle),
 		idleSpreadAt: indexOf(in.crit, MinRecruiterIdleSpread),
+		returnsAt:    slices.IndexFunc(in.crit, func(cr criterion) bool { return cr.returns }),
+		brokenAt:     slices.IndexFunc(in.crit, func(cr criterion) bool { return cr.broken }),
+		invited:      make([][]int, nR),
 		spread:       -1,
 		meets:        make([]int, nR),
 		usedAt:       indexOf(in.crit, MinRecruiters),
@@ -631,12 +643,41 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 		}
 	}
 
+	s.indexGuests()
+
 	complete := slices.IndexFunc(s.crit, func(cr criterion) bool { return countsCandidates(cr.obj) })
 	meetings := indexOf(s.crit, MaxMeetings)
 	s.completeFirst = complete >= 0 && (meetings < 0 || complete < meetings)
 	s.completeAt = complete
 
 	return s, nil
+}
+
+// indexGuests lists, for each recruiter who is a guest somewhere or
+// continuous (Recruiter.Continuous), the
+// candidates who meet them, as a guest or not: whose visits count their
+// returns. A visit that needs them counts like the others: away from one
+// visit, they cannot be back for the next without coming back.
+func (s *searcher) indexGuests() {
+	guest := make([]bool, len(s.in.p.Recruiters))
+
+	for _, req := range s.in.p.Requests {
+		guest[req.Recruiter] = guest[req.Recruiter] || req.Optional || s.in.p.Recruiters[req.Recruiter].Continuous
+	}
+
+	for _, req := range s.in.p.Requests {
+		if guest[req.Recruiter] && !slices.Contains(s.invited[req.Recruiter], req.Candidate) {
+			s.invited[req.Recruiter] = append(s.invited[req.Recruiter], req.Candidate)
+		}
+	}
+
+	s.invitesContinuous = make([]bool, len(s.in.p.Candidates))
+
+	for g, candidates := range s.invited {
+		for _, c := range candidates {
+			s.invitesContinuous[c] = s.invitesContinuous[c] || s.in.p.Recruiters[g].Continuous
+		}
+	}
 }
 
 // indexPrecedences lists, for each candidate, who must be over before them
@@ -667,6 +708,14 @@ func (s *searcher) maskParts(part, parts []int) error {
 	in := s.in
 
 	for c := range in.requestsOf {
+		// The parts of a candidate are the bits of one uint64: which are
+		// held, needed, or to come first is then one operation on a word,
+		// asked millions of times while a candidate is inserted. Hence 64
+		// at most.
+		//
+		// TODO: to lift the limit, a wider set of bits in place of every
+		// uint64 of parts (optMask, fullMask, needMask, possible, before,
+		// higher, and the masks the explorations carry).
 		if parts[c] > 64 {
 			return fmt.Errorf("planning: %s has more than 64 interviews to hold", in.p.Candidates[c].Name)
 		}
@@ -853,11 +902,38 @@ func (s *searcher) bounds() []int {
 			}
 		case MaxMeetings:
 			b[i] = -meetings
+		case MaxGuestTime:
+			b[i] = -s.mostGuestTime()
 		default: // no obvious bound: zero is never beaten
 		}
 	}
 
 	return b
+}
+
+// mostGuestTime returns as much guest time as a schedule can hold, or more:
+// each guest in the longest interview that may hold them.
+func (s *searcher) mostGuestTime() int {
+	longest := map[int]int{}
+
+	for _, opt := range s.in.options {
+		if len(opt.starts) == 0 {
+			continue
+		}
+
+		for _, r := range opt.requests {
+			if s.in.p.Requests[r].Optional {
+				longest[r] = max(longest[r], opt.length)
+			}
+		}
+	}
+
+	total := 0
+	for _, length := range longest {
+		total += length
+	}
+
+	return total * int(s.in.g.step/time.Minute)
 }
 
 // mostMeetings returns the most requests one plan of candidate c can hold,
@@ -1017,6 +1093,18 @@ func (s *searcher) greedy() {
 			}
 		}
 	}
+}
+
+// wholePlan tells whether plan, holding mask, is a plan candidate c may
+// have: every meeting they need (the guests may be there or not), and no
+// continuous guest brought back.
+func (s *searcher) wholePlan(c int, mask uint64, plan []placed) bool {
+	need := s.needMask[c]
+	if mask&need != need {
+		return false
+	}
+
+	return !s.invitesContinuous[c] || s.guestReturns(true, c, plan) == 0
 }
 
 // firstPlacement returns the first complete placement of candidate c found
@@ -1379,6 +1467,21 @@ func (s *searcher) apply(pr *prepared) {
 	copy(s.pinned, pr.pinned)
 
 	for _, iv := range pr.fixed {
+		for g, candidates := range s.invited {
+			if !slices.Contains(candidates, iv.Candidate) {
+				continue
+			}
+
+			if s.fixedVisits == nil {
+				s.fixedVisits = make([][]guestVisit, len(s.invited))
+			}
+
+			with := slices.Contains(iv.Recruiters, g)
+			s.fixedVisits[g] = append(s.fixedVisits[g], guestVisit{iv.Start, with, !with})
+		}
+	}
+
+	for _, iv := range pr.fixed {
 		// The slots the interview overlaps, even when it is off the grid.
 		d := dayOf(iv.Start)
 		if d < 0 || d >= s.days {
@@ -1405,7 +1508,7 @@ func (s *searcher) apply(pr *prepared) {
 			s.busy[h].set(from, to, true)
 			s.meets[h]++
 			s.dayMeets[s.unit(h, from)]++
-			s.own(h, from, to, iv.Candidate)
+			s.own(h, from, to, s.in.trips.placeOfInterview(s.in.p, iv))
 			s.refresh(s.unit(h, from))
 		}
 
@@ -1588,6 +1691,10 @@ func (s *searcher) fits(c int, plan []placed) string {
 		return err.Error()
 	}
 
+	if s.invitesContinuous[c] && s.guestReturns(true, c, plan) > 0 {
+		return "a continuous guest of " + name + " would leave the visits of a day and come back"
+	}
+
 	return ""
 }
 
@@ -1725,11 +1832,18 @@ func (s *searcher) move() {
 	}
 }
 
-// fair tells whether the recruiters' breaks sit within Options.BreakSpread.
+// fair tells whether the recruiters' breaks sit within Options.BreakSpread,
+// and whether every Recruiter.Continuous guest, once away, stays away for
+// the day: the rules over several candidates, which a move is taken back
+// for breaking.
 // Recruiters with fewer than two interviews are left out: they have no
 // waiting to speak of, and counting their nought would pull the fewest down
 // and turn a rule about the spread into a cap on the most.
 func (s *searcher) fair() bool {
+	if s.brokenAt >= 0 && s.guestReturns(true, -1, nil) > 0 { // a continuous guest comes back
+		return false
+	}
+
 	if s.spread < 0 {
 		return true
 	}
@@ -2078,7 +2192,7 @@ func (s *searcher) eject(served []int) []int {
 	var victims []int
 
 	for _, c := range served {
-		if s.conflict(x, plan, c, s.plans[c]) {
+		if s.conflict(plan, s.plans[c]) {
 			victims = append(victims, c)
 		}
 	}
@@ -2092,12 +2206,9 @@ func (s *searcher) eject(served []int) []int {
 	return victims
 }
 
-// conflict tells whether plan a of candidate x and plan b of candidate c
-// need the same recruiter at the same time, or closer than the recruiter's
-// gap and the journey between the places of x and c.
-func (s *searcher) conflict(x int, a []placed, c int, b []placed) bool {
-	journey := int(s.in.trips.between(x, c) / time.Minute)
-
+// conflict tells whether plans a and b need the same recruiter at the same time, or closer than the recruiter's
+// gap and the journey between the places of their interviews.
+func (s *searcher) conflict(a, b []placed) bool {
 	for _, pa := range a {
 		oa := &s.in.options[pa.option]
 
@@ -2111,7 +2222,7 @@ func (s *searcher) conflict(x int, a []placed, c int, b []placed) bool {
 				return true
 			}
 
-			if need := s.sharedGap(oa.recruiters, ob.recruiters) + journey; need > 0 {
+			if need := s.sharedGap(oa.recruiters, ob.recruiters) + s.journey(oa.place, ob.place); need > 0 {
 				startA, endA := s.in.minute[pa.start], s.endMinutes(pa.start, oa.length)
 				startB, endB := s.in.minute[pb.start], s.endMinutes(pb.start, ob.length)
 
@@ -2154,7 +2265,8 @@ func (s *searcher) breakSymmetries() {
 
 // clearOfChain tells whether option o, from slot t, keeps the gaps of the
 // recruiters it shares with plan, the interviews of the same candidate placed
-// so far: busy only holds those of the other candidates.
+// so far, and the journeys when they are at two places (Request.Place):
+// busy only holds those of the other candidates.
 func (s *searcher) clearOfChain(o, t int, plan []placed) bool {
 	opt := &s.in.options[o]
 	if !s.repeats[opt.candidate] {
@@ -2165,7 +2277,11 @@ func (s *searcher) clearOfChain(o, t int, plan []placed) bool {
 
 	for _, pl := range plan {
 		other := &s.in.options[pl.option]
-		if gap := s.sharedGap(opt.recruiters, other.recruiters); gap > 0 {
+		if !shareAny(opt.recruiters, other.recruiters) {
+			continue
+		}
+
+		if gap := s.sharedGap(opt.recruiters, other.recruiters) + s.journey(opt.place, other.place); gap > 0 {
 			from, to := s.in.minute[pl.start], s.endMinutes(pl.start, other.length)
 			if start < to+gap && from < end+gap {
 				return false
@@ -2240,6 +2356,7 @@ type node struct {
 	mask       uint64 // parts held
 	blocks     int
 	requests   int // requests held: what MaxMeetings counts
+	guestTime  int // minutes the guests spend in the interviews: what MaxGuestTime counts
 	start      int // start of the last interview
 	end        int // end of the last interview (exclusive)
 	wait       int // slots between the interviews of a same day
@@ -2288,6 +2405,10 @@ func (s *searcher) then(n node, o, t int) node {
 	n.blocks++
 	n.requests += len(opt.requests)
 	n.start, n.end = t, end
+
+	if opt.guests > 0 {
+		n.guestTime += opt.guests * opt.length * int(s.in.g.step/time.Minute)
+	}
 	n.endSum += s.endMinutes(t, opt.length)
 
 	return n
@@ -2320,7 +2441,7 @@ func (s *searcher) bestPlacement(c int) []placed {
 	complete := 0
 
 	consider := func(n node) {
-		if n.mask&need != need { // the guests may be there or not
+		if !s.wholePlan(c, n.mask, cur) {
 			return
 		}
 
@@ -2518,6 +2639,12 @@ func (s *searcher) vector(dst []int, c int, n node) {
 			continue
 		}
 
+		if cr.returns || cr.broken { // counted over the guests' days, by score
+			dst[i] = 0
+
+			continue
+		}
+
 		switch cr.obj {
 		case MaxCompleteCandidates, MaxPriorities, MaxUrgency:
 			dst[i] = 0
@@ -2526,6 +2653,8 @@ func (s *searcher) vector(dst []int, c int, n node) {
 			}
 		case MaxMeetings:
 			dst[i] = -n.requests
+		case MaxGuestTime:
+			dst[i] = -n.guestTime
 		case MinInterviews:
 			dst[i] = n.blocks
 		case MinRecruiterSpan:
@@ -2755,7 +2884,7 @@ func (s *searcher) free(o, t int) bool {
 	}
 
 	for _, h := range opt.recruiters {
-		if !s.roomFor(busy[h], h, opt.candidate, t, opt.length) {
+		if !s.roomFor(busy[h], h, opt.candidate, opt.place, t, opt.length) {
 			return false
 		}
 	}
@@ -2764,9 +2893,10 @@ func (s *searcher) free(o, t int) bool {
 }
 
 // roomFor tells whether recruiter h, busy in the slots of busy, can meet
-// candidate c from slot t for length slots: free then, and far enough from
-// their other interviews for their gap and the journeys, nights included.
-func (s *searcher) roomFor(busy bitset, h, c, t, length int) bool {
+// candidate c at place from slot t for length slots: free then, and far
+// enough from their other interviews for their gap and the journeys, nights
+// included.
+func (s *searcher) roomFor(busy bitset, h, c, place, t, length int) bool {
 	gap := int(s.in.p.Recruiters[h].MinGap / time.Minute)
 
 	reach := gap
@@ -2791,13 +2921,13 @@ func (s *searcher) roomFor(busy bitset, h, c, t, length int) bool {
 	start, end := minute[t], s.endMinutes(t, length)
 
 	for u := from; u < t; u++ {
-		if busy.has(u) && minute[u]+step+gap+s.journey(int(s.owner[h][u]), c) > start {
+		if busy.has(u) && minute[u]+step+gap+s.journey(int(s.owner[h][u]), place) > start {
 			return false
 		}
 	}
 
 	for u := t + length; u < to; u++ {
-		if busy.has(u) && end+gap+s.journey(c, int(s.owner[h][u])) > minute[u] {
+		if busy.has(u) && end+gap+s.journey(place, int(s.owner[h][u])) > minute[u] {
 			return false
 		}
 	}
@@ -2805,10 +2935,10 @@ func (s *searcher) roomFor(busy bitset, h, c, t, length int) bool {
 	return true
 }
 
-// journey returns the journey between the places of candidates a and b, in
-// minutes.
+// journey returns the journey between places a and b, in minutes (zero
+// when one of them is -1).
 func (s *searcher) journey(a, b int) int {
-	return int(s.in.trips.between(a, b) / time.Minute)
+	return int(s.in.trips.apart(a, b) / time.Minute)
 }
 
 // gapSlots returns the slots [from, to) that a recruiter with a gap of gap
@@ -2944,7 +3074,7 @@ func (s *searcher) rebound() {
 // the units it touched to touched, which it returns grown. The caller
 // brings the buffer so that marking a plan allocates nothing: it is done
 // twice on every replace, which is the hot path of the whole search.
-func (s *searcher) mark(touched []int, c int, plan []placed, busy bool) []int {
+func (s *searcher) mark(touched []int, _ int, plan []placed, busy bool) []int {
 	for _, pl := range plan {
 		opt := &s.in.options[pl.option]
 		for _, h := range opt.recruiters {
@@ -2955,7 +3085,7 @@ func (s *searcher) mark(touched []int, c int, plan []placed, busy bool) []int {
 				s.meets[h]++
 				s.dayMeets[s.unit(h, pl.start)]++
 
-				s.own(h, pl.start, pl.start+opt.length, c)
+				s.own(h, pl.start, pl.start+opt.length, opt.place)
 			} else {
 				s.meets[h]--
 				s.dayMeets[s.unit(h, pl.start)]--
@@ -2984,15 +3114,15 @@ func (s *searcher) occupy(from, to int, taken bool) {
 	}
 }
 
-// own records candidate c as the holder of the slots [from, to) of
-// recruiter h, when journeys matter.
-func (s *searcher) own(h, from, to, c int) {
+// own records place as where recruiter h is in the slots [from, to), when
+// journeys matter.
+func (s *searcher) own(h, from, to, place int) {
 	if s.owner == nil {
 		return
 	}
 
 	for t := from; t < to; t++ {
-		s.owner[h][t] = int32(c) //nolint:gosec // fewer candidates than an int32 holds
+		s.owner[h][t] = int32(place) //nolint:gosec // fewer places than an int32 holds
 	}
 }
 
@@ -3080,7 +3210,95 @@ func (s *searcher) score() []int {
 		score[s.wholeAt] += s.wholeHi - s.wholeLo
 	}
 
+	if s.returnsAt >= 0 {
+		score[s.returnsAt] = s.guestReturns(false, -1, nil)
+	}
+
+	if s.brokenAt >= 0 {
+		score[s.brokenAt] = s.guestReturns(true, -1, nil)
+	}
+
 	return score
+}
+
+// guestReturns counts, for each guest and day, the times the guest is away
+// from a visit they are invited to and then back at a later one that day:
+// the visits held that invite them, in the order of time, form runs with
+// them and without them, and every run with them after the first is one
+// return. With continuous, only the Recruiter.Continuous guests count; with
+// cand >= 0, candidate cand holds plan instead of their own.
+func (s *searcher) guestReturns(continuous bool, cand int, plan []placed) int {
+	returns := 0
+
+	var visits []guestVisit
+
+	for g, candidates := range s.invited {
+		if continuous && !s.in.p.Recruiters[g].Continuous {
+			continue
+		}
+
+		// The fixed interviews are visits like the others: a candidate
+		// resumed from is pinned and has no plan, and a guest counted over
+		// the plans alone was free to come back after a fixed visit they
+		// were away from.
+		visits = visits[:0]
+		if s.fixedVisits != nil {
+			visits = append(visits, s.fixedVisits[g]...)
+		}
+
+		for _, c := range candidates {
+			held := s.plans[c]
+			if c == cand {
+				held = plan
+			}
+
+			for _, pl := range held {
+				opt := &s.in.options[pl.option]
+				with := slices.Contains(opt.recruiters, g)
+				visits = append(visits, guestVisit{s.in.g.time(pl.start), with, !with})
+			}
+		}
+
+		slices.SortFunc(visits, func(a, b guestVisit) int { return cmp.Compare(a.start, b.start) })
+
+		// The visits that start together are read together, and do not
+		// hide one another (see comesBack).
+		moments := visits[:0]
+		for _, v := range visits {
+			if n := len(moments); n > 0 && moments[n-1].start == v.start {
+				moments[n-1].with = moments[n-1].with || v.with
+				moments[n-1].without = moments[n-1].without || v.without
+
+				continue
+			}
+
+			moments = append(moments, v)
+		}
+
+		seen, away, day := false, false, -1
+
+		for _, m := range moments {
+			if d := dayOf(m.start); d != day {
+				seen, away, day = false, false, d
+			}
+
+			if m.with && away {
+				returns++
+			}
+
+			seen = seen || m.with
+			away = seen && m.without
+		}
+	}
+
+	return returns
+}
+
+// guestVisit is a visit that invites a guest: when it starts, and whether
+// the guest is in it.
+type guestVisit struct {
+	start         time.Duration
+	with, without bool
 }
 
 func (s *searcher) snapshot() solution {
@@ -3096,16 +3314,20 @@ func (s *searcher) evaluate(sched *Schedule, score []int) error {
 		return err
 	}
 
-	// The search's own criterion, when it has one, comes before those of
-	// the objectives and has no score.
-	own := len(s.crit) - len(scores)
+	// The search's own criteria, when it has them, come before those of
+	// the objectives (the continuous guests' returns, the required
+	// candidates) and after them (the guests' returns), and have no score.
+	own := 0
+	for own < len(s.crit) && (s.crit[own].required || s.crit[own].broken) {
+		own++
+	}
 
-	for i, proven := range s.proven(score)[own:] {
+	for i, proven := range s.proven(score)[own : own+len(scores)] {
 		scores[i].Proven = proven
 
 		if bound := s.bound[own+i]; bound != 0 {
 			scores[i].Bound = bound
-			if cr := s.crit[own+i]; countsCandidates(cr.obj) || cr.obj == MaxMeetings {
+			if cr := s.crit[own+i]; countsCandidates(cr.obj) || cr.obj == MaxMeetings || cr.obj == MaxGuestTime {
 				scores[i].Bound = -bound // the maxima are counted downwards inside
 			}
 		}

@@ -84,6 +84,8 @@ func randomGuests(rnd *rand.Rand) (*planning.Problem, planning.Options) {
 			r.Availability = []planning.Interval{}
 		}
 
+		r.Continuous = rnd.IntN(4) == 0 // as a guest, once away, away for the day
+
 		p.Recruiters = append(p.Recruiters, r)
 	}
 
@@ -120,7 +122,12 @@ func randomGuests(rnd *rand.Rand) (*planning.Problem, planning.Options) {
 			cand.Duration = []time.Duration{0, 30 * time.Minute}[rnd.IntN(2)]
 
 			for _, h := range who[:2+rnd.IntN(2)] {
-				p.Requests = append(p.Requests, planning.Request{Candidate: c, Recruiter: h, Optional: guest(2)})
+				req := planning.Request{Candidate: c, Recruiter: h, Optional: guest(2)}
+				if req.Optional && rnd.IntN(2) == 0 { // the visit is longer with them
+					req.Duration = time.Hour
+				}
+
+				p.Requests = append(p.Requests, req)
 			}
 		default: // a meeting, and sometimes one of its people again, alone
 			for _, h := range who[:2+rnd.IntN(2)] {
@@ -198,6 +205,10 @@ func choose(p *planning.Problem, from int, rnd *rand.Rand) {
 			if p.Requests[a].Meeting == p.Requests[b].Meeting {
 				p.Requests[a].Choice, p.Requests[b].Choice = 1, 1
 				p.Requests[b].Optional, p.Requests[b].Rank = p.Requests[a].Optional, p.Requests[a].Rank
+
+				if rnd.IntN(2) == 0 { // one alternative takes longer
+					p.Requests[b].Duration = time.Hour
+				}
 
 				return
 			}

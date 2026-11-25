@@ -68,12 +68,31 @@ dates et les horaires :
 | Une semaine, des disponibilités par date, des priorités | Une semaine d'entretiens |
 | Un jury : ses membres reçoivent ensemble | Une commission de recrutement |
 | Des enregistrements avec des invités difficiles à réunir | Les enregistrements d'une émission |
+| Chaque candidat voit l'un ou l'autre de plusieurs recruteurs | Un évaluateur parmi trois |
 | Des tournages dans plusieurs villes, avec les trajets | Une tournée de tournages dans cinq villes |
 | Un colloque, des parties de jeu | Un colloque ; Des parties de jeu de rôle |
+| Une sortie ou un voyage : des visites, des trains, un invité | Deux jours de voyage en train |
 
-Trois règles d'écriture : gardez les espaces en début de ligne (deux de plus
-pour ce qui appartient à la ligne du dessus) ; écrivez chaque nom de la même
-façon partout ; écrivez les heures `09:00` et les dates `2026-11-16`.
+Trois règles d'écriture, que le programme vérifie :
+
+- **Le décalage en début de ligne compte** : il dit à quoi la ligne
+  appartient. Une ligne décalée de deux espaces de plus que celle du dessus
+  en fait partie. Ici, `Amélie` est l'une des `recruiters`, et
+  `availability` donne ses horaires à elle :
+
+  ```yaml
+  recruiters:
+    Amélie:
+      availability: 09:00-12:00
+  ```
+
+  Décalez avec des espaces, pas avec la touche Tab.
+- **Un nom s'écrit partout de la même façon**, majuscules et accents
+  compris : `Chloé` sous `recruiters` et `Chloe` dans `meet` sont deux noms
+  différents pour le programme, qui le signale comme une erreur.
+- **Les heures et les dates s'écrivent en chiffres** : les heures sur 24 h
+  avec deux points, `09:00` ou `14:30` (pas `9h`) ; les dates dans l'ordre
+  année-mois-jour, `2026-11-16` pour le 16 novembre 2026.
 
 ### Les mots du fichier
 
@@ -90,6 +109,9 @@ d'autres choses :
 | `duration` | la durée d'un entretien | |
 | `together: true` | une réunion : tout `meet` à la fois | un enregistrement |
 | `place`, `travel` | le lieu d'un candidat, et les trajets entre les lieux | les villes d'une tournée |
+| `optional: true` | un invité : bienvenu s'il peut venir, la rencontre a lieu sans lui | une amie qui se joint à une visite |
+| `required: true` | ce qui doit être planifié, sans compter comme une réussite | l'hôtel et les trains d'un voyage |
+| `choice` | l'un ou l'autre : le candidat voit un seul de ceux qui portent le même `choice` | un évaluateur parmi trois, un restaurant parmi deux |
 
 Toutes les clés sont dans le [README](README.fr.md#le-fichier-problème).
 
@@ -190,3 +212,8 @@ inventés.
 Pour un usage régulier, le programme téléchargé fait la même chose, plus
 vite et sans limite de temps : voyez
 [Premier planning, pas à pas](README.fr.md#premier-planning-pas-à-pas).
+
+Le projet est aussi une bibliothèque, en Go : un développeur peut s'en
+servir pour construire un autre programme autour du même moteur, par
+exemple une interface plus simple, faite pour votre service ou branchée sur
+vos outils. Voyez [Comme bibliothèque](README.fr.md#comme-bibliothèque).

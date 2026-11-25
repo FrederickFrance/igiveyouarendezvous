@@ -89,6 +89,15 @@ type Recruiter struct {
 	// write notes, to rest; the journeys between places come on top (see
 	// Problem.Travel). Zero means none.
 	MinGap time.Duration
+	// Continuous, for a recruiter who is a guest (Request.Optional), forbids
+	// that they leave the visits of a day and come back to a later one: once
+	// away, they stay away that day. The visits are those of the candidates
+	// who meet them, as a guest or not, so one that needs them late in the
+	// day keeps them all day, or is not held. Visits that start together do
+	// not hide one another: in one of them, the guest is still away from the
+	// others. They may still come late or leave early. Without it the search
+	// only avoids it, between schedules equally good on every objective.
+	Continuous bool
 }
 
 // Candidate is a person who must meet some recruiters (see Request).
@@ -146,6 +155,9 @@ type Request struct {
 	// Duration is the length of this meeting, in place of the candidate's
 	// and the recruiter's; zero means the candidate's Duration, or else the
 	// recruiter's. A joint interview lasts as long as its longest meeting.
+	// When the candidate meets everybody Together, only a guest (Optional)
+	// or an alternative of a Choice may have one: the interview is then the
+	// longer when they come, such as a visit with a guide.
 	Duration time.Duration
 	// Meeting gathers the requests of a candidate held at once, in one
 	// interview, with nobody else: those with the same non-zero Meeting. A
@@ -168,11 +180,12 @@ type Request struct {
 	// is not asked again (Schedule.Remaining). Alone, an optional request
 	// is simply an interview that may not happen.
 	//
-	// A guest costs their time like anybody, and MaxMeetings is the only
-	// objective that counts them: they come when it ranks before the
+	// A guest costs their time like anybody, and MaxMeetings and
+	// MaxGuestTime are the only objectives that count them (how often, and
+	// how long): they come when one of them ranks before the
 	// objectives their presence weighs on (MinRecruiters, MinRecruiterSpan
-	// and the like), only where they cost nothing when it ranks after
-	// them, and never when it is not among the objectives, which
+	// and the like), only where they cost nothing when they rank after
+	// them, and never when neither is among the objectives, which
 	// Problem.Doubts reports.
 	//
 	// A candidate whose every request is optional needs nothing: what they
@@ -196,6 +209,12 @@ type Request struct {
 	// Meeting, and jointly as JointGroups allow, never with two of its
 	// alternatives; not among the members of a panel.
 	Choice int
+	// Place, for an alternative of a Choice, is where the candidate is met
+	// when this alternative is the one held, in place of Candidate.Place:
+	// lunch at the bistro in the old town or at the market, and the
+	// journeys before and after are those of the place chosen. Only the
+	// alternatives of one choice of a candidate may have places.
+	Place string
 }
 
 // Problem is what has to be planned.
@@ -644,14 +663,49 @@ func (p *Problem) checkPrecedences() error {
 	return nil
 }
 
+// choiceKey names one choice of a candidate, in one meeting.
+type choiceKey struct{ candidate, meeting, choice int }
+
+// checkAlternative checks request i, an alternative of choice k, against
+// the first alternative of k (alternative) and the choice of its candidate
+// whose alternatives have places (placed), and records it in both.
+func (p *Problem) checkAlternative(i int, k choiceKey, alternative map[choiceKey]int, placed map[int]choiceKey) error {
+	r := p.Requests[i]
+	name := p.Candidates[r.Candidate].Name
+
+	if r.Place != "" {
+		if other, ok := placed[r.Candidate]; ok && other != k {
+			return fmt.Errorf("planning: %s: places are given to the alternatives of two choices: "+
+				"which one says where the candidate is?", name)
+		}
+
+		placed[r.Candidate] = k
+	}
+
+	first, ok := alternative[k]
+	if !ok {
+		alternative[k] = i
+
+		return nil
+	}
+
+	if q := p.Requests[first]; q.Rank != r.Rank || q.Optional != r.Optional {
+		return fmt.Errorf("planning: %s: the alternatives %s and %s of one choice differ in rank or in being optional",
+			name, p.Recruiters[q.Recruiter].Name, p.Recruiters[r.Recruiter].Name)
+	}
+
+	return nil
+}
+
 // checkRequests validates the requests: a candidate meets a recruiter once
 // outside meetings, and once in each meeting at most.
 func (p *Problem) checkRequests() error {
 	type key struct{ candidate, meeting, recruiter int }
 
 	seen := map[key]bool{}
-	rank := map[key]int{}        // of each meeting, without its recruiter
-	alternative := map[key]int{} // the first request of each choice
+	rank := map[key]int{}              // of each meeting, without its recruiter
+	alternative := map[choiceKey]int{} // the first request of each choice
+	placed := map[int]choiceKey{}      // the choice whose alternatives have places, by candidate
 
 	for i, r := range p.Requests {
 		if r.Candidate < 0 || r.Candidate >= len(p.Candidates) || r.Recruiter < 0 || r.Recruiter >= len(p.Recruiters) {
@@ -671,28 +725,25 @@ func (p *Problem) checkRequests() error {
 		switch {
 		case r.Duration < 0:
 			return fmt.Errorf("planning: %s meets %s: negative duration", name, p.Recruiters[r.Recruiter].Name)
-		case r.Duration > 0 && p.Candidates[r.Candidate].Together:
-			return fmt.Errorf("planning: %s meets everybody together: no meeting durations, give the candidate's", name)
+		case r.Duration > 0 && p.Candidates[r.Candidate].Together && !r.Optional && r.Choice == 0:
+			return fmt.Errorf("planning: %s meets everybody together: no durations but for a guest or a choice, give the candidate's", name)
 		case r.Meeting < 0:
 			return fmt.Errorf("planning: %s: negative meeting", name)
 		case r.Meeting > 0 && p.Candidates[r.Candidate].Together:
 			return fmt.Errorf("planning: %s meets everybody together: no other meetings", name)
 		case r.Choice < 0:
 			return fmt.Errorf("planning: %s: negative choice", name)
+		case r.Place != "" && r.Choice == 0:
+			return fmt.Errorf("planning: %s meets %s at %s: only one of a choice is met elsewhere than the candidate",
+				name, p.Recruiters[r.Recruiter].Name, r.Place)
 		case r.Choice > 0 && p.panelOf(r.Recruiter) >= 0:
 			return fmt.Errorf("planning: %s meets %s as one choice among others, and %s is in a panel, which is met whole",
 				name, p.Recruiters[r.Recruiter].Name, p.Recruiters[r.Recruiter].Name)
 		}
 
 		if r.Choice > 0 {
-			k := key{r.Candidate, r.Meeting, -1 - r.Choice}
-			if first, ok := alternative[k]; ok {
-				if q := p.Requests[first]; q.Rank != r.Rank || q.Optional != r.Optional {
-					return fmt.Errorf("planning: %s: the alternatives %s and %s of one choice differ in rank or in being optional",
-						name, p.Recruiters[q.Recruiter].Name, p.Recruiters[r.Recruiter].Name)
-				}
-			} else {
-				alternative[k] = i
+			if err := p.checkAlternative(i, choiceKey{r.Candidate, r.Meeting, r.Choice}, alternative, placed); err != nil {
+				return err
 			}
 		}
 

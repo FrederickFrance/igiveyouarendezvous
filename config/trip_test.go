@@ -41,7 +41,7 @@ func trip(t *testing.T, name, friend, hers string, objectives ...planning.Object
 		o.Objectives = objectives
 	}
 
-	s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Seed: 1, Workers: 1, Iterations: 5000})
+	s, err := planning.Search(t.Context(), p, o, planning.SearchOptions{Seed: 1, Workers: 1, Iterations: 20000})
 	require.NoError(t, err)
 	require.NoError(t, planning.Check(p, o, s))
 

@@ -72,14 +72,15 @@ func (p *Problem) Doubts(opts Options) []Doubt {
 }
 
 // guestDoubts reports the optional meetings nothing pays for. A guest costs
-// the time they spend like anybody, and the meetings held are the only
-// objective that counts them (see Request.Optional): when MaxMeetings is not
-// among the objectives, no guest is ever invited, which is hardly what
+// the time they spend like anybody, and the meetings held and the guests'
+// time are the only objectives that count them (see Request.Optional): when
+// neither MaxMeetings nor MaxGuestTime is among the objectives, no guest is
+// ever invited, which is hardly what
 // "optional" was written for. With it after the objectives on the
 // recruiters' time, a guest comes only where it costs nothing, and that may
 // well be what is meant: nothing is said then.
 func (p *Problem) guestDoubts(o Options) []Doubt {
-	if slices.Contains(o.Objectives, MaxMeetings) {
+	if slices.Contains(o.Objectives, MaxMeetings) || slices.Contains(o.Objectives, MaxGuestTime) {
 		return nil
 	}
 
@@ -102,9 +103,10 @@ func (p *Problem) guestDoubts(o Options) []Doubt {
 	return []Doubt{{
 		About: "objectives",
 		Text: fmt.Sprintf("%s (the first: %s with %s) and nothing to hold them for: a guest costs their time "+
-			"like anybody, and only %q counts them — add it to the objectives, before those on the "+
-			"recruiters' time, or the guests all stay at home",
-			plural(n, "optional meeting"), candidateOf(p, first), recruiterOf(p, first), MaxMeetings.String()),
+			"like anybody, and only %q and %q count them — add one of them to the objectives, before "+
+			"those on the recruiters' time, or the guests all stay at home",
+			plural(n, "optional meeting"), candidateOf(p, first), recruiterOf(p, first),
+			MaxMeetings.String(), MaxGuestTime.String()),
 	}}
 }
 
@@ -174,8 +176,8 @@ func (p *Problem) freeDefaultDoubt() []Doubt {
 	trips := p.journeys()
 	visited := map[int]bool{}
 
-	for _, a := range trips.placeOf {
-		if a >= 0 {
+	for a, used := range trips.used {
+		if used {
 			visited[a] = true
 		}
 	}
@@ -239,9 +241,9 @@ func (p *Problem) unvisitedDoubts() []Doubt {
 	trips := p.journeys()
 	visited := map[string]bool{}
 
-	for c, a := range trips.placeOf {
-		if a >= 0 {
-			visited[p.Candidates[c].Place] = true
+	for a, used := range trips.used {
+		if used {
+			visited[trips.places[a]] = true
 		}
 	}
 

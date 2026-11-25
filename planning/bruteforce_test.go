@@ -393,7 +393,8 @@ func better(scores []planning.Score, best []int) bool {
 	for i, sc := range scores {
 		a, b := sc.Value, best[i]
 		if sc.Objective == planning.MaxPriorities || sc.Objective == planning.MaxUrgency ||
-			sc.Objective == planning.MaxCompleteCandidates || sc.Objective == planning.MaxMeetings {
+			sc.Objective == planning.MaxCompleteCandidates || sc.Objective == planning.MaxMeetings ||
+			sc.Objective == planning.MaxGuestTime {
 			a, b = -a, -b
 		}
 

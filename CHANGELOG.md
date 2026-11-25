@@ -7,6 +7,56 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
+## [0.18.0] - 2026-11-25 "Régis-Robert" 🐕
+
+### Added
+
+- **A guest may lengthen a visit.** In a candidate met `together`, a guest
+  (`optional: true`) or one of a choice may now have a `duration` of their
+  own: the visit lasts that long when they come, and is held without them,
+  at its usual length, where the longer one does not fit. Everybody else
+  in the visit still takes the candidate's length.
+- **Objective `guest-time`**: the most time the guests spend in the
+  interviews they come to. `meetings` counts how often a guest comes; this
+  counts how long, so a long visit with a friend beats two short ones. It
+  pays for the guests as `meetings` does, so `-check` no longer reports
+  guests nothing holds when it is among the objectives. The trip example
+  puts it right after the priorities.
+- **A guest is not sent away and back.** Between two schedules as good on
+  every objective, the search prefers the one where a guest who leaves the
+  visits of a day does not come back to a later one. It decides nothing the
+  objectives decide, and has no score of its own. **`continuous: true`** on
+  a recruiter forbids it outright: once away from the visits of a day, they
+  stay away that day. The visits that need them count like the others, so
+  a guest who misses one cannot be back for the next. `-check` refuses a
+  schedule that breaks it.
+- **A place for each of a choice.** In the mapping form of `meet`, one of a
+  choice may have a `place` (`Bistro: {choice: lunch, place: Old town}`):
+  where the candidate is met when it is the one chosen, in place of the
+  candidate's `place`. The journeys before and after are those of the
+  place chosen, so lunch is at the bistro or at the café of the next town,
+  whichever the day allows. The journeys now follow the place of each
+  interview rather than of each candidate, and two interviews of one
+  candidate at two places keep the journey between them. The trip example
+  (EN, FR) has lunch on the first day, at the hotel restaurant or at the
+  bistro of the old town.
+
+### Changed
+
+- The README's "Other uses" section is now "By use", one part per use
+  (recruiting; meetings, recordings and shoots; a programme; outings and
+  trips), and the prompts for language models group the keys that serve one
+  use only the same way.
+- The tests also search big problems, of fifty to two hundred candidates
+  with every option in use somewhere, two on each run and a hundred in the
+  weekly deep run, which adds ten of a thousand candidates and more: no
+  best schedule is known there, but every rule must hold, a seed must give
+  its schedule again, and the search must resume from it as it is.
+- The guides spell out the three writing rules with an example, list the
+  examples and the words of the last versions (one of several recruiters,
+  a trip, `optional`, `required`, `choice`), and say that the project is
+  also a library on which a simpler program can be built.
+
 ## [0.17.0] - 2026-11-23 "X-Or, le shérif de l'espace" ⚡
 
 X-Or is the name the French gave to Space Sheriff Gavan, and XOR is the

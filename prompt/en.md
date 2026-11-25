@@ -50,47 +50,6 @@ has defaults):
   Without `availability`: the hours of `day`. Somebody absent on a few
   days: list by date every day they are present; the absent days alone,
   with `none`, would make them absent for the whole period.
-- **A guest who comes along if they can** is written `optional: true` on
-  one of the recruiters of `meet`, in its mapping form:
-  `meet: {Market: {}, Annick: {optional: true}}`. Use it rather than a
-  meeting of its own whenever somebody joins an outing or an interview that
-  happens anyway: the interview is held without the guest when they are
-  not free, and is never given up for them. A guest is invited for the
-  sake of `meetings`, the only objective that counts them: if you write
-  `objectives`, keep `meetings` among them, before the objectives on the
-  recruiters' time (`recruiters`, `recruiter-half-days`, `recruiter-span`),
-  or no guest will ever come. Do not make every meeting of a candidate
-  optional unless the candidate is a pure bonus, and never together with
-  `required`.
-- **One recruiter among several** is a list within the list of `meet`:
-  `meet: [Manager, [Ada, Ben, Cleo]]`, or in a meeting
-  `with: [Host, [Camera 1, Camera 2]]`. Use it whenever the person says
-  "one of", "any of", "whoever is free": asking for all of them would make
-  the candidate meet each one. In the mapping form, give the alternatives
-  the same `choice: <name>` and the same rank.
-- **A default journey links every pair of places.** The journeys hold
-  together: one through other places counts when it is shorter. So with
-  `default: 10m` no two places are ever more than twenty minutes apart,
-  whatever you write, and a long journey meant to forbid a link does not
-  forbid it. A `default: 0` is worse: it is not "no link" but a free link,
-  so every pair you leave out becomes free teleportation. The rule is
-  short: **a default is safe only when every journey you write is shorter
-  than it.** One longer journey and the default undoes it. So either give
-  no default at all — the journeys you write then suffice, since a pair
-  reached through other places costs that way, and a pair nothing links is
-  refused instead of guessed — or keep the default for an area where the
-  distances really are alike and under it. A default beside a complete
-  list is never consulted: take it out, or the next place added without its
-  journeys will quietly take a value nothing checks. Spell every place
-  exactly the same way in `journeys` and in the candidates: a place named
-  only in `journeys` is still a way through.
-- **Something that happens on the way has no `place`.** A train, a flight,
-  a call in the car: leave `place` out, and the journey between the places
-  on either side is still counted across it. Giving the train the station
-  instead charges the ride twice, once in its own length and once again in
-  the journey out of the station. Keep its window as its timetable
-  (`availability: {2026-12-22: 09:10-10:15}` for a 1h05 ride, which pins
-  it) and mark it `required: true`.
 - **An availability is a constraint, not a decision.** Give a person or a
   place the hours they are really open, and let the search choose the day and
   the time. Writing one date and a window just wide enough for the length
@@ -107,14 +66,6 @@ has defaults):
 - `recruiters.<name>.min-gap`: the shortest time between two interviews of
   this recruiter, nights included (`30m` to write notes); `recruiter-min-gap`:
   the same for every recruiter without one.
-- `candidates.<name>.place`: where the candidate is met, such as the city
-  of a shoot; the recruiters travel between places. `travel`: the journeys,
-  `default` for any pair not listed, and `journeys`, a list of
-  `[Paris, Lyon, 2h30]`, both ways. Give upper estimates, door to door, with
-  a comment on what each rests on (`# train 2h + 30 min to the station`).
-  Without `default` you need not list every pair: one reached through other
-  places costs that way, so give the journeys that are really direct and
-  let the rest follow. Two places that nothing links are refused.
 - `candidates.<name>.priority`: `1` by default; the higher, the more
   important when not everybody fits.
 - `joint-groups`: lists of recruiters who MAY interview a candidate together,
@@ -123,15 +74,6 @@ has defaults):
 - `panels`: lists of recruiters who ALWAYS interview together, such as a
   jury: the members a candidate must meet, they meet in one interview. A
   recruiter belongs to one panel at most, and then to no joint group.
-- `candidates.<name>.meetings`: meetings with several recruiters at once,
-  held as given, in which a recruiter may come back, such as
-  `[{with: [Host, Camera], duration: 1h, times: 2}, {with: [Host, Camera, Guest], duration: 2h}]`;
-  `times` repeats a meeting, `rank` orders them as in `meet`. A candidate
-  may have `meet`, `meetings`, or both.
-- `candidates.<name>.together: true`: one single meeting with all the
-  recruiters of `meet` at once (a show, a workshop session); no ranks then,
-  and no `meetings`. Other uses map onto the same words: guests and crews
-  are "recruiters", episodes, shoots or sessions are "candidates".
 - `rooms`: the most interviews at the same time, whoever attends them: the
   rooms, tables or booths there are. Nothing else bounds it, so give it for
   a hall or a fair ("four tables", `rooms: 4`) and leave it out when
@@ -160,6 +102,87 @@ has defaults):
   with `recruiter-idle` right after it, since an even share says nothing
   of how much waiting there is: `[meetings, recruiter-idle-spread,
   recruiter-idle]`.
+
+Some keys serve one use only: leave them out unless my rules call for them.
+
+Interviews:
+
+- **One recruiter among several** is a list within the list of `meet`:
+  `meet: [Manager, [Ada, Ben, Cleo]]`, or in a meeting
+  `with: [Host, [Camera 1, Camera 2]]`. Use it whenever the person says
+  "one of", "any of", "whoever is free": asking for all of them would make
+  the candidate meet each one. In the mapping form, give the alternatives
+  the same `choice: <name>` and the same rank; when they are at different
+  places (lunch at the bistro or at the market), give each its `place:`.
+
+Meetings, recordings and shoots:
+
+- `candidates.<name>.together: true`: one single meeting with all the
+  recruiters of `meet` at once (a show, a workshop session); no ranks then,
+  and no `meetings`. Other uses map onto the same words: guests and crews
+  are "recruiters", episodes, shoots or sessions are "candidates".
+- `candidates.<name>.meetings`: meetings with several recruiters at once,
+  held as given, in which a recruiter may come back, such as
+  `[{with: [Host, Camera], duration: 1h, times: 2}, {with: [Host, Camera, Guest], duration: 2h}]`;
+  `times` repeats a meeting, `rank` orders them as in `meet`. A candidate
+  may have `meet`, `meetings`, or both.
+- `candidates.<name>.place`: where the candidate is met, such as the city
+  of a shoot; the recruiters travel between places. `travel`: the journeys,
+  `default` for any pair not listed, and `journeys`, a list of
+  `[Paris, Lyon, 2h30]`, both ways. Give upper estimates, door to door, with
+  a comment on what each rests on (`# train 2h + 30 min to the station`).
+  Without `default` you need not list every pair: one reached through other
+  places costs that way, so give the journeys that are really direct and
+  let the rest follow. Two places that nothing links are refused.
+- **A default journey links every pair of places.** The journeys hold
+  together: one through other places counts when it is shorter. So with
+  `default: 10m` no two places are ever more than twenty minutes apart,
+  whatever you write, and a long journey meant to forbid a link does not
+  forbid it. A `default: 0` is worse: it is not "no link" but a free link,
+  so every pair you leave out becomes free teleportation. The rule is
+  short: **a default is safe only when every journey you write is shorter
+  than it.** One longer journey and the default undoes it. So either give
+  no default at all — the journeys you write then suffice, since a pair
+  reached through other places costs that way, and a pair nothing links is
+  refused instead of guessed — or keep the default for an area where the
+  distances really are alike and under it. A default beside a complete
+  list is never consulted: take it out, or the next place added without its
+  journeys will quietly take a value nothing checks. Spell every place
+  exactly the same way in `journeys` and in the candidates: a place named
+  only in `journeys` is still a way through.
+- **Something that happens on the way has no `place`.** A train, a flight,
+  a call in the car: leave `place` out, and the journey between the places
+  on either side is still counted across it. Giving the train the station
+  instead charges the ride twice, once in its own length and once again in
+  the journey out of the station. Keep its window as its timetable
+  (`availability: {2026-12-22: 09:10-10:15}` for a 1h05 ride, which pins
+  it) and mark it `required: true`.
+
+Outings and trips (the group is a recruiter, every place a recruiter
+too, every visit a candidate):
+
+- `candidates.<name>.required: true`: what the day is built around and
+  carries no interest of its own (the train that was booked, the room
+  given back): the program refuses a schedule without it rather than
+  quietly dropping it. Not for what one would rather have: that is a
+  `priority`.
+- **A guest who comes along if they can** is written `optional: true` on
+  one of the recruiters of `meet`, in its mapping form:
+  `meet: {Market: {}, Annick: {optional: true}}`. Use it rather than a
+  meeting of its own whenever somebody joins an outing or an interview that
+  happens anyway: the interview is held without the guest when they are
+  not free, and is never given up for them. A guest is invited for the
+  sake of `meetings` (how often they come) or `guest-time` (how long), the
+  only objectives that count them: if you write `objectives`, keep one of
+  them, before the objectives on the recruiters' time (`recruiters`,
+  `recruiter-half-days`, `recruiter-span`), or no guest will ever come; put
+  `guest-time` first when the point is time spent with the guest; a guest
+  who must not leave and come back the same day gets `continuous: true`
+  among the recruiters. Do not make every meeting of a candidate
+  optional unless the candidate is a pure bonus, and never together with
+  `required`. In a `together` visit, only a guest or one of a choice may
+  have its own `duration`: the visit is that much longer when they come
+  (`Guide: {optional: true, duration: 1h30m}`).
 
 How to write it:
 

@@ -64,7 +64,7 @@ func progressJSON(pr planning.Progress) (string, error) {
 func scoreUnit(obj planning.Objective) string {
 	switch obj {
 	case planning.MinRecruiterSpan, planning.MinCandidateWait, planning.MinEndTimes,
-		planning.MinDayEnds, planning.MinSpan:
+		planning.MinDayEnds, planning.MinSpan, planning.MaxGuestTime:
 		return "minutes"
 	default:
 		return "count"
@@ -74,7 +74,8 @@ func scoreUnit(obj planning.Objective) string {
 // scoreDirection tells which way is better for an objective.
 func scoreDirection(obj planning.Objective) string {
 	switch obj {
-	case planning.MaxCompleteCandidates, planning.MaxMeetings, planning.MaxPriorities, planning.MaxUrgency:
+	case planning.MaxCompleteCandidates, planning.MaxMeetings, planning.MaxPriorities, planning.MaxUrgency,
+		planning.MaxGuestTime:
 		return "max"
 	default:
 		return "min"
