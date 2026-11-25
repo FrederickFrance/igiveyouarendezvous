@@ -124,6 +124,9 @@ type Recruiter struct {
 	// included (see planning.Recruiter.MinGap); nil means the gap of the
 	// file, recruiter-min-gap.
 	MinGap *Duration `yaml:"min-gap"`
+	// Continuous, for a guest, forbids that they leave the visits of a day
+	// and come back to a later one (see planning.Recruiter.Continuous).
+	Continuous bool `yaml:"continuous"`
 }
 
 // Candidate is a candidate of the problem file.
@@ -182,8 +185,8 @@ func (c *Candidate) UnmarshalYAML(n *yaml.Node) error {
 		return fmt.Errorf("line %d: the priority is 1 or more", n.Line)
 	case raw.Together && slices.ContainsFunc(*raw.Meet, func(m Meet) bool { return m.Rank > 0 }):
 		return fmt.Errorf("line %d: together, everybody meets at once: no ranks in meet", n.Line)
-	case raw.Together && slices.ContainsFunc(*raw.Meet, func(m Meet) bool { return m.Duration > 0 }):
-		return fmt.Errorf("line %d: together, everybody meets at once: no durations in meet, give the candidate's duration", n.Line)
+	case raw.Together && slices.ContainsFunc(*raw.Meet, func(m Meet) bool { return m.Duration > 0 && !m.Optional && m.Choice == "" }):
+		return fmt.Errorf("line %d: together, everybody meets at once: no durations in meet but for a guest (optional) or one of a choice, give the candidate's duration", n.Line)
 	}
 
 	*c = Candidate{
@@ -252,7 +255,7 @@ var problemKeys = shape{
 	"day": nil, "breaks": nil, "duration": nil, "step": nil, "min-gap": nil, "max-gap": nil,
 	"recruiter-min-gap": nil, "joint-groups": nil, "panels": nil, "max-joint-size": nil, "objectives": nil,
 	"rooms": nil, "break-spread": nil, "precedences": nil,
-	"recruiters": {"*": {"duration": nil, "availability": nil, "min-gap": nil}},
+	"recruiters": {"*": {"duration": nil, "availability": nil, "min-gap": nil, "continuous": nil}},
 	"candidates": {"*": {"meet": nil, "meetings": nil, "priority": nil, "availability": nil, "duration": nil, "together": nil, "place": nil, "required": nil}},
 	"travel":     {"default": nil, "journeys": nil},
 }
@@ -488,7 +491,10 @@ func (f *File) Problem(from, to string) (*planning.Problem, planning.Options, er
 			return nil, o, fmt.Errorf("line %d: recruiter %s: %w", e.Line, e.Name, err)
 		}
 
-		r := planning.Recruiter{Name: e.Name, Duration: time.Duration(e.Value.Duration), MinGap: time.Duration(f.RecruiterMinGap)}
+		r := planning.Recruiter{
+			Name: e.Name, Duration: time.Duration(e.Value.Duration), MinGap: time.Duration(f.RecruiterMinGap),
+			Continuous: e.Value.Continuous,
+		}
 		if e.Value.MinGap != nil {
 			r.MinGap = time.Duration(*e.Value.MinGap)
 		}
@@ -536,7 +542,9 @@ func (f *File) Problem(from, to string) (*planning.Problem, planning.Options, er
 			}
 
 			met[h] = true
-			req := planning.Request{Candidate: c, Recruiter: h, Rank: m.Rank, Duration: m.Duration, Optional: m.Optional}
+			req := planning.Request{
+				Candidate: c, Recruiter: h, Rank: m.Rank, Duration: m.Duration, Optional: m.Optional, Place: m.Place,
+			}
 
 			if m.Choice != "" {
 				if _, ok := choices[m.Choice]; !ok {

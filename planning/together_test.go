@@ -141,5 +141,5 @@ func TestMeetingDuration(t *testing.T) {
 	p.Requests[0].Duration = 15 * time.Minute
 	p.Candidates[0].Together = true
 	_, err = planning.Search(t.Context(), p, o, planning.SearchOptions{Iterations: 1})
-	require.EqualError(t, err, "planning: A meets everybody together: no meeting durations, give the candidate's")
+	require.EqualError(t, err, "planning: A meets everybody together: no durations but for a guest or a choice, give the candidate's")
 }

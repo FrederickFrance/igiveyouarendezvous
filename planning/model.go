@@ -103,6 +103,8 @@ type option struct {
 	recruiters []int
 	length     int   // slots
 	starts     []int // slots where everybody involved is available
+	place      int   // where it is held (see journeys.placeOfRequests), -1 nowhere in particular
+	guests     int   // its optional requests (see MaxGuestTime)
 }
 
 func newInstance(p *Problem, opts Options) (*instance, error) {
@@ -569,10 +571,13 @@ func forEachSubset(items []int, limit int, fn func([]int)) {
 }
 
 func (in *instance) addOption(c int, requests []int) {
-	opt := option{candidate: c, requests: requests}
+	opt := option{candidate: c, requests: requests, place: in.trips.placeOfRequests(in.p, c, requests)}
 
 	for _, r := range requests {
 		opt.recruiters = append(opt.recruiters, in.p.Requests[r].Recruiter)
+		if in.p.Requests[r].Optional {
+			opt.guests++
+		}
 	}
 
 	slices.Sort(opt.recruiters)
@@ -673,9 +678,13 @@ func (in *instance) repeats() []bool {
 	for c, requests := range in.requestsOf {
 		part := map[int]int{} // recruiter → their meeting, 0 outside meetings
 
+		// With a place to an alternative, two interviews of the candidate
+		// may be at two places, and a recruiter in both needs the journey.
+		elsewhere := in.travel && slices.ContainsFunc(requests, func(r int) bool { return in.p.Requests[r].Place != "" })
+
 		for _, r := range requests {
 			req := in.p.Requests[r]
-			if in.p.Recruiters[req.Recruiter].MinGap <= 0 {
+			if in.p.Recruiters[req.Recruiter].MinGap <= 0 && !elsewhere {
 				continue
 			}
 

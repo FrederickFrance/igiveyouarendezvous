@@ -65,12 +65,31 @@ hours:
 | A week, availabilities by date, priorities | A week of interviews |
 | A jury: its members interview together | A selection panel |
 | Recordings with guests who are hard to gather | Recordings of a show |
+| Each candidate meets one or another of several recruiters | One assessor among three |
 | Shoots in several cities, with the journeys | A tour of shoots in five cities |
 | A colloquium, games | A colloquium; Role-playing games |
+| An outing or a trip: visits, trains, a guest | Two days away, by train |
 
-Three writing rules: keep the spaces at the start of the lines (two more
-for what belongs to the line above); write each name the same way
-everywhere; write times `09:00` and dates `2026-11-16`.
+Three writing rules, which the program checks:
+
+- **The indent at the start of a line matters**: it says what the line
+  belongs to. A line indented two spaces more than the line above is part
+  of it. Here, `Ada` is one of the `recruiters`, and `availability` gives
+  her own hours:
+
+  ```yaml
+  recruiters:
+    Ada:
+      availability: 09:00-12:00
+  ```
+
+  Indent with spaces, not with the Tab key.
+- **A name is written the same way everywhere**, capitals and accents
+  included: `Chloé` under `recruiters` and `Chloe` in `meet` are two
+  different names to the program, which reports it as an error.
+- **Times and dates are written in figures**: times on the 24-hour clock
+  with a colon, `09:00` or `14:30` (not `9am`); dates in the order
+  year-month-day, `2026-11-16` for 16 November 2026.
 
 ### The words of the file
 
@@ -87,6 +106,9 @@ purposes:
 | `duration` | the length of an interview | |
 | `together: true` | a meeting: everybody of `meet` at once | a recording |
 | `place`, `travel` | the place of a candidate, and the journeys between places | the cities of a tour |
+| `optional: true` | a guest: welcome if they can come, the meeting takes place without them | a friend who joins a visit |
+| `required: true` | what must be planned, without counting as an achievement | the hotel and the trains of a trip |
+| `choice` | one or the other: the candidate meets only one of those with the same `choice` | one assessor among three, one restaurant out of two |
 
 Every key is in the [README](README.md#the-problem-file).
 
@@ -182,3 +204,8 @@ if you have a GitHub account. An issue is public: use made-up names.
 For regular use, the downloaded program does the same, faster and without
 a time limit: see
 [Your first schedule, step by step](README.md#your-first-schedule-step-by-step).
+
+The project is also a library, in Go: a developer can use it to build
+another program around the same engine, for instance a simpler interface,
+made for your team or plugged into your tools. See
+[As a library](README.md#as-a-library).

@@ -91,6 +91,23 @@ func randomCrossing(rnd *rand.Rand) (*planning.Problem, planning.Options) {
 		}
 
 		p.Travel = planning.Travel{Default: new(time.Hour), Journeys: []planning.Journey{{From: "Lyon", To: "Paris", Duration: 30 * time.Minute}}}
+
+		// The alternatives of one choice of a candidate, now and then, are
+		// each at a place of their own (see Request.Place).
+		placed := map[int]int{} // candidate: the meeting of their choice with places
+
+		for r, req := range p.Requests {
+			if req.Choice == 0 || rnd.IntN(2) == 0 {
+				continue
+			}
+
+			if m, ok := placed[req.Candidate]; ok && m != req.Meeting {
+				continue
+			}
+
+			placed[req.Candidate] = req.Meeting
+			p.Requests[r].Place = []string{"Lyon", "Paris", "Nice"}[rnd.IntN(3)]
+		}
 	}
 
 	if rnd.IntN(4) == 0 {

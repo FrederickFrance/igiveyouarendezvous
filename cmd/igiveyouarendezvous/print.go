@@ -455,7 +455,7 @@ func scoreText(p *planning.Problem, s *planning.Schedule, pe period, sc planning
 		return fmt.Sprintf("%d/%d", sc.Value, len(p.Recruiters)*max(1, pe.open))
 	case planning.MinRecruiterHalfDays:
 		return fmt.Sprintf("%d/%d", sc.Value, 2*len(p.Recruiters)*max(1, pe.open))
-	case planning.MinRecruiterSpan, planning.MinCandidateWait, planning.MinSpan:
+	case planning.MinRecruiterSpan, planning.MinCandidateWait, planning.MinSpan, planning.MaxGuestTime:
 		return hours(sc.Value)
 	case planning.MinEndTimes:
 		if len(s.Interviews) == 0 || len(pe.dates) > 1 { // the times of several days do not average

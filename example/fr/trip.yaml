@@ -25,12 +25,13 @@ to: 2026-12-22
 day: 08:00-21:00
 max-gap: unlimited
 
-# « meetings » est ce qui invite l'amie. Une invitée coûte son temps comme
-# tout le monde, et les rencontres tenues sont le seul objectif qui la
-# compte : après les priorités, elle ne coûte jamais une visite ; avant le
-# temps des recruteurs, sa compagnie vaut une heure du sien. Sans lui elle
-# resterait chez elle, et -check le dirait.
-objectives: [priorities, meetings, recruiter-span, day-end]
+# « guest-time » est ce qui invite l'amie, aussi longtemps qu'elle peut être
+# avec nous ; « meetings » compte ensuite combien de fois elle vient. Une
+# invitée coûte son temps comme tout le monde, et ces deux objectifs sont
+# les seuls qui la comptent : après les priorités, elle ne coûte jamais une
+# visite ; avant le temps des recruteurs, sa compagnie vaut une heure du
+# sien. Sans eux elle resterait chez elle, et -check le dirait.
+objectives: [priorities, guest-time, meetings, recruiter-span, day-end]
 
 # Quatre trajets, et pas de défaut. Un défaut serait le piège ici : il relie
 # tous les couples de lieux, donc deux lieux ne sont jamais à plus de deux
@@ -92,6 +93,12 @@ recruiters:
   Marché de la ville voisine:
     availability: {2026-12-22: 11:00-18:00}
 
+  # Deux endroits où déjeuner le premier jour : l'un des deux suffira.
+  Restaurant de l'hôtel:
+    availability: {2026-12-21: 12:00-14:30}
+  Bistro:
+    availability: {2026-12-21: 12:00-15:00}
+
 candidates:
   # ---- ce autour de quoi la journée se construit : aucun intérêt, et pas de journée sans
   Bagages déposés à l'hôtel:
@@ -131,6 +138,17 @@ candidates:
     together: true
     duration: 1h10
     required: true
+
+  # Le déjeuner du premier jour, au restaurant de l'hôtel ou au bistro de la
+  # vieille ville : un choix, dont chacun a son lieu, si bien que les
+  # trajets d'avant et d'après sont ceux de celui qui est choisi. Déjeuner à
+  # l'hôtel va avec le dépôt des bagages ; au bistro, avec le marché.
+  Déjeuner:
+    meet: {Nous: {}, Restaurant de l'hôtel: {choice: déjeuner, place: Hôtel}, Bistro: {choice: déjeuner, place: Vieille ville}}
+    together: true
+    duration: 45m
+    required: true
+    availability: {2026-12-21: 12:40-14:30}
 
   # ---- les visites. L'amie se joint à deux d'entre elles si elle peut.
   Le marché de Noël:

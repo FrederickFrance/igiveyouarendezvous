@@ -47,7 +47,7 @@ tiennent pas sont écrits dans le fichier problème de la période suivante.
 
 Pas seulement des entretiens : les enregistrements d'une émission avec des
 invités difficiles à réunir, le programme d'un colloque, des parties de jeu
-de rôle… voir [Autres usages](#autres-usages).
+de rôle… voir [Par usage](#par-usage).
 
 ## Premier planning, pas à pas
 
@@ -284,6 +284,7 @@ Les clés sont en anglais, comme le reste du programme. `recruiters` et
 | `recruiters.<nom>.duration` | `duration` | durée des entretiens avec ce recruteur ; un entretien commun dure autant que sa plus longue partie |
 | `recruiters.<nom>.availability` | `day` | plages du recruteur (`none` : absent), chaque jour ou par date (voir plus bas) |
 | `recruiters.<nom>.min-gap` | `recruiter-min-gap` | le temps minimal entre deux entretiens de ce recruteur, de la fin de l'un au début du suivant, nuits comprises : pour mettre ses notes au propre (`30m`), pour se reposer (`12h`) ; les trajets s'y ajoutent (voir `travel`) ; `0` : aucun |
+| `recruiters.<nom>.continuous` | `false` | pour un invité : une fois parti des visites d'un jour, il ne revient pas ce jour-là (voir les invités, plus bas) |
 | `recruiter-min-gap` | `0` | le `min-gap` de chaque recruteur qui n'a pas le sien, comme `10m` de battement pour tout le monde |
 | `candidates.<nom>.meet` | obligatoire sans `meetings` | les recruteurs à rencontrer, un entretien chacun, dans n'importe quel ordre, ou avec leurs rangs et les durées des rencontres (voir plus bas) |
 | `candidates.<nom>.meetings` | aucune | des rencontres avec plusieurs recruteurs à la fois, chacune telle quelle ; un recruteur peut revenir dans plusieurs (voir plus bas) |
@@ -291,7 +292,7 @@ Les clés sont en anglais, comme le reste du programme. `recruiters` et
 | `candidates.<nom>.priority` | `1` | plus c'est haut, plus c'est important (objectif `priorities`) |
 | `candidates.<nom>.required` | `false` | `true` : une contrainte et non plus un objectif — un planning sans ce candidat est refusé et il est nommé (voir plus bas) |
 | `candidates.<nom>.duration` | celle des recruteurs | durée des entretiens de ce candidat, à la place de celles des recruteurs (la durée d'une rencontre dans `meet` l'emporte) |
-| `candidates.<nom>.together` | `false` | `true` : une réunion, tous les recruteurs à la fois en un seul entretien, ou rien (voir [Autres usages](#autres-usages)) |
+| `candidates.<nom>.together` | `false` | `true` : une réunion, tous les recruteurs à la fois en un seul entretien, ou rien (voir [Par usage](#par-usage)) |
 | `candidates.<nom>.place` | aucun | où l'on rencontre le candidat, comme la ville d'un tournage ; aucun : pas de trajet vers lui ni depuis lui, comme un appel (voir plus bas) |
 | `travel` | aucun | les trajets entre les lieux : `default`, et `journeys`, comme `[Paris, Lyon, 2h]` (voir plus bas) |
 
@@ -494,6 +495,20 @@ arrondis aux 5 minutes supérieures : `2h07` compte pour `2h10`, plutôt que
 de faire une grille d'une minute. Exemple complet : [une
 tournée](example/fr/tour.yaml).
 
+**Les trajets tiennent ensemble.** Un trajet par d'autres lieux compte
+quand il est plus court, donc les temps que vous donnez doivent être
+cohérents : Paris-Dijon ne peut pas durer plus que Paris-Lyon puis
+Lyon-Dijon. Deux conséquences, surprenantes toutes les deux. Un **trajet
+par défaut relie tous les couples de lieux** : avec un défaut de dix
+minutes, deux lieux ne sont jamais à plus de vingt minutes l'un de
+l'autre, quoi que dise le fichier — un trajet long donné pour interdire
+une liaison ne l'interdit pas. Et **un défaut de zéro n'est pas « pas de
+liaison », c'est une liaison gratuite** : tout couple absent du fichier
+devient un passage sans coût. Un lieu cité dans `journeys` est un lieu
+même si aucun candidat n'y est rencontré, donc un nom mal orthographié
+ouvre un passage que personne ne voulait. Le programme signale chaque
+trajet qu'un passage rend plus court que ce que vous avez indiqué.
+
 **La période suivante.** `-rest` réécrit le fichier problème, sans les
 candidats servis ; les autres gardent toutes leurs rencontres. La période
 (`from`, `to`, `not-before`), planifiée, est retirée, pour choisir la
@@ -536,11 +551,40 @@ Ce que vous tapez part chez le fournisseur de l'assistant : donnez des noms
 de remplacement (`Candidat 1`, des initiales), et remettez les vrais noms
 dans le fichier ensuite. La démo et le programme, eux, n'envoient rien.
 
-## Autres usages
+## Par usage
 
 Le programme place des « candidats » qui doivent rencontrer des
 « recruteurs », chacun à un seul endroit à la fois. Bien d'autres plannings
 entrent dans ce moule : les noms des clés restent, seul leur sens change.
+
+La plupart des clés ci-dessous ne servent qu'à un usage ; absentes, elles ne
+changent rien pour les autres.
+
+### Recrutement
+
+Les entretiens proprement dits : candidats, recruteurs, rangs, entretiens
+communs et jurys (voir [le fichier problème](#le-fichier-problème)),
+priorités et urgence. Voir
+[example/fr/problem.yaml](example/fr/problem.yaml),
+[example/fr/panel.yaml](example/fr/panel.yaml) et
+[example/fr/assessors.yaml](example/fr/assessors.yaml).
+
+**Un recruteur parmi plusieurs** s'écrit avec une liste dans la liste de
+`meet` : `meet: [Manager, [Ada, Ben, Cléo]]` fait voir le manager et un des
+trois évaluateurs, celui qui arrange le planning. Dans la forme en mapping,
+les alternatives portent le même `choice`, un nom au choix, et partagent
+leur rang : `{Manager: 1, Ada: {rank: 2, choice: évaluateur}, Ben: {rank: 2,
+choice: évaluateur}}`. Dans une réunion, c'est une liste dans `with` :
+`{with: [Animateur, [Caméra 1, Caméra 2]]}`. Le candidat est complet avec
+n'importe lequel d'entre eux, le choix compte pour une rencontre dans
+`meetings`, et les autres ne sont pas à planifier plus tard : on n'en avait
+pas besoin. Avec `optional: true` sur chacun, le choix est un invité qui
+peut être n'importe lequel, ou personne. Un choix n'est jamais vu deux fois
+dans une même rencontre, même conjointe, et ses alternatives ne sont pas
+membres d'un panel, qui se voit entier. Voir
+[example/fr/assessors.yaml](example/fr/assessors.yaml).
+
+### Réunions, enregistrements et tournages
 
 **Réunions : tout le monde à la fois.** Avec `together: true`, un candidat
 rencontre tous ses recruteurs en un seul entretien, quels que soient les
@@ -576,37 +620,6 @@ pour les invités communs à plusieurs émissions. Exemples complets : [les
 enregistrements d'une émission](example/fr/show.yaml), [des parties de jeu de
 rôle](example/fr/roleplay.yaml) dont la meneuse de jeu anime deux tables.
 
-Pas seulement des entretiens, et pas seulement une journée de travail : le
-même fichier planifie [deux jours de voyage en train](example/fr/trip.yaml),
-où l'hôtel et les trains sont `required` — la journée s'écroule sans eux et
-ils ne sont aucun exploit — et où une amie se joint à deux visites en
-invitée, `optional` : aucune visite n'est abandonnée pour elle.
-
-**Un programme : une chose après l'autre.** Pour un colloque dans une seule
-salle, le colloque est le candidat et les intervenants ses recruteurs : il
-n'est qu'à un endroit à la fois, donc les interventions s'enchaînent. La
-`duration` de chaque intervenant est la durée de son intervention, les rangs
-mettent l'ouverture en premier et la clôture en dernier, et leurs
-disponibilités fixent leurs jours ([exemple complet](example/fr/colloquium.yaml)) :
-
-```yaml
-day: 09:00-12:00, 14:00-17:00   # le déjeuner comme un trou dans la journée : interventions avant et après
-max-gap: unlimited
-objectives: [complete-candidates, earliest]
-candidates:
-  colloque:
-    meet: {ouverture: 1, Ada: 2, Blaise: 2, Grace: 2, clôture: 3}
-```
-
-Quelques pièges :
-- le déjeuner se met dans `day`, pas dans `breaks` : une pause interdit les
-  entretiens d'un candidat de part et d'autre dans la même journée, donc une
-  journée n'aurait d'interventions que le matin ou que l'après-midi ;
-- l'objectif `candidate-wait` compte le déjeuner comme de l'attente et tasse
-  les interventions le matin : ne le mettez pas ;
-- tout ou rien : un intervenant impossible à placer laisse tout le colloque
-  non planifié (l'affichage dit qui) ; une seule salle.
-
 **Un tournage sur plusieurs jours d'affilée.** Le tournage est un candidat ;
 chaque personne y figure une fois par jour (`Ada jour 1`, `Ada jour 2`…, avec
 ses disponibilités) ; les personnes d'un même jour forment un jury, pour que
@@ -638,6 +651,102 @@ compter le temps de ranger le matériel : un `min-gap` s'appliquerait aussi
 entre deux rencontres d'un même tournage. Voir [l'exemple d'une
 tournée](example/fr/tour.yaml).
 
+### Un programme : colloques et jeux
+
+**Un programme : une chose après l'autre.** Pour un colloque dans une seule
+salle, le colloque est le candidat et les intervenants ses recruteurs : il
+n'est qu'à un endroit à la fois, donc les interventions s'enchaînent. La
+`duration` de chaque intervenant est la durée de son intervention, les rangs
+mettent l'ouverture en premier et la clôture en dernier, et leurs
+disponibilités fixent leurs jours ([exemple complet](example/fr/colloquium.yaml)) :
+
+```yaml
+day: 09:00-12:00, 14:00-17:00   # le déjeuner comme un trou dans la journée : interventions avant et après
+max-gap: unlimited
+objectives: [complete-candidates, earliest]
+candidates:
+  colloque:
+    meet: {ouverture: 1, Ada: 2, Blaise: 2, Grace: 2, clôture: 3}
+```
+
+Quelques pièges :
+- le déjeuner se met dans `day`, pas dans `breaks` : une pause interdit les
+  entretiens d'un candidat de part et d'autre dans la même journée, donc une
+  journée n'aurait d'interventions que le matin ou que l'après-midi ;
+- l'objectif `candidate-wait` compte le déjeuner comme de l'attente et tasse
+  les interventions le matin : ne le mettez pas ;
+- tout ou rien : un intervenant impossible à placer laisse tout le colloque
+  non planifié (l'affichage dit qui) ; une seule salle.
+
+Les jeux de rôle fonctionnent de même : chaque partie est un candidat, les
+joueurs et le meneur ses recruteurs. Voir
+[example/fr/roleplay.yaml](example/fr/roleplay.yaml) et
+[example/fr/colloquium.yaml](example/fr/colloquium.yaml).
+
+### Sorties et voyages
+
+Pas seulement des entretiens, et pas seulement une journée de travail : le
+même fichier planifie [deux jours de voyage en train](example/fr/trip.yaml),
+commenté ligne à ligne. Le modèle se retourne : la famille ou le groupe est
+un recruteur, qui n'est qu'à un endroit à la fois ; chaque lieu est un
+recruteur aussi, dont les disponibilités sont les heures d'ouverture ;
+chaque visite est un candidat, une rencontre entre les deux. L'hôtel et les
+trains sont `required`, une amie se joint à certaines visites en invitée,
+et le déjeuner se prend à l'un de deux endroits.
+
+**`required: true`** fait d'un candidat une contrainte et non plus un
+objectif : le programme refuse de rendre un planning sans lui et le nomme
+à la place. C'est pour ce autour de quoi la journée se construit et qui
+n'a aucun intérêt propre — le train déjà réservé, les clefs rendues à
+l'hôtel, la salle à libérer à dix-huit heures. Une `priority` classe ce
+qu'on préfère avoir ; ceci dit qu'il n'y a rien à classer, donc un
+candidat indispensable reste en dehors du décompte des candidats servis.
+
+**`optional: true`** sur un des recruteurs de `meet` l'invite sans en
+avoir besoin : `meet: {Marché: {}, Annick: {optional: true}}`. Le
+candidat est complet sans lui, et la rencontre se tient avec les invités
+libres à ce moment-là et sans les autres, chacun pour son propre compte.
+C'est l'invité qui se joint s'il peut — une amie pendant une sortie, un
+second évaluateur s'il est disponible, un manager qui passe sur
+l'entretien quand sa journée le permet. Une rencontre n'est jamais
+abandonnée pour un invité : elle se tient sans lui quand il ne peut pas
+être là à une heure qui convient aux autres. Une fois tenue, l'invité qui
+l'a manquée n'est pas redemandé : le candidat est servi, et n'est pas
+dans le fichier de ce qui reste (`-rest`). Un invité coûte son temps
+comme tout le monde, et `meetings` et `guest-time` sont les seuls
+objectifs qui le comptent, combien de fois et combien de temps : il vient
+quand l'un d'eux passe avant ceux sur le temps des recruteurs, comme
+`meetings` par défaut, et jamais quand aucun des deux n'est parmi les
+`objectives`, ce que `-check` signale. Un candidat dont toutes les
+rencontres sont facultatives est un bonus : compté dans `meetings`,
+jamais parmi les candidats servis.
+
+Dans une visite (`together: true`), un invité peut avoir sa propre durée,
+celle de la visite quand il vient : `meet: {Nous: {}, Musée: {}, Guide: {optional: true, duration: 1h30m}}`
+avec `duration: 1h` fait une visite d'une heure, d'une heure et demie
+avec le guide ; la plus longue ne se tient avec le guide que là où elle
+tient. De même pour une alternative d'un choix (le repas qui dure plus au
+marché). Une visite dure autant que sa plus longue partie présente : une
+telle durée ne peut que l'allonger.
+
+Entre deux plannings aussi bons sur tous les objectifs, celui où un invité ne quitte pas les visites du jour
+pour revenir à une suivante est préféré : l'amie est avec nous au marché
+et à la cathédrale, pas au marché, absente à la cathédrale et de retour
+au musée. Pour l'interdire tout à fait, donnez à l'invité
+`continuous: true` parmi les recruteurs : une fois parti des visites du
+jour, il ne revient pas ce jour-là (il peut toujours arriver tard ou
+partir tôt). Une visite qui a besoin de lui, où il n'est pas facultatif,
+compte comme les autres : sans la cathédrale, l'amie qui a les billets du
+musée ne peut pas être là pour le musée ; la recherche la garde avec nous,
+ou absente jusqu'au musée, jamais les deux.
+
+Chacun d'un choix peut dire où le candidat est vu quand c'est lui qui est
+choisi, pour les trajets : `Déjeuner: {meet: {Nous: {}, Bistro: {choice:
+déjeuner, place: Vieille ville}, Café: {choice: déjeuner, place: Ville
+voisine}}, together: true}` est un déjeuner au bistro ou au café, selon ce
+que permettent les trajets d'avant et d'après. Seules les alternatives d'un
+choix d'un candidat ont des lieux.
+
 ## Objectifs
 
 | Nom | Sens |
@@ -645,6 +754,7 @@ tournée](example/fr/tour.yaml).
 | `priorities` | maximise les candidats qui voient tous leurs recruteurs, niveau de priorité par niveau, le plus haut d'abord |
 | `urgency` | parmi eux, préfère les candidats à qui il reste le moins de jours (voir plus bas) |
 | `complete-candidates` | maximise les candidats qui voient tous leurs recruteurs, quelle que soit leur priorité |
+| `guest-time` | maximise le temps que les invités (`optional: true`) passent dans les rencontres où ils viennent : un invité présent pour une longue visite compte plus qu'un autre qui passe pour une courte |
 | `meetings` | maximise les rencontres tenues |
 | `recruiters` | minimise les recruteurs qui ont au moins un entretien, jour par jour : un recruteur qui vient deux jours compte deux |
 | `recruiter-half-days` | minimise les demi-journées (matin, après-midi) où des recruteurs ont un entretien, sommées sur les recruteurs et les jours |
@@ -734,57 +844,6 @@ qui en voient peu.
   Alice, présente deux heures, quatre entretiens d'une demi-heure avec elle,
   c'est tout ce que la journée peut tenir, si libres que soient les autres.
   Là où le compte l'atteint, la réponse est prouvée sans rien énumérer.
-- **`optional: true`** sur un des recruteurs de `meet` l'invite sans en
-  avoir besoin : `meet: {Marché: {}, Annick: {optional: true}}`. Le
-  candidat est complet sans lui, et la rencontre se tient avec les invités
-  libres à ce moment-là et sans les autres, chacun pour son propre compte.
-  C'est l'invité qui se joint s'il peut — une amie pendant une sortie, un
-  second évaluateur s'il est disponible, un manager qui passe sur
-  l'entretien quand sa journée le permet. Une rencontre n'est jamais
-  abandonnée pour un invité : elle se tient sans lui quand il ne peut pas
-  être là à une heure qui convient aux autres. Une fois tenue, l'invité qui
-  l'a manquée n'est pas redemandé : le candidat est servi, et n'est pas
-  dans le fichier de ce qui reste (`-rest`). Un invité coûte son temps
-  comme tout le monde, et `meetings` est le seul objectif qui le compte :
-  il vient quand cet objectif passe avant ceux sur le temps des recruteurs,
-  comme c'est le cas par défaut, et jamais quand il n'est pas parmi les
-  `objectives`, ce que `-check` signale. Un candidat dont toutes les
-  rencontres sont facultatives est un bonus : compté dans `meetings`,
-  jamais parmi les candidats servis.
-- **Un recruteur parmi plusieurs** s'écrit avec une liste dans la liste de
-  `meet` : `meet: [Manager, [Ada, Ben, Cléo]]` fait voir le manager et un
-  des trois évaluateurs, celui qui arrange le planning. Dans la forme en
-  mapping, les alternatives portent le même `choice`, un nom au choix, et
-  partagent leur rang : `{Manager: 1, Ada: {rank: 2, choice: évaluateur},
-  Ben: {rank: 2, choice: évaluateur}}`. Dans une réunion, c'est une liste
-  dans `with` : `{with: [Animateur, [Caméra 1, Caméra 2]]}`. Le candidat
-  est complet avec n'importe lequel d'entre eux, le choix compte pour une
-  rencontre dans `meetings`, et les autres ne sont pas à planifier plus
-  tard : on n'en avait pas besoin. Avec `optional: true` sur chacun, le
-  choix est un invité qui peut être n'importe lequel, ou personne. Un choix
-  n'est jamais vu deux fois dans une même rencontre, même conjointe, et ses
-  alternatives ne sont pas membres d'un panel, qui se voit entier. Voir
-  [example/fr/assessors.yaml](example/fr/assessors.yaml).
-- **`required: true`** fait d'un candidat une contrainte et non plus un
-  objectif : le programme refuse de rendre un planning sans lui et le nomme
-  à la place. C'est pour ce autour de quoi la journée se construit et qui
-  n'a aucun intérêt propre — le train déjà réservé, les clefs rendues à
-  l'hôtel, la salle à libérer à dix-huit heures. Une `priority` classe ce
-  qu'on préfère avoir ; ceci dit qu'il n'y a rien à classer, donc un
-  candidat indispensable reste en dehors du décompte des candidats servis.
-- **Les trajets tiennent ensemble.** Un trajet par d'autres lieux compte
-  quand il est plus court, donc les temps que vous donnez doivent être
-  cohérents : Paris-Dijon ne peut pas durer plus que Paris-Lyon puis
-  Lyon-Dijon. Deux conséquences, surprenantes toutes les deux. Un **trajet
-  par défaut relie tous les couples de lieux** : avec un défaut de dix
-  minutes, deux lieux ne sont jamais à plus de vingt minutes l'un de
-  l'autre, quoi que dise le fichier — un trajet long donné pour interdire
-  une liaison ne l'interdit pas. Et **un défaut de zéro n'est pas « pas de
-  liaison », c'est une liaison gratuite** : tout couple absent du fichier
-  devient un passage sans coût. Un lieu cité dans `journeys` est un lieu
-  même si aucun candidat n'y est rencontré, donc un nom mal orthographié
-  ouvre un passage que personne ne voulait. Le programme signale chaque
-  trajet qu'un passage rend plus court que ce que vous avez indiqué.
 - **Suivre** : `-progress` affiche les objectifs à chaque amélioration, avec
   le temps écoulé. `-progress-json` affiche la même chose en un objet JSON
   par ligne, pour un programme : `{"seconds":4.7,"iterations":812345,
@@ -1013,8 +1072,10 @@ version plus récente sort, et la ferme une fois les deux montées. Chaque
 dimanche soir, un passage profond (`.github/workflows/deep.yml`,
 `scripts/deep.sh`) rejoue les comparaisons avec une recherche exhaustive et
 les marches sur des problèmes aléatoires sur des milliers de problèmes,
-nouveaux chaque semaine, et ouvre une issue qui nomme la graine de celui qui
-échoue : `DEEP_FROM=<graine> DEEP_SEEDS=1 go test -run <test> ./planning/`
+nouveaux chaque semaine, cherche une centaine de gros problèmes, jusqu'à
+deux cents candidats, et dix de mille candidats et plus, où aucun meilleur
+planning n'est connu mais où chaque règle doit tenir, et ouvre une issue qui
+nomme la graine de celui qui échoue : `DEEP_FROM=<graine> DEEP_SEEDS=1 go test -run <test> ./planning/`
 le rejoue. Un tag de version (`git tag
 v0.1.0 && git push origin v0.1.0`) publie une version avec les zips prêts à
 l'emploi du tutoriel (`.github/workflows/release.yml`, `scripts/package.sh`).

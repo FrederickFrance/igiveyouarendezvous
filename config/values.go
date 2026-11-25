@@ -214,6 +214,9 @@ type Meet struct {
 	// planning.Request.Choice): the candidate meets one of the recruiters
 	// with the same Choice. Empty for a recruiter to meet in any case.
 	Choice string
+	// Place, for one of a choice, is where the candidate is met when this
+	// recruiter is the one chosen (see planning.Request.Place).
+	Place string
 }
 
 // Meets lists the recruiters to meet: a list, in any order, or a mapping of
@@ -229,6 +232,11 @@ type Meet struct {
 //
 //	meet: [recruiter 1, [assessor 1, assessor 2, assessor 3]]
 //	meet: {recruiter 1: 1, assessor 1: {rank: 2, choice: assessor}, assessor 2: {rank: 2, choice: assessor}}
+//
+// Each of a choice may say where the candidate is met when it is the one
+// chosen, for the journeys:
+//
+//	meet: {Us: {}, Bistro: {choice: lunch, place: Old town}, Market: {choice: lunch, place: Market square}}
 type Meets []Meet
 
 // UnmarshalYAML implements yaml.Unmarshaler.
@@ -294,8 +302,12 @@ func readMeet(key, value *yaml.Node) (Meet, error) {
 				if meet.Choice = strings.TrimSpace(v.Value); v.Kind != yaml.ScalarNode || meet.Choice == "" {
 					return meet, fmt.Errorf("line %d: %s: choice names the choice, the same for the recruiters of whom the candidate meets one", v.Line, key.Value)
 				}
+			case "place":
+				if meet.Place = strings.TrimSpace(v.Value); v.Kind != yaml.ScalarNode || meet.Place == "" {
+					return meet, fmt.Errorf("line %d: %s: place names where the candidate is met with this one of a choice, such as Old town", v.Line, key.Value)
+				}
 			default:
-				return meet, fmt.Errorf("line %d: %s: unknown key %q (known: choice, duration, rank, optional)", k.Line, key.Value, k.Value)
+				return meet, fmt.Errorf("line %d: %s: unknown key %q (known: choice, duration, rank, optional, place)", k.Line, key.Value, k.Value)
 			}
 
 			if err != nil {

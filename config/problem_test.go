@@ -255,7 +255,7 @@ func TestProblemFileErrors(t *testing.T) {
 		"recruiters:\n  '': {}\ncandidates: {}":                                 "line 2: an empty name",
 		"recruiters:\n  R: {duration: soon}\ncandidates: {}":                    "R: line 2: invalid duration",
 		"recruiters: {}\ncandidates: {}\nday: 25h-26h":                          "invalid time",
-		"recruiters:\n  R: {availability: 9h-12h, 14h-16h}\ncandidates: {}":     `unknown key "14h-16h" in recruiters > R (known: availability, duration, min-gap); between braces, write the time spans between quotes`,
+		"recruiters:\n  R: {availability: 9h-12h, 14h-16h}\ncandidates: {}":     `unknown key "14h-16h" in recruiters > R (known: availability, continuous, duration, min-gap); between braces, write the time spans between quotes`,
 		"{\"recruiters\": {}, \"candidates\": {}, \"x\": 1}":                    `unknown key "x"`,
 	} {
 		_, err := Parse([]byte(text))
@@ -735,4 +735,94 @@ candidates:
 	require.Equal(t, 3, p.Candidates[0].DaysLeft, "the 4th with Ben, the 5th with Ada, the 6th with Ben")
 	require.Equal(t, 0, p.Candidates[1].DaysLeft, "never both")
 	require.Equal(t, 3, p.Candidates[2].DaysLeft)
+}
+
+// In a visit, a guest or one of a choice may have their own length: the
+// visit lasts the longer when they come. Everybody else still takes the
+// candidate's.
+func TestAGuestMayLengthenAVisitInTheFile(t *testing.T) {
+	t.Parallel()
+
+	f, err := Parse([]byte(`recruiters: {Us: , Guide: , Museum: , Bistro: , Market: }
+candidates:
+  The museum:
+    meet: {Us: {}, Museum: {}, Guide: {optional: true, duration: 1h30m}}
+    duration: 1h
+    together: true
+  Lunch:
+    meet: {Us: {}, Bistro: {choice: lunch}, Market: {choice: lunch, duration: 45m}}
+    duration: 30m
+    together: true
+`))
+	require.NoError(t, err)
+
+	p, _, err := f.Problem("", "")
+	require.NoError(t, err)
+
+	lengths := map[string]time.Duration{}
+	for _, r := range p.Requests {
+		lengths[p.Candidates[r.Candidate].Name+"/"+p.Recruiters[r.Recruiter].Name] = r.Duration
+	}
+
+	require.Equal(t, map[string]time.Duration{
+		"The museum/Us": 0, "The museum/Museum": 0, "The museum/Guide": 90 * time.Minute,
+		"Lunch/Us": 0, "Lunch/Bistro": 0, "Lunch/Market": 45 * time.Minute,
+	}, lengths)
+
+	_, err = Parse([]byte(`recruiters: {Us: , Museum: }
+candidates:
+  The museum:
+    meet: {Us: {duration: 2h}, Museum: {}}
+    together: true
+`))
+	require.ErrorContains(t, err, "no durations in meet but for a guest (optional) or one of a choice")
+}
+
+// A guest who, once away, stays away for the day.
+func TestAContinuousGuestInTheFile(t *testing.T) {
+	t.Parallel()
+
+	f, err := Parse([]byte(`recruiters: {Us: , Friend: {continuous: true}}
+candidates:
+  The market: {meet: {Us: {}, Friend: {optional: true}}, together: true, duration: 1h}
+`))
+	require.NoError(t, err)
+
+	p, _, err := f.Problem("", "")
+	require.NoError(t, err)
+	require.False(t, p.Recruiters[0].Continuous)
+	require.True(t, p.Recruiters[1].Continuous)
+}
+
+// One of a choice may say where the candidate is met when it is chosen:
+// lunch at the bistro in the old town or at the café of the next town.
+func TestAPlaceForOneOfAChoiceInTheFile(t *testing.T) {
+	t.Parallel()
+
+	f, err := Parse([]byte(`recruiters: {Us: , Bistro: , Café: }
+travel: {journeys: [[Old town, Next town, 1h]]}
+candidates:
+  Lunch:
+    meet: {Us: {}, Bistro: {choice: lunch, place: Old town}, Café: {choice: lunch, place: Next town}}
+    duration: 30m
+    together: true
+`))
+	require.NoError(t, err)
+
+	p, _, err := f.Problem("", "")
+	require.NoError(t, err)
+
+	places := map[string]string{}
+	for _, r := range p.Requests {
+		places[p.Recruiters[r.Recruiter].Name] = r.Place
+	}
+
+	require.Equal(t, map[string]string{"Us": "", "Bistro": "Old town", "Café": "Next town"}, places)
+
+	_, err = Parse([]byte(`recruiters: {Us: , Bistro: }
+candidates:
+  Lunch:
+    meet: {Us: {}, Bistro: {place: [Old town]}}
+`))
+	require.ErrorContains(t, err, "place names where the candidate is met with this one of a choice")
 }

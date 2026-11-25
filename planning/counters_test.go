@@ -2,6 +2,7 @@ package planning
 
 import (
 	"math/rand/v2"
+	"slices"
 	"testing"
 	"time"
 
@@ -31,6 +32,15 @@ func TestTheCountersAgreeWithThePlans(t *testing.T) {
 	for seed := range deepSeeds(t, 40) {
 		rnd := rand.New(rand.NewPCG(seed, 0x9e3779b97f4a7c15))
 		p, o := randomForum(rnd)
+
+		// The counters must hold whichever objectives read them.
+		if seed%2 == 0 {
+			o.Objectives = append(o.Objectives, MinRecruiterHalfDays)
+		}
+
+		if seed%3 == 0 {
+			o.Objectives = slices.DeleteFunc(o.Objectives, func(ob Objective) bool { return ob == MinRecruiterIdleSpread })
+		}
 
 		in, err := newInstance(p, o)
 		require.NoError(t, err, "seed %d", seed)
@@ -70,7 +80,7 @@ func requireCounters(t *testing.T, s *searcher, seed uint64, move int) {
 
 	atSlot := make([]int, s.in.g.slots)
 	meets := make([]int, len(s.busy))
-	dayMeets := make([]int, len(s.dayMeets))
+	dayMeets := make([]int, len(s.busy)*s.days)
 
 	for _, plan := range s.plans {
 		for _, pl := range plan {
@@ -137,6 +147,12 @@ func requireCounters(t *testing.T, s *searcher, seed uint64, move int) {
 			}
 
 			require.Equal(t, span, s.span[u], where("the span of recruiter %d on day %d"), h, day)
+
+			half := [2]bool{
+				!busy[h].free(from, from+s.halves[0]),
+				!busy[h].free(from+s.halves[1], to),
+			}
+			require.Equal(t, half, s.half[u], where("the half-days of recruiter %d on day %d"), h, day)
 
 			if s.idle != nil {
 				idle := 0

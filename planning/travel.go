@@ -41,9 +41,11 @@ type Journey struct {
 	Duration time.Duration
 }
 
-// HasPlaces tells whether some candidate has a place.
+// HasPlaces tells whether some candidate, or some alternative of a choice,
+// has a place.
 func (p *Problem) HasPlaces() bool {
-	return slices.ContainsFunc(p.Candidates, func(c Candidate) bool { return c.Place != "" })
+	return slices.ContainsFunc(p.Candidates, func(c Candidate) bool { return c.Place != "" }) ||
+		slices.ContainsFunc(p.Requests, func(r Request) bool { return r.Place != "" })
 }
 
 // durations returns the default journey, when set, and the listed ones.
@@ -95,8 +97,10 @@ func sameEnds(a, b Journey) bool {
 type journeys struct {
 	placeOf []int             // [candidate]: index of their place, -1 without one
 	places  []string          // names of the places
+	index   map[string]int    // [name]: index of the place
+	used    []bool            // [place]: some candidate or alternative is there
 	time    [][]time.Duration // [place][place]: the shortest journey
-	longest []time.Duration   // [candidate]: their longest journey to any place
+	longest []time.Duration   // [candidate]: their longest journey, from any of their places to any place
 }
 
 // journeys returns the shortest journeys between the places of the
@@ -105,6 +109,7 @@ func (p *Problem) journeys() journeys {
 	var j journeys
 
 	index := map[string]int{}
+	j.index = index
 	add := func(name string) int {
 		if i, ok := index[name]; ok {
 			return i
@@ -124,12 +129,26 @@ func (p *Problem) journeys() journeys {
 		}
 	}
 
+	for _, r := range p.Requests {
+		if r.Place != "" {
+			add(r.Place)
+		}
+	}
+
+	visited := len(j.places) // the places of the candidates and the alternatives come first
+
 	for _, k := range p.Travel.Journeys {
 		add(k.From)
 		add(k.To)
 	}
 
 	n := len(j.places)
+	j.used = make([]bool, n)
+
+	for a := range visited {
+		j.used[a] = true
+	}
+
 	j.time = make([][]time.Duration, n)
 
 	// Without a default, a pair the journeys do not link starts out of
@@ -170,7 +189,42 @@ func (p *Problem) journeys() journeys {
 		}
 	}
 
+	for _, r := range p.Requests {
+		if r.Place != "" {
+			j.longest[r.Candidate] = max(j.longest[r.Candidate], slices.Max(j.time[index[r.Place]]))
+		}
+	}
+
 	return j
+}
+
+// apart returns the journey between places a and b, zero when one of them
+// is -1 (no place).
+func (j *journeys) apart(a, b int) time.Duration {
+	if a < 0 || b < 0 {
+		return 0
+	}
+
+	return j.time[a][b]
+}
+
+// placeOfInterview returns the place of interview iv: that of the
+// alternative it holds when it has one (Request.Place), the candidate's
+// otherwise; -1 without either.
+func (j *journeys) placeOfInterview(p *Problem, iv Interview) int {
+	return j.placeOfRequests(p, iv.Candidate, iv.Requests)
+}
+
+// placeOfRequests returns the place where candidate c is met with these
+// requests, as placeOfInterview.
+func (j *journeys) placeOfRequests(p *Problem, c int, requests []int) int {
+	for _, r := range requests {
+		if place := p.Requests[r].Place; place != "" {
+			return j.index[place]
+		}
+	}
+
+	return j.placeOf[c]
 }
 
 // unlinked names two places of the candidates that no journey links, and
@@ -183,17 +237,9 @@ func (p *Problem) journeys() journeys {
 // It returns the first such pair in the order of the places, so that the
 // message is the same from one run to the next.
 func (j *journeys) unlinked() (string, string, bool) {
-	visited := map[int]bool{}
-
-	for _, a := range j.placeOf {
-		if a >= 0 {
-			visited[a] = true
-		}
-	}
-
 	for a := range len(j.places) {
 		for b := range a {
-			if visited[a] && visited[b] && j.time[a][b] >= unreachable {
+			if j.used[a] && j.used[b] && j.time[a][b] >= unreachable {
 				return j.places[b], j.places[a], true
 			}
 		}
@@ -271,18 +317,11 @@ func (p *Problem) Chains() []Chain {
 		}
 	}
 
-	visited := map[int]bool{}
-	for _, a := range trips.placeOf {
-		if a >= 0 {
-			visited[a] = true
-		}
-	}
-
 	var out []Chain
 
 	for a := range n {
 		for b := range a {
-			if !visited[a] || !visited[b] || listed[[2]int{a, b}] || dist[b][a] >= unreachable {
+			if !trips.used[a] || !trips.used[b] || listed[[2]int{a, b}] || dist[b][a] >= unreachable {
 				continue
 			}
 
@@ -308,16 +347,6 @@ func wayThrough(places []string, via [][]int, a, b int) []string {
 	out = append(out, places[k])
 
 	return append(out, wayThrough(places, via, k, b)...)
-}
-
-// between returns the journey between the places of candidates a and b,
-// zero when one of them has no place (or a or b is -1).
-func (j *journeys) between(a, b int) time.Duration {
-	if a < 0 || b < 0 || j.placeOf[a] < 0 || j.placeOf[b] < 0 {
-		return 0
-	}
-
-	return j.time[j.placeOf[a]][j.placeOf[b]]
 }
 
 // needed tells whether some journey takes time.

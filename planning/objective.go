@@ -104,6 +104,12 @@ const (
 	// the end of the last one, over the whole period, nights included: the
 	// campaign is over as soon as possible.
 	MinSpan
+	// MaxGuestTime maximises the time the guests (Request.Optional) spend
+	// in the interviews they come to, in minutes, summed over the guests: a
+	// guest with us for a long visit counts more than one who looks in on a
+	// short one. MaxMeetings counts how many times a guest comes; this
+	// counts how long, which is what a friend on an outing is invited for.
+	MaxGuestTime
 )
 
 var objectiveNames = map[Objective][2]string{
@@ -123,13 +129,14 @@ var objectiveNames = map[Objective][2]string{
 	MaxUrgency:             {"urgency", "maximise the complete candidates with the fewest days left, the fewest first"},
 	MinDayEnds:             {"day-end", "minimise the end of the last interview of each day"},
 	MinSpan:                {"span", "minimise the time from the first interview to the end of the last one"},
+	MaxGuestTime:           {"guest-time", "maximise the time the guests spend in the interviews they come to"},
 }
 
 // AllObjectives lists every objective.
 func AllObjectives() []Objective {
 	return []Objective{
-		MaxPriorities, MaxUrgency, MaxCompleteCandidates, MaxMeetings, MinRecruiters, MinRecruiterHalfDays,
-		MinInterviews, MinRecruiterSpan, MinRecruiterBreaks, MinRecruiterIdle,
+		MaxPriorities, MaxUrgency, MaxCompleteCandidates, MaxGuestTime, MaxMeetings, MinRecruiters,
+		MinRecruiterHalfDays, MinInterviews, MinRecruiterSpan, MinRecruiterBreaks, MinRecruiterIdle,
 		MinRecruiterIdleSpread, MinCandidateWait, MinCandidateBreaks,
 		MinEndTimes, MinDayEnds, MinSpan,
 	}
@@ -212,6 +219,20 @@ type criterion struct {
 	// like a move to take back. It is the search's own: it stands for no
 	// objective and has no Score.
 	required bool
+	// returns marks the criterion the search puts after every objective
+	// when some recruiters are guests (Request.Optional): how many times a
+	// guest leaves the visits they are invited to on a day and comes back
+	// to a later one. A friend who is with us at the market, away for the
+	// cathedral and back for the museum is no way to spend a day out; with
+	// everything else equal, the schedule that keeps her with us is the
+	// better one. It decides nothing an objective decides, and has no Score
+	// either.
+	returns bool
+	// broken marks the criterion the search puts first when some guests are
+	// Recruiter.Continuous: how many times one of them comes back. The
+	// insertions never make one, but this keeps every move that would
+	// (re-timing a day can reorder its visits) from being kept.
+	broken bool
 }
 
 // searchCriteria returns the criteria the search compares schedules on:
@@ -222,6 +243,14 @@ func searchCriteria(p *Problem, objectives []Objective) []criterion {
 
 	if slices.ContainsFunc(p.Candidates, func(c Candidate) bool { return c.Required }) {
 		crit = slices.Insert(crit, 0, criterion{required: true})
+	}
+
+	if slices.ContainsFunc(p.Requests, func(r Request) bool { return r.Optional }) {
+		crit = append(crit, criterion{returns: true})
+	}
+
+	if slices.ContainsFunc(p.Recruiters, func(r Recruiter) bool { return r.Continuous }) {
+		crit = slices.Insert(crit, 0, criterion{broken: true})
 	}
 
 	return crit

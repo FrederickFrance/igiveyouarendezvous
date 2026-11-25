@@ -418,7 +418,7 @@ func (s *searcher) windowOn(buf []window, last placed, day int) (window, bool) {
 // It is the second place that occupies slots, beside mark, so it owes the
 // room count the same upkeep: a retiming that held interviews without
 // counting them read a stale count and packed a day past its rooms.
-func (s *searcher) hold(c int, pl placed, busy bool) {
+func (s *searcher) hold(_ int, pl placed, busy bool) {
 	opt := &s.in.options[pl.option]
 	for _, h := range opt.recruiters {
 		s.busy[h].set(pl.start, pl.start+opt.length, busy)
@@ -427,7 +427,7 @@ func (s *searcher) hold(c int, pl placed, busy bool) {
 			s.meets[h]++
 			s.dayMeets[s.unit(h, pl.start)]++
 
-			s.own(h, pl.start, pl.start+opt.length, c)
+			s.own(h, pl.start, pl.start+opt.length, opt.place)
 		} else {
 			s.meets[h]--
 			s.dayMeets[s.unit(h, pl.start)]--

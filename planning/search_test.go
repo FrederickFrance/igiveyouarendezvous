@@ -215,7 +215,8 @@ func worse(t *testing.T, a, b []planning.Score) int {
 		}
 
 		better := a[i].Value < b[i].Value // objectives to minimise
-		if a[i].Objective == planning.MaxCompleteCandidates || a[i].Objective == planning.MaxMeetings {
+		if a[i].Objective == planning.MaxCompleteCandidates || a[i].Objective == planning.MaxMeetings ||
+			a[i].Objective == planning.MaxGuestTime {
 			better = !better
 		}
 
