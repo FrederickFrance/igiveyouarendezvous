@@ -20,6 +20,8 @@
 //	  - [recruiter 1, recruiter 2, recruiter 3]
 //	panels:                   # recruiters who always interview together, such as a jury
 //	  - [recruiter 4, recruiter 5]
+//	                          # or juries by name, met by name in meet (see Panels):
+//	                          #   jury 1: {members: [recruiter 4, recruiter 5], availability: 14:00-17:00, place: room A}
 //	max-joint-size: 0         # maximum recruiters in a joint interview (0: no limit)
 //	rooms: 0                  # interviews that can be held at once (0: no limit)
 //	break-spread:             # how far the recruiters' break counts may differ (none: no limit)
@@ -96,7 +98,7 @@ type File struct {
 	// own (see Recruiter.MinGap).
 	RecruiterMinGap Duration   `yaml:"recruiter-min-gap"`
 	JointGroups     [][]string `yaml:"joint-groups"`
-	Panels          [][]string `yaml:"panels"`
+	Panels          Panels     `yaml:"panels"`
 	MaxJointSize    int        `yaml:"max-joint-size"`
 	Rooms           int        `yaml:"rooms"`
 	// Precedences order candidates against each other, as pairs of their
@@ -507,6 +509,11 @@ func (f *File) Problem(from, to string) (*planning.Problem, planning.Options, er
 		p.Recruiters = append(p.Recruiters, r)
 	}
 
+	juries, err := f.Panels.juries(recruiters, dates)
+	if err != nil {
+		return nil, o, err
+	}
+
 	for c, e := range f.Candidates {
 		spans, set, err := on(e.Value.Availability, dates)
 		if err != nil {
@@ -532,6 +539,17 @@ func (f *File) Problem(from, to string) (*planning.Problem, planning.Options, er
 		choices := map[string]int{} // the number of each choice, from 1
 
 		for _, m := range e.Value.Meet {
+			if jury, ok := juries[NormalizeName(m.Recruiter)]; ok {
+				req, err := jury.request(c, m, choices)
+				if err != nil {
+					return nil, o, fmt.Errorf("line %d: candidate %s: %w", e.Line, e.Name, err)
+				}
+
+				p.Requests = append(p.Requests, req)
+
+				continue
+			}
+
 			h, ok := recruiters[NormalizeName(m.Recruiter)]
 
 			switch {
@@ -546,14 +564,7 @@ func (f *File) Problem(from, to string) (*planning.Problem, planning.Options, er
 				Candidate: c, Recruiter: h, Rank: m.Rank, Duration: m.Duration, Optional: m.Optional, Place: m.Place,
 			}
 
-			if m.Choice != "" {
-				if _, ok := choices[m.Choice]; !ok {
-					choices[m.Choice] = len(choices) + 1
-				}
-
-				req.Choice = choices[m.Choice]
-			}
-
+			req.Choice = choiceNumber(choices, m.Choice)
 			p.Requests = append(p.Requests, req)
 		}
 
@@ -566,7 +577,7 @@ func (f *File) Problem(from, to string) (*planning.Problem, planning.Options, er
 		return nil, o, err
 	}
 
-	if p.Panels, err = groups("panels", f.Panels, recruiters); err != nil {
+	if p.Panels, err = groups("panels", f.Panels.Unnamed, recruiters); err != nil {
 		return nil, o, err
 	}
 

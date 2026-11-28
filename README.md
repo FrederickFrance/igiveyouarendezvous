@@ -268,7 +268,7 @@ candidates:
 | `min-gap` | `0` | the least time between two interviews of a candidate: a duration (`30m`, `2h`) or calendar days (`3d`) |
 | `max-gap` | `0` | the most time between two interviews of a candidate: a duration, calendar days (`1d`: the next day at the latest) or `unlimited`; `0` and `0`: back to back |
 | `joint-groups` | none | groups of recruiters who may interview together (see below) |
-| `panels` | none | groups of recruiters who always interview together, such as a jury (see below) |
+| `panels` | none | groups of recruiters who always interview together, such as a jury, or juries by name with when they sit and where (see below) |
 | `max-joint-size` | `0` | most recruiters in a joint interview (`0`: no limit) |
 | `rooms` | `0` | most interviews at the same time, whoever attends them: the rooms, tables or booths there are (`0`: no limit) |
 | `break-spread` | none | how far the recruiters' numbers of breaks may differ, among those with at least two interviews (`2`: nobody waits more than two times more often than anybody else); none: no limit |
@@ -414,6 +414,33 @@ must meet, the candidate meets in one interview, with nobody else, or not at
 all: never one after the other. A recruiter belongs to one panel at most,
 and then to no joint group; `max-joint-size` does not apply to panels. Full
 example: [a selection panel](example/panel.yaml).
+
+**Panels by name.** A panel may also have a name, the times it sits and its
+room; the candidate then meets it by its name, and may meet one of several,
+as a choice: a defence before one of the juries of the week.
+
+```yaml
+panels:
+  Jury 1: {members: [Ana, Bea, Cal], availability: {2026-06-15: 09:00-12:00}, place: Room A}
+  Jury 2: {members: [Ana, Dan, Eve], availability: {2026-06-16: 14:00-17:00}, place: Room B}
+candidates:
+  Student:
+    meet: {Sup: {}, Jury 1: {choice: jury}, Jury 2: {choice: jury}}
+    together: true
+```
+
+The times of a panel are when it sits, on top of the availabilities of its
+members, who may sit on other panels at other times (Ana here). Someone the
+candidate meets on their own account and who sits on the panel chosen, a
+supervisor on the jury, is there once. A panel with a room and met alone
+asks for the candidate to have that place instead. Full example:
+[defences before one of three juries](example/defences.yaml).
+
+When candidates choose among several panels and each brings people of their
+own (a supervisor, a referee), put `recruiter-places` before
+`recruiter-visits` and `recruiter-breaks` in the objectives: it gathers
+the candidates of the same person before the same panel, so that this
+person goes to fewer rooms. The other order spreads them.
 
 **Meetings.** `meet` gives one interview per recruiter; `meetings` gives
 meetings with several recruiters at once, held as given, with nobody else,
@@ -597,26 +624,26 @@ Full examples ([in French](example/fr) too): [the recordings of a show](example/
 tables.
 
 **A shoot over several days in a row.** The shoot is one candidate; each
-person appears once per day (`Ada day 1`, `Ada day 2`…, with their
-availabilities); the people of a day form a panel, so that each day gathers
-its whole team; the ranks give the order of the days, and the gaps make them
-follow each other:
+day of it is a panel by name, with the whole team; the ranks give the
+order of the days, and the gaps make them follow each other:
 
 ```yaml
 min-gap: 1d
 max-gap: 1d
 panels:
-  - [Ada day 1, Blaise day 1]
-  - [Ada day 2, Blaise day 2]
+  Team day 1: {members: [Ada, Blaise]}
+  Team day 2: {members: [Ada, Blaise]}
 candidates:
   the shoot:
     duration: 6h
-    meet: {Ada day 1: 1, Blaise day 1: 1, Ada day 2: 2, Blaise day 2: 2}
+    meet: {Team day 1: 1, Team day 2: 2}
 ```
 
 Without two days in a row with the whole team, the shoot is not planned.
-The limit: for the program, `Ada day 1` is not Ada, so a clash with another
-recording of the same person, in the same file, goes unseen.
+Ada is Ada on both days: another recording of hers, in the same file,
+cannot fall on a day of the shoot. (Before v0.20, each person had to be
+written once a day, `Ada day 1` and `Ada day 2`, and the program could not
+see that they were the same person.)
 
 **Shoots in several cities.** The shoot of an episode is a candidate, at
 its `place`, with its `meetings`: the host and the camera operator, alone or
@@ -729,11 +756,14 @@ after allow. Only the alternatives of one choice of a candidate have places.
 | `meetings` | maximise the meetings held |
 | `recruiters` | minimise the recruiters who have at least one interview, day by day: a recruiter who comes on two days counts two |
 | `recruiter-half-days` | minimise the half-days (morning, afternoon) in which recruiters have an interview, summed over the recruiters and the days |
+| `recruiter-places` | minimise the places where recruiters have an interview, day by day: the rooms a member of several juries goes to; without places, the days they come |
+| `recruiter-visits` | minimise the times recruiters come in: each run of interviews in a row counts one, day by day, so a day with one break counts two (`recruiters` and `recruiter-breaks` added together: the "blocks" of a teacher at thesis defences) |
 | `interviews` | minimise the interviews, so group meetings when allowed |
 | `recruiter-span` | minimise the time recruiters spend from the start of their first interview to the end of their last, day by day |
 | `recruiter-breaks` | minimise the times a recruiter is left waiting between two interviews of a day, counting each wait once however long it lasts |
 | `recruiter-idle` | minimise the free time inside the recruiters' days: from their first interview to the end of their last, less the interviews themselves |
 | `recruiter-idle-spread` | minimise the difference between the recruiter with the most free time inside their day and the one with the least, among those with at least two interviews that day |
+| `panel-spread` | minimise the difference between the jury that holds the most interviews and the one that holds the least, among the juries by name (`panels`): days of the same length; a jury nobody meets holds none |
 | `candidate-wait` | minimise the time candidates wait between two interviews of a day (useful when `max-gap` is not `0`) |
 | `candidate-breaks` | minimise the times a candidate is left waiting between two interviews of a day, counting each wait once however long it lasts |
 | `earliest` | hold the interviews as early as possible in the period |

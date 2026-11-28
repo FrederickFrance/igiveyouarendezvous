@@ -7,6 +7,34 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
+## [0.20.0] - 2026-11-28 "Sorting Hat" 🎩
+
+### Added
+
+- **Juries by name.** `panels` may also name its juries, each with its
+  members, the times it sits and its room; a candidate meets one by its
+  name, and may meet one of several as a choice: a defence before one of
+  the juries of the week, with the supervisor. A member may sit on several
+  juries at different times, and someone the candidate meets on their own
+  account who sits on the jury chosen is there once. In the library, a
+  request may bring other recruiters along (`Request.With`) and may have
+  times of its own (`Request.Availability`). `planning.Request` holds
+  slices now, and is no longer comparable with `==`.
+- **Objective `recruiter-places`**: the places where each recruiter has an
+  interview, day by day — the rooms a member of several juries has to go
+  to. Without places, it counts the days they come, as `recruiters` does.
+- **`example/defences.yaml`** (and its French version, in the demo too): a
+  week of defences before one of three juries, one of whom sits on two.
+- The schedule shows the place of the alternative held (the room of the
+  jury, the restaurant chosen), no longer always the candidate's.
+- **Objective `recruiter-visits`**: the times the recruiters come in, day
+  by day, each run of interviews in a row counting one: `recruiters` and
+  `recruiter-breaks` added together, the "blocks" of the teachers at
+  thesis defences, in one count rather than one after the other.
+- **Objective `panel-spread`**: the difference between the jury by name
+  that holds the most interviews and the one that holds the least — the
+  juries of the week sit for days of the same length.
+
 ## [0.19.0] - 2026-11-28 "Armando Muñoz" 🧬
 
 ### Added

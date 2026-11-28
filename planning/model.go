@@ -84,6 +84,7 @@ type instance struct {
 	g          grid
 	availC     [][]bool // [candidate][slot]
 	availR     [][]bool // [recruiter][slot]
+	availQ     [][]bool // [request][slot], nil when the request has no availability of its own
 	day        []int    // [slot]: its day
 	minute     []int    // [slot]: its start, in minutes from the midnight of the first day
 	session    []int    // [slot]: part of a day between breaks, -1 during a break
@@ -153,9 +154,15 @@ func newInstance(p *Problem, opts Options) (*instance, error) {
 		values = append(values, b.Start, b.End)
 	}
 
-	for _, r := range p.Requests {
+	reqAvail := make([][]Interval, len(p.Requests))
+	for i, r := range p.Requests {
 		if r.Duration > 0 {
 			values = append(values, r.Duration)
+		}
+
+		if r.Availability != nil {
+			reqAvail[i] = availability(r.Availability, o)
+			addIntervals(reqAvail[i])
 		}
 	}
 
@@ -224,6 +231,8 @@ func newInstance(p *Problem, opts Options) (*instance, error) {
 		in.availR[h] = in.g.mask(recAvail[h])
 		removeBreaks(in.availR[h], pause)
 	}
+
+	in.availQ = in.requestMasks(reqAvail)
 
 	in.availC = make([][]bool, len(p.Candidates))
 	for c := range p.Candidates {
@@ -574,17 +583,16 @@ func (in *instance) addOption(c int, requests []int) {
 	opt := option{candidate: c, requests: requests, place: in.trips.placeOfRequests(in.p, c, requests)}
 
 	for _, r := range requests {
-		opt.recruiters = append(opt.recruiters, in.p.Requests[r].Recruiter)
 		if in.p.Requests[r].Optional {
 			opt.guests++
 		}
 	}
 
-	slices.Sort(opt.recruiters)
+	opt.recruiters = in.p.gather(requests)
 	opt.length = int(in.p.length(requests, in.o) / in.g.step)
 
 	for t := 0; t+opt.length <= in.g.slots; t++ {
-		if t%in.g.perDay+opt.length <= in.g.perDay && in.free(c, opt.recruiters, t, opt.length) {
+		if t%in.g.perDay+opt.length <= in.g.perDay && in.free(c, opt.recruiters, t, opt.length) && in.within(requests, t, opt.length) {
 			opt.starts = append(opt.starts, t)
 		}
 	}
@@ -605,6 +613,37 @@ func (in *instance) free(c int, recruiters []int, t, length int) bool {
 		for _, h := range recruiters {
 			if !in.availR[h][s] {
 				return false
+			}
+		}
+	}
+
+	return true
+}
+
+// requestMasks puts the availabilities of the requests on the grid (see
+// Request.Availability): nil for a request without one.
+func (in *instance) requestMasks(avail [][]Interval) [][]bool {
+	out := make([][]bool, len(avail))
+
+	for i, a := range avail {
+		if a != nil {
+			out[i] = in.g.mask(a)
+		}
+	}
+
+	return out
+}
+
+// within tells whether the requests that have an availability of their
+// own (see Request.Availability) may all be held from slot t for length
+// slots.
+func (in *instance) within(requests []int, t, length int) bool {
+	for _, r := range requests {
+		if q := in.availQ[r]; q != nil {
+			for s := t; s < t+length; s++ {
+				if !q[s] {
+					return false
+				}
 			}
 		}
 	}
@@ -684,15 +723,17 @@ func (in *instance) repeats() []bool {
 
 		for _, r := range requests {
 			req := in.p.Requests[r]
-			if in.p.Recruiters[req.Recruiter].MinGap <= 0 && !elsewhere {
-				continue
-			}
+			for _, h := range in.p.people(r) {
+				if in.p.Recruiters[h].MinGap <= 0 && !elsewhere {
+					continue
+				}
 
-			if m, ok := part[req.Recruiter]; ok && m != req.Meeting {
-				out[c] = true
-			}
+				if m, ok := part[h]; ok && m != req.Meeting {
+					out[c] = true
+				}
 
-			part[req.Recruiter] = req.Meeting
+				part[h] = req.Meeting
+			}
 		}
 	}
 

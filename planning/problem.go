@@ -209,6 +209,18 @@ type Request struct {
 	// Meeting, and jointly as JointGroups allow, never with two of its
 	// alternatives; not among the members of a panel.
 	Choice int
+	// With lists other recruiters (indexes in Recruiters) who come along
+	// with Recruiter whenever this request is held: the other members of a
+	// jury met as one, so that one alternative of a choice may be a whole
+	// jury, each of them busy for the time. Someone the candidate also
+	// meets on their own account, in the same interview, is there once.
+	With []int
+	// Availability, when given, lists the only times this request may be
+	// held, on top of the availabilities of the candidate and the
+	// recruiter: the sittings of a jury, a visit open on some days only.
+	// The interview that holds it is then within them, and so are the
+	// others of its alternative (see Alternative).
+	Availability []Interval
 	// Place, for an alternative of a Choice, is where the candidate is met
 	// when this alternative is the one held, in place of Candidate.Place:
 	// lunch at the bistro in the old town or at the market, and the
@@ -591,7 +603,7 @@ func (p *Problem) check(o Options) error {
 		return err
 	}
 
-	return p.checkRequests()
+	return p.checkRequests(o)
 }
 
 // checkPrecedences validates the precedences: known candidates, nobody
@@ -699,7 +711,7 @@ func (p *Problem) checkAlternative(i int, k choiceKey, alternative map[choiceKey
 
 // checkRequests validates the requests: a candidate meets a recruiter once
 // outside meetings, and once in each meeting at most.
-func (p *Problem) checkRequests() error {
+func (p *Problem) checkRequests(o Options) error {
 	type key struct{ candidate, meeting, recruiter int }
 
 	seen := map[key]bool{}
@@ -712,34 +724,11 @@ func (p *Problem) checkRequests() error {
 			return fmt.Errorf("planning: request %d: unknown candidate or recruiter", i)
 		}
 
-		if r.Rank < 0 {
-			return fmt.Errorf("planning: %s: negative rank", p.Candidates[r.Candidate].Name)
-		}
-
-		if r.Rank > 0 && p.Candidates[r.Candidate].Together {
-			return fmt.Errorf("planning: %s meets everybody together: no ranks", p.Candidates[r.Candidate].Name)
+		if err := p.checkRequest(r, o); err != nil {
+			return err
 		}
 
 		name := p.Candidates[r.Candidate].Name
-
-		switch {
-		case r.Duration < 0:
-			return fmt.Errorf("planning: %s meets %s: negative duration", name, p.Recruiters[r.Recruiter].Name)
-		case r.Duration > 0 && p.Candidates[r.Candidate].Together && !r.Optional && r.Choice == 0:
-			return fmt.Errorf("planning: %s meets everybody together: no durations but for a guest or a choice, give the candidate's", name)
-		case r.Meeting < 0:
-			return fmt.Errorf("planning: %s: negative meeting", name)
-		case r.Meeting > 0 && p.Candidates[r.Candidate].Together:
-			return fmt.Errorf("planning: %s meets everybody together: no other meetings", name)
-		case r.Choice < 0:
-			return fmt.Errorf("planning: %s: negative choice", name)
-		case r.Place != "" && r.Choice == 0:
-			return fmt.Errorf("planning: %s meets %s at %s: only one of a choice is met elsewhere than the candidate",
-				name, p.Recruiters[r.Recruiter].Name, r.Place)
-		case r.Choice > 0 && p.panelOf(r.Recruiter) >= 0:
-			return fmt.Errorf("planning: %s meets %s as one choice among others, and %s is in a panel, which is met whole",
-				name, p.Recruiters[r.Recruiter].Name, p.Recruiters[r.Recruiter].Name)
-		}
 
 		if r.Choice > 0 {
 			if err := p.checkAlternative(i, choiceKey{r.Candidate, r.Meeting, r.Choice}, alternative, placed); err != nil {
@@ -747,15 +736,20 @@ func (p *Problem) checkRequests() error {
 			}
 		}
 
+		// A request that brings a whole jury (With) may share a member with
+		// another one: the member is there once (see Request.With).
 		k := key{r.Candidate, r.Meeting, r.Recruiter}
 		switch {
+		case len(r.With) > 0:
 		case seen[k] && r.Meeting == 0:
 			return fmt.Errorf("planning: %s must meet %s twice outside meetings", name, p.Recruiters[r.Recruiter].Name)
 		case seen[k]:
 			return fmt.Errorf("planning: %s meets %s twice in one meeting", name, p.Recruiters[r.Recruiter].Name)
 		}
 
-		seen[k] = true
+		if len(r.With) == 0 {
+			seen[k] = true
+		}
 
 		if r.Meeting > 0 {
 			m := key{r.Candidate, r.Meeting, -1}
@@ -768,6 +762,47 @@ func (p *Problem) checkRequests() error {
 	}
 
 	return p.checkRequired()
+}
+
+// checkRequest validates the fields of request r, whose candidate and
+// recruiter are known.
+func (p *Problem) checkRequest(r Request, o Options) error {
+	if r.Rank < 0 {
+		return fmt.Errorf("planning: %s: negative rank", p.Candidates[r.Candidate].Name)
+	}
+
+	if r.Rank > 0 && p.Candidates[r.Candidate].Together {
+		return fmt.Errorf("planning: %s meets everybody together: no ranks", p.Candidates[r.Candidate].Name)
+	}
+
+	name := p.Candidates[r.Candidate].Name
+
+	switch {
+	case r.Duration < 0:
+		return fmt.Errorf("planning: %s meets %s: negative duration", name, p.Recruiters[r.Recruiter].Name)
+	case r.Duration > 0 && p.Candidates[r.Candidate].Together && !r.Optional && r.Choice == 0:
+		return fmt.Errorf("planning: %s meets everybody together: no durations but for a guest or a choice, give the candidate's", name)
+	case r.Meeting < 0:
+		return fmt.Errorf("planning: %s: negative meeting", name)
+	case r.Meeting > 0 && p.Candidates[r.Candidate].Together:
+		return fmt.Errorf("planning: %s meets everybody together: no other meetings", name)
+	case r.Choice < 0:
+		return fmt.Errorf("planning: %s: negative choice", name)
+	case !p.withValid(r):
+		return fmt.Errorf("planning: %s meets %s with an unknown recruiter, or one named twice", name, p.Recruiters[r.Recruiter].Name)
+	case r.Place != "" && r.Choice == 0:
+		return fmt.Errorf("planning: %s meets %s at %s: only one of a choice is met elsewhere than the candidate",
+			name, p.Recruiters[r.Recruiter].Name, r.Place)
+	case r.Choice > 0 && p.panelOf(r.Recruiter) >= 0:
+		return fmt.Errorf("planning: %s meets %s as one choice among others, and %s is in a panel, which is met whole",
+			name, p.Recruiters[r.Recruiter].Name, p.Recruiters[r.Recruiter].Name)
+	}
+
+	if _, err := normalize(r.Availability, o.days()); r.Availability != nil && err != nil {
+		return fmt.Errorf("planning: %s: %w", name, err)
+	}
+
+	return nil
 }
 
 // units returns, for each request, the meeting it stands for in a count of
@@ -1101,4 +1136,101 @@ func inside(intervals []Interval, start, end time.Duration) bool {
 	}
 
 	return false
+}
+
+// withValid tells whether the recruiters who come along with request r
+// (see Request.With) are known, distinct, and not its recruiter.
+func (p *Problem) withValid(r Request) bool {
+	for i, h := range r.With {
+		if h < 0 || h >= len(p.Recruiters) || h == r.Recruiter || slices.Contains(r.With[:i], h) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// people returns the recruiters request r brings: its recruiter, and
+// those who come along with it (see Request.With).
+func (p *Problem) people(r int) []int {
+	req := p.Requests[r]
+	if len(req.With) == 0 {
+		return []int{req.Recruiter}
+	}
+
+	return append([]int{req.Recruiter}, req.With...)
+}
+
+// gather returns the recruiters of an interview holding the requests, each
+// once and sorted.
+func (p *Problem) gather(requests []int) []int {
+	var out []int
+
+	for _, r := range requests {
+		for _, h := range p.people(r) {
+			if !slices.Contains(out, h) {
+				out = append(out, h)
+			}
+		}
+	}
+
+	slices.Sort(out)
+
+	return out
+}
+
+// heads returns the recruiters of the requests themselves, each once and
+// sorted, without those who come along (see Request.With): the panels and
+// joint groups are theirs.
+func (p *Problem) heads(requests []int) []int {
+	var out []int
+
+	for _, r := range requests {
+		if h := p.Requests[r].Recruiter; !slices.Contains(out, h) {
+			out = append(out, h)
+		}
+	}
+
+	slices.Sort(out)
+
+	return out
+}
+
+// juries returns the jury of each request, as an index from 0, -1 for a
+// request that brings nobody along, and the number of juries: the requests
+// that bring the same people (Request.With) to the same place at the same
+// times are one jury, met by several candidates (see MinPanelSpread).
+func (p *Problem) juries() (jury []int, n int) {
+	jury = make([]int, len(p.Requests))
+	seen := map[string]int{}
+
+	for r, req := range p.Requests {
+		if len(req.With) == 0 {
+			jury[r] = -1
+
+			continue
+		}
+
+		key := fmt.Sprint(req.Recruiter, req.With, req.Place, req.Availability)
+		if k, ok := seen[key]; ok {
+			jury[r] = k
+
+			continue
+		}
+
+		seen[key] = n
+		jury[r] = n
+		n++
+	}
+
+	return jury, n
+}
+
+// spreadOf returns the largest value less the smallest, 0 for none.
+func spreadOf(values []int) int {
+	if len(values) == 0 {
+		return 0
+	}
+
+	return slices.Max(values) - slices.Min(values)
 }

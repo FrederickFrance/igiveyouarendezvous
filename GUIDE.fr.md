@@ -69,6 +69,7 @@ dates et les horaires :
 | Un jury : ses membres reçoivent ensemble | Une commission de recrutement |
 | Des enregistrements avec des invités difficiles à réunir | Les enregistrements d'une émission |
 | Chaque candidat voit l'un ou l'autre de plusieurs recruteurs | Un évaluateur parmi trois |
+| Des soutenances, chacune devant l'un des jurys de la semaine | Des soutenances devant l'un de trois jurys |
 | Des tournages dans plusieurs villes, avec les trajets | Une tournée de tournages dans cinq villes |
 | Un colloque, des parties de jeu | Un colloque ; Des parties de jeu de rôle |
 | Une sortie ou un voyage : des visites, des trains, un invité | Deux jours de voyage en train |

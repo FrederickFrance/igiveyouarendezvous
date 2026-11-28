@@ -41,6 +41,28 @@ func TestWriteCSV(t *testing.T) {
 		`2026-11-10,14:00,14:30,"'=HYPERLINK(""x"")",,Bob,no`+"\n", buf.String(), "a column of places")
 }
 
+// The place written is that of the alternative held: the room of the jury
+// chosen, not the candidate's.
+func TestCSVGivesThePlaceOfTheAlternativeHeld(t *testing.T) {
+	t.Parallel()
+
+	p := &planning.Problem{
+		Recruiters: []planning.Recruiter{{Name: "Alice"}, {Name: "Bob"}},
+		Candidates: []planning.Candidate{{Name: "Zoé"}},
+		Requests: []planning.Request{
+			{Candidate: 0, Recruiter: 0, Choice: 1, Place: "Room A"},
+			{Candidate: 0, Recruiter: 1, Choice: 1, Place: "Room B"},
+		},
+	}
+	s := &planning.Schedule{Interviews: []planning.Interview{
+		{Candidate: 0, Recruiters: []int{1}, Requests: []int{1}, Start: 9 * time.Hour, End: 10 * time.Hour},
+	}}
+
+	var buf bytes.Buffer
+	require.NoError(t, WriteCSV(&buf, p, s, "2026-11-09", ','))
+	require.Contains(t, buf.String(), "2026-11-09,09:00,10:00,Zoé,Room B,Bob,no\n")
+}
+
 func TestParseSeparator(t *testing.T) {
 	t.Parallel()
 

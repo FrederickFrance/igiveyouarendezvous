@@ -97,7 +97,7 @@ func fixedProblem(p *Problem, o Options, accepted []Interview, c int, plan []Int
 				return "an interview with an unknown recruiter"
 			}
 
-			if !slices.ContainsFunc(p.Requests, func(r Request) bool { return r.Candidate == c && r.Recruiter == h }) {
+			if !slices.ContainsFunc(p.Requests, func(r Request) bool { return r.Candidate == c && (r.Recruiter == h || slices.Contains(r.With, h)) }) {
 				return fmt.Sprintf("%s no longer needs to meet %s", name, p.Recruiters[h].Name)
 			}
 		}

@@ -78,7 +78,7 @@ func WriteCSV(w io.Writer, p *planning.Problem, s *planning.Schedule, from strin
 			cell(p.Candidates[iv.Candidate].Name), cell(strings.Join(names, " + ")), fixed,
 		}
 		if places {
-			row = slices.Insert(row, 4, cell(p.Candidates[iv.Candidate].Place))
+			row = slices.Insert(row, 4, cell(p.PlaceOf(iv)))
 		}
 
 		if err := cw.Write(row); err != nil {

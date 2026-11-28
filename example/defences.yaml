@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=../schema/problem.schema.json
+#
+# A week of thesis defences. Three juries sit, each one day in its room;
+# every student defends before one of them, whichever suits, with their
+# supervisor and their referee there. Ada sits on two juries, on two days:
+# a jury by name has its own times, so she is not the same jury twice. A
+# supervisor who sits on the jury chosen is there once, which is why the
+# search likes to send a student before the jury of their supervisor.
+#
+# The objectives, most important first: every student heard; juries that
+# hear as many students as each other; each teacher in as few rooms as
+# possible; and as few breaks as possible in their days.
+
+from: 2026-06-15
+to: 2026-06-17
+day: 08:30-16:30
+breaks: 12:00-13:00
+duration: 30m
+step: 30m      # the journeys between rooms, 5 minutes, then never shift the half-hours
+
+objectives: [complete-candidates, panel-spread, recruiter-places, recruiter-breaks]
+
+panels:
+  Jury Monday: {members: [Ada, Bruno, Chloé], availability: {2026-06-15: 08:30-16:30}, place: Room 101}
+  Jury Tuesday: {members: [Ada, Dmitri, Elsa], availability: {2026-06-16: 08:30-16:30}, place: Room 102}
+  Jury Wednesday: {members: [Farid, Gina, Hugo], availability: {2026-06-17: 08:30-12:00}, place: Room 103}
+
+travel:
+  default: 5m   # between two rooms: a teacher never runs from one to the next
+
+recruiters:
+  Ada:
+  Bruno:
+  Chloé:
+  Dmitri:
+  Elsa:
+  Farid:
+  Gina:
+  Hugo:
+  Ines:
+    availability: {2026-06-15: 08:30-12:00, 2026-06-16: 08:30-12:00}
+  Jonas:
+  Karim:
+    availability: {2026-06-17: 08:30-12:00}
+
+# Each student: supervisor and referee, and one of the juries. The mapping
+# form gives the choice its name; {} is a plain meeting.
+candidates:
+  Léa:    {together: true, meet: {Bruno: {}, Ines: {}, Jury Monday: {choice: jury}, Jury Tuesday: {choice: jury}, Jury Wednesday: {choice: jury}}}
+  Malo:   {together: true, meet: {Bruno: {}, Jonas: {}, Jury Monday: {choice: jury}, Jury Tuesday: {choice: jury}, Jury Wednesday: {choice: jury}}}
+  Nora:   {together: true, meet: {Dmitri: {}, Ines: {}, Jury Monday: {choice: jury}, Jury Tuesday: {choice: jury}, Jury Wednesday: {choice: jury}}}
+  Oscar:  {together: true, meet: {Dmitri: {}, Karim: {}, Jury Monday: {choice: jury}, Jury Tuesday: {choice: jury}, Jury Wednesday: {choice: jury}}}
+  Paula:  {together: true, meet: {Gina: {}, Jonas: {}, Jury Monday: {choice: jury}, Jury Tuesday: {choice: jury}, Jury Wednesday: {choice: jury}}}
+  Quinn:  {together: true, meet: {Gina: {}, Karim: {}, Jury Monday: {choice: jury}, Jury Tuesday: {choice: jury}, Jury Wednesday: {choice: jury}}}
+  Rosa:   {together: true, meet: {Jonas: {}, Ines: {}, Jury Monday: {choice: jury}, Jury Tuesday: {choice: jury}, Jury Wednesday: {choice: jury}}}
+  Sacha:  {together: true, meet: {Jonas: {}, Elsa: {}, Jury Monday: {choice: jury}, Jury Tuesday: {choice: jury}, Jury Wednesday: {choice: jury}}}
+  Tess:   {together: true, meet: {Chloé: {}, Karim: {}, Jury Monday: {choice: jury}, Jury Tuesday: {choice: jury}, Jury Wednesday: {choice: jury}}}

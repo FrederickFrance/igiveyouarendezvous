@@ -110,6 +110,26 @@ const (
 	// short one. MaxMeetings counts how many times a guest comes; this
 	// counts how long, which is what a friend on an outing is invited for.
 	MaxGuestTime
+	// MinRecruiterPlaces minimises the places where each recruiter has an
+	// interview, day by day, summed over the recruiters and the days: the
+	// rooms a member of several juries has to go to (Request.Place,
+	// Candidate.Place). An interview without a place counts as one place.
+	// Without places, it counts the days a recruiter comes, as
+	// MinRecruiters does.
+	MinRecruiterPlaces
+	// MinPanelSpread minimises the difference between the jury that holds
+	// the most interviews and the one that holds the least, a jury being a
+	// request that brings recruiters along (Request.With), with its place
+	// and its times: the juries of the week sit for days of the same
+	// length. A jury met by nobody counts as holding none.
+	MinPanelSpread
+	// MinRecruiterVisits minimises the times the recruiters come in: each
+	// run of interviews of a recruiter, day by day, counts one, so a day
+	// with one break counts two. It is MinRecruiters and MinRecruiterBreaks
+	// added together, the "blocks" of the defence timetabling literature: a
+	// teacher who comes once for three defences in a row rather than three
+	// times.
+	MinRecruiterVisits
 )
 
 var objectiveNames = map[Objective][2]string{
@@ -130,14 +150,17 @@ var objectiveNames = map[Objective][2]string{
 	MinDayEnds:             {"day-end", "minimise the end of the last interview of each day"},
 	MinSpan:                {"span", "minimise the time from the first interview to the end of the last one"},
 	MaxGuestTime:           {"guest-time", "maximise the time the guests spend in the interviews they come to"},
+	MinRecruiterPlaces:     {"recruiter-places", "minimise the places where recruiters have an interview, day by day"},
+	MinRecruiterVisits:     {"recruiter-visits", "minimise the times recruiters come in: each run of consecutive interviews, day by day"},
+	MinPanelSpread:         {"panel-spread", "minimise the difference between the jury that holds the most interviews and the one that holds the least"},
 }
 
 // AllObjectives lists every objective.
 func AllObjectives() []Objective {
 	return []Objective{
 		MaxPriorities, MaxUrgency, MaxCompleteCandidates, MaxGuestTime, MaxMeetings, MinRecruiters,
-		MinRecruiterHalfDays, MinInterviews, MinRecruiterSpan, MinRecruiterBreaks, MinRecruiterIdle,
-		MinRecruiterIdleSpread, MinCandidateWait, MinCandidateBreaks,
+		MinRecruiterHalfDays, MinRecruiterPlaces, MinRecruiterVisits, MinInterviews, MinRecruiterSpan, MinRecruiterBreaks, MinRecruiterIdle,
+		MinRecruiterIdleSpread, MinPanelSpread, MinCandidateWait, MinCandidateBreaks,
 		MinEndTimes, MinDayEnds, MinSpan,
 	}
 }
