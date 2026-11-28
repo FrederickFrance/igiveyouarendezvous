@@ -281,7 +281,7 @@ Les clés sont en anglais, comme le reste du programme. `recruiters` et
 | `min-gap` | `0` | le temps minimal entre deux entretiens d'un candidat : une durée (`30m`, `2h`) ou des jours calendaires (`3d`) |
 | `max-gap` | `0` | le temps maximal entre deux entretiens d'un candidat : une durée, des jours calendaires (`1d` : le lendemain au plus tard) ou `unlimited` ; `0` et `0` : enchaînés |
 | `joint-groups` | aucun | groupes de recruteurs qui peuvent recevoir ensemble (voir plus bas) |
-| `panels` | aucun | groupes de recruteurs qui reçoivent toujours ensemble, comme un jury (voir plus bas) |
+| `panels` | aucun | groupes de recruteurs qui reçoivent toujours ensemble, comme un jury, ou jurys nommés avec le moment où ils siègent et leur salle (voir plus bas) |
 | `max-joint-size` | `0` | nombre maximal de recruteurs dans un entretien commun (`0` : sans limite) |
 | `rooms` | `0` | nombre maximal d'entretiens en même temps, quels qu'en soient les participants : les salles, les tables ou les stands dont on dispose (`0` : sans limite) |
 | `break-spread` | aucun | écart maximal entre les nombres de pauses des recruteurs, parmi ceux qui ont au moins deux entretiens (`2` : personne n'attend plus de deux fois plus souvent qu'un autre) ; aucun : sans limite |
@@ -432,6 +432,35 @@ pas du tout : jamais l'un après l'autre. Un recruteur appartient à un jury au
 plus, et alors à aucun groupe commun ; `max-joint-size` ne s'applique pas aux
 jurys. Exemple complet : [une commission de
 recrutement](example/fr/panel.yaml).
+
+**Jurys nommés.** Un jury peut aussi avoir un nom, les moments où il siège et
+sa salle ; le candidat le rencontre alors par son nom, et peut en rencontrer
+un parmi plusieurs, comme un choix : une soutenance devant l'un des jurys de
+la semaine.
+
+```yaml
+panels:
+  Jury 1: {members: [Ana, Bea, Cal], availability: {2026-06-15: 09:00-12:00}, place: Salle A}
+  Jury 2: {members: [Ana, Dan, Eve], availability: {2026-06-16: 14:00-17:00}, place: Salle B}
+candidates:
+  Étudiant:
+    meet: {Directeur: {}, Jury 1: {choice: jury}, Jury 2: {choice: jury}}
+    together: true
+```
+
+Les moments d'un jury sont ceux où il siège, en plus des disponibilités de
+ses membres, qui peuvent siéger dans d'autres jurys à d'autres moments (Ana
+ici). Quelqu'un que le candidat rencontre pour son propre compte et qui siège
+dans le jury choisi, un directeur dans le jury, n'est là qu'une fois. Un jury
+qui a une salle et qu'on rencontre seul demande de donner plutôt cette salle
+au candidat. Exemple complet : [des soutenances devant l'un de trois
+jurys](example/fr/defences.yaml).
+
+Quand les candidats choisissent entre plusieurs jurys et que chacun amène
+ses propres personnes (un directeur, un rapporteur), placez
+`recruiter-places` avant `recruiter-visits` et `recruiter-breaks` dans les
+objectifs : il regroupe devant le même jury les candidats d'une même
+personne, qui va ainsi dans moins de salles. L'autre ordre les disperse.
 
 **Rencontres.** `meet` donne un entretien par recruteur ; `meetings` donne
 des rencontres avec plusieurs recruteurs à la fois, telles quelles, sans
@@ -627,27 +656,26 @@ enregistrements d'une émission](example/fr/show.yaml), [des parties de jeu de
 rôle](example/fr/roleplay.yaml) dont la meneuse de jeu anime deux tables.
 
 **Un tournage sur plusieurs jours d'affilée.** Le tournage est un candidat ;
-chaque personne y figure une fois par jour (`Ada jour 1`, `Ada jour 2`…, avec
-ses disponibilités) ; les personnes d'un même jour forment un jury, pour que
-chaque journée réunisse toute son équipe ; les rangs donnent l'ordre des
-jours, et les écarts les font se suivre :
+chacun de ses jours est un jury nommé, avec toute l'équipe ; les rangs
+donnent l'ordre des jours, et les écarts les font se suivre :
 
 ```yaml
 min-gap: 1d
 max-gap: 1d
 panels:
-  - [Ada jour 1, Blaise jour 1]
-  - [Ada jour 2, Blaise jour 2]
+  Équipe jour 1: {members: [Ada, Blaise]}
+  Équipe jour 2: {members: [Ada, Blaise]}
 candidates:
   le tournage:
     duration: 6h
-    meet: {Ada jour 1: 1, Blaise jour 1: 1, Ada jour 2: 2, Blaise jour 2: 2}
+    meet: {Équipe jour 1: 1, Équipe jour 2: 2}
 ```
 
 Sans deux jours d'affilée avec toute l'équipe, le tournage n'est pas
-planifié. La limite : pour le programme, `Ada jour 1` n'est pas Ada, donc un
-conflit avec un autre enregistrement de la même personne, dans le même
-fichier, passe inaperçu.
+planifié. Ada est Ada les deux jours : un autre enregistrement de la même
+personne, dans le même fichier, ne peut pas tomber un jour du tournage.
+(Avant la v0.20, chacun devait figurer une fois par jour, `Ada jour 1` et
+`Ada jour 2`, et le programme ne voyait pas que c'était la même personne.)
 
 **Des tournages dans plusieurs villes.** Le tournage d'un épisode est un
 candidat, à son lieu, `place`, avec ses rencontres, `meetings` :
@@ -764,11 +792,14 @@ choix d'un candidat ont des lieux.
 | `meetings` | maximise les rencontres tenues |
 | `recruiters` | minimise les recruteurs qui ont au moins un entretien, jour par jour : un recruteur qui vient deux jours compte deux |
 | `recruiter-half-days` | minimise les demi-journées (matin, après-midi) où des recruteurs ont un entretien, sommées sur les recruteurs et les jours |
+| `recruiter-places` | minimise les lieux où des recruteurs ont un entretien, jour par jour : les salles où va un membre de plusieurs jurys ; sans lieux, les jours où ils viennent |
+| `recruiter-visits` | minimise les venues des recruteurs : chaque suite d'entretiens d'affilée compte une, jour par jour, donc une journée avec une pause compte deux (`recruiters` et `recruiter-breaks` additionnés : les « blocs » d'un enseignant aux soutenances) |
 | `interviews` | minimise les entretiens, donc les rencontres groupées quand c'est permis |
 | `recruiter-span` | minimise le temps de présence des recruteurs, du début de leur premier entretien à la fin du dernier, jour par jour |
 | `recruiter-breaks` | minimise le nombre de fois où un recruteur attend entre deux entretiens d'une même journée, chaque attente comptée une fois quelle qu'en soit la durée |
 | `recruiter-idle` | minimise le temps libre à l'intérieur des journées des recruteurs : du premier entretien à la fin du dernier, moins les entretiens eux-mêmes |
 | `recruiter-idle-spread` | minimise l'écart entre le recruteur qui a le plus de temps libre à l'intérieur de sa journée et celui qui en a le moins, parmi ceux qui ont au moins deux entretiens ce jour-là |
+| `panel-spread` | minimise l'écart entre le jury qui tient le plus d'entretiens et celui qui en tient le moins, parmi les jurys nommés (`panels`) : des journées de même longueur ; un jury que personne ne rencontre n'en tient aucun |
 | `candidate-wait` | minimise l'attente des candidats entre deux entretiens d'une même journée (utile quand `max-gap` n'est pas `0`) |
 | `candidate-breaks` | minimise le nombre de fois où un candidat attend entre deux entretiens d'une même journée, chaque attente comptée une fois quelle qu'en soit la durée |
 | `earliest` | place les entretiens le plus tôt possible dans la période |

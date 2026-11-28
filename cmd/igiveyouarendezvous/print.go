@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -108,7 +109,7 @@ func printSchedule(w io.Writer, p *planning.Problem, s *planning.Schedule, pe pe
 
 		candidate := p.Candidates[iv.Candidate].Name
 		if places {
-			candidate += "\t" + p.Candidates[iv.Candidate].Place
+			candidate += "\t" + p.PlaceOf(iv)
 		}
 
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n",
@@ -212,7 +213,7 @@ func printLeft(w io.Writer, p *planning.Problem, s *planning.Schedule) {
 
 	for _, r := range s.Unscheduled {
 		switch req := p.Requests[r]; {
-		case len(rest) > 0 && rest[0] == req:
+		case len(rest) > 0 && reflect.DeepEqual(rest[0], req):
 			later, rest = append(later, req), rest[1:]
 		case req.Choice > 0 && made[choiceOfRequest(p, r)]:
 		default:
@@ -278,7 +279,8 @@ func byCandidate(p *planning.Problem, requests []planning.Request) string {
 			order = append(order, req.Candidate)
 		}
 
-		name := p.Recruiters[req.Recruiter].Name
+		name := requestName(p, req)
+
 		key := req.Choice*1000 + req.Meeting // a choice of a meeting is not one outside it
 
 		if k := slices.IndexFunc(groups[req.Candidate], func(g group) bool { return req.Choice > 0 && g.choice == key }); k >= 0 {
@@ -335,7 +337,20 @@ func printShortcuts(w io.Writer, p *planning.Problem) {
 // people available at no time of the period, then the candidates and
 // recruiters never free together long enough, by candidate.
 func printImpossible(w io.Writer, p *planning.Problem, s *planning.Schedule) {
-	if len(s.Impossible) == 0 {
+	// Of a choice held, the alternatives that could never be held are no
+	// loss.
+	made := map[choiceOf]bool{}
+	for _, iv := range s.Interviews {
+		for _, r := range iv.Requests {
+			made[choiceOfRequest(p, r)] = true
+		}
+	}
+
+	impossible := slices.DeleteFunc(slices.Clone(s.Impossible), func(r int) bool {
+		return p.Requests[r].Choice > 0 && made[choiceOfRequest(p, r)]
+	})
+
+	if len(impossible) == 0 && len(s.Absent.Recruiters)+len(s.Absent.Candidates) == 0 {
 		return
 	}
 
@@ -364,7 +379,7 @@ func printImpossible(w io.Writer, p *planning.Problem, s *planning.Schedule) {
 
 	var order []int
 
-	for _, r := range s.Impossible {
+	for _, r := range impossible {
 		req := p.Requests[r]
 		if absentR[req.Recruiter] || absentC[req.Candidate] || withAbsent(p, req, absentR) {
 			continue // explained above
@@ -374,7 +389,7 @@ func printImpossible(w io.Writer, p *planning.Problem, s *planning.Schedule) {
 			order = append(order, req.Candidate)
 		}
 
-		if name := p.Recruiters[req.Recruiter].Name; !slices.Contains(never[req.Candidate], name) { // once, whatever the meetings
+		if name := requestName(p, req); !slices.Contains(never[req.Candidate], name) { // once, whatever the meetings
 			never[req.Candidate] = append(never[req.Candidate], name)
 		}
 	}
@@ -535,4 +550,15 @@ func hours(minutes int) string {
 	}
 
 	return fmt.Sprintf("%dh%02d", minutes/60, minutes%60)
+}
+
+// requestName names the recruiter of a request, with those who come along
+// for a whole jury (see planning.Request.With): "Ana + Bea + Cal".
+func requestName(p *planning.Problem, req planning.Request) string {
+	names := []string{p.Recruiters[req.Recruiter].Name}
+	for _, h := range req.With {
+		names = append(names, p.Recruiters[h].Name)
+	}
+
+	return strings.Join(names, " + ")
 }

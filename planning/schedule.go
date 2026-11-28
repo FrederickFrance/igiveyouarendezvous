@@ -30,7 +30,8 @@ type Score struct {
 	DaysLeft int
 	// Value is a count for MaxPriorities and MaxUrgency (the complete
 	// candidates of the level), MaxCompleteCandidates, MaxMeetings, MinInterviews,
-	// MinRecruiters and MinRecruiterHalfDays, and minutes for the other
+	// MinRecruiters, MinRecruiterHalfDays, MinRecruiterPlaces, MinRecruiterVisits
+	// and MinPanelSpread, and minutes for the other
 	// objectives (for MinEndTimes: the sum of the end times, in minutes after
 	// midnight).
 	Value int
@@ -408,14 +409,14 @@ func checkInterview(p *Problem, o Options, iv Interview, held []int, breaks []In
 		meeting = m
 
 		held[r]++
-		recruiters = append(recruiters, p.Requests[r].Recruiter)
 	}
+
+	recruiters = p.gather(iv.Requests)
 
 	if err := checkGathering(p, o, iv, recruiters, meeting); err != nil {
 		return err
 	}
 
-	slices.Sort(recruiters)
 	length := p.length(iv.Requests, o)
 
 	if !slices.Equal(recruiters, iv.Recruiters) {
@@ -444,6 +445,12 @@ func checkInterview(p *Problem, o Options, iv Interview, held []int, breaks []In
 	for _, h := range recruiters {
 		if !inside(availability(p.Recruiters[h].Availability, o), iv.Start, iv.End) {
 			return fmt.Errorf("%s is not available %s", p.Recruiters[h].Name, when)
+		}
+	}
+
+	for _, r := range iv.Requests {
+		if a := p.Requests[r].Availability; a != nil && !inside(availability(a, o), iv.Start, iv.End) {
+			return fmt.Errorf("interview of %s with %s %s, out of the times of that meeting", candidate, p.Recruiters[p.Requests[r].Recruiter].Name, when)
 		}
 	}
 
@@ -574,11 +581,16 @@ func checkGathering(p *Problem, o Options, iv Interview, recruiters []int, meeti
 		return nil
 	}
 
-	if err := p.panel(c, recruiters); err != nil {
+	// The panels and joint groups are those of the recruiters of the
+	// requests: who comes along with a request comes with it (see
+	// Request.With), whatever the groups.
+	heads := p.heads(iv.Requests)
+
+	if err := p.panel(c, heads); err != nil {
 		return err
 	}
 
-	if err := p.joint(c, recruiters, o); err != nil {
+	if err := p.joint(c, heads, o); err != nil {
 		return fmt.Errorf("joint interview of %s with %w", candidate, err)
 	}
 
@@ -987,6 +999,23 @@ func evaluate(p *Problem, o Options, s *Schedule, cr criterion, held []bool) int
 	switch obj := cr.obj; obj {
 	case MinRecruiters, MinRecruiterHalfDays: // by recruiter and day
 		return recruitersUsed(o, s, obj == MinRecruiterHalfDays)
+	case MinRecruiterPlaces:
+		return recruiterPlaces(p, s)
+	case MinRecruiterVisits: // the days they come, and their breaks
+		return recruitersUsed(o, s, false) + waitScore(p, s, MinRecruiterBreaks)
+	case MinPanelSpread:
+		jury, n := p.juries()
+		held := make([]int, n)
+
+		for _, iv := range s.Interviews {
+			for _, r := range iv.Requests {
+				if jury[r] >= 0 {
+					held[jury[r]]++
+				}
+			}
+		}
+
+		return spreadOf(held)
 	case MaxCompleteCandidates, MaxPriorities, MaxUrgency:
 		n := 0
 
@@ -1181,4 +1210,35 @@ func candidateOf(p *Problem, r int) string {
 
 func recruiterOf(p *Problem, r int) string {
 	return p.Recruiters[p.Requests[r].Recruiter].Name
+}
+
+// recruiterPlaces counts the places where each recruiter has an interview,
+// day by day (see MinRecruiterPlaces).
+func recruiterPlaces(p *Problem, s *Schedule) int {
+	type key struct{ recruiter, day, place int }
+
+	trips := p.journeys()
+	seen := map[key]bool{}
+
+	for _, iv := range s.Interviews {
+		place := trips.placeOfRequests(p, iv.Candidate, iv.Requests)
+		for _, h := range iv.Recruiters {
+			seen[key{h, Interval{iv.Start, iv.End}.Day(), place}] = true
+		}
+	}
+
+	return len(seen)
+}
+
+// PlaceOf returns where interview iv is held: the place of the alternative
+// held, a restaurant or the room of a jury (see Request.Place), or else the
+// candidate's (Candidate.Place); "" for nowhere in particular.
+func (p *Problem) PlaceOf(iv Interview) string {
+	for _, r := range iv.Requests {
+		if r >= 0 && r < len(p.Requests) && p.Requests[r].Place != "" {
+			return p.Requests[r].Place
+		}
+	}
+
+	return p.Candidates[iv.Candidate].Place
 }

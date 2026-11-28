@@ -132,16 +132,46 @@
       }
     },
     "panels": {
-      "description": "Groups of recruiters who always interview together, such as a jury: a candidate meets the members of a panel they need at once, with nobody else. A recruiter is in one panel at most, and then in no joint group.",
-      "type": "array",
-      "items": {
-        "type": "array",
-        "minItems": 2,
-        "uniqueItems": true,
-        "items": {
-          "$ref": "#/$defs/name"
+      "description": "Recruiters who always interview together, such as a jury. A list of groups: a candidate meets the members of a group they need at once, with nobody else, and a recruiter is in one group at most, and then in no joint group. Or panels by name, each with its members, when it sits and where: a candidate meets one by naming it in meet, possibly as one of a choice, and a recruiter may sit on several.",
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/$defs/name"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "members"
+            ],
+            "properties": {
+              "members": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/name"
+                }
+              },
+              "availability": {
+                "$ref": "#/$defs/availability"
+              },
+              "place": {
+                "$ref": "#/$defs/name"
+              }
+            }
+          }
         }
-      }
+      ]
     },
     "max-joint-size": {
       "type": "integer",
@@ -183,11 +213,14 @@
           "meetings",
           "recruiters",
           "recruiter-half-days",
+          "recruiter-places",
+          "recruiter-visits",
           "interviews",
           "recruiter-span",
           "recruiter-breaks",
           "recruiter-idle",
           "recruiter-idle-spread",
+          "panel-spread",
           "candidate-wait",
           "candidate-breaks",
           "earliest",

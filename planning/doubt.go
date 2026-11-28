@@ -464,8 +464,10 @@ func (p *Problem) interviews(c int, o Options) []time.Duration {
 // constraint.
 func (p *Problem) peopleDoubts() []Doubt {
 	met := make([]bool, len(p.Recruiters))
-	for _, r := range p.Requests {
-		met[r.Recruiter] = true
+	for r := range p.Requests {
+		for _, h := range p.people(r) {
+			met[h] = true
+		}
 	}
 
 	var out []Doubt

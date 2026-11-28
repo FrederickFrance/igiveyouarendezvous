@@ -1,0 +1,59 @@
+# yaml-language-server: $schema=../../schema/problem.schema.json
+#
+# Une semaine de soutenances. Trois jurys siègent, chacun un jour dans sa
+# salle ; chaque étudiant soutient devant l'un d'eux, celui qui convient,
+# avec son directeur et son rapporteur. Ada siège dans deux jurys, deux
+# jours différents : un jury nommé a ses propres horaires, ce n'est donc pas
+# deux fois le même jury. Un directeur qui siège dans le jury choisi n'est
+# là qu'une fois : c'est pourquoi la recherche aime envoyer un étudiant
+# devant le jury de son directeur.
+#
+# Les objectifs, du plus important au moins important : tous les étudiants
+# entendus ; des jurys qui entendent autant d'étudiants les uns que les
+# autres ; chaque enseignant dans le moins de salles possible ; et le moins
+# de pauses possible dans leurs journées.
+
+from: 2026-06-15
+to: 2026-06-17
+day: 08:30-16:30
+breaks: 12:00-13:00
+duration: 30m
+step: 30m      # les trajets entre salles, 5 minutes, ne décalent alors jamais les demi-heures
+
+objectives: [complete-candidates, panel-spread, recruiter-places, recruiter-breaks]
+
+panels:
+  Jury du lundi: {members: [Ada, Bruno, Chloé], availability: {2026-06-15: 08:30-16:30}, place: Salle 101}
+  Jury du mardi: {members: [Ada, Dmitri, Elsa], availability: {2026-06-16: 08:30-16:30}, place: Salle 102}
+  Jury du mercredi: {members: [Farid, Gina, Hugo], availability: {2026-06-17: 08:30-12:00}, place: Salle 103}
+
+travel:
+  default: 5m   # entre deux salles : un enseignant ne court jamais de l'une à l'autre
+
+recruiters:
+  Ada:
+  Bruno:
+  Chloé:
+  Dmitri:
+  Elsa:
+  Farid:
+  Gina:
+  Hugo:
+  Inès:
+    availability: {2026-06-15: 08:30-12:00, 2026-06-16: 08:30-12:00}
+  Jonas:
+  Karim:
+    availability: {2026-06-17: 08:30-12:00}
+
+# Chaque étudiant : son directeur et son rapporteur, et l'un des jurys. La
+# forme en dictionnaire donne son nom au choix ; {} est une rencontre simple.
+candidates:
+  Léa:    {together: true, meet: {Bruno: {}, Inès: {}, Jury du lundi: {choice: jury}, Jury du mardi: {choice: jury}, Jury du mercredi: {choice: jury}}}
+  Malo:   {together: true, meet: {Bruno: {}, Jonas: {}, Jury du lundi: {choice: jury}, Jury du mardi: {choice: jury}, Jury du mercredi: {choice: jury}}}
+  Nora:   {together: true, meet: {Dmitri: {}, Inès: {}, Jury du lundi: {choice: jury}, Jury du mardi: {choice: jury}, Jury du mercredi: {choice: jury}}}
+  Oscar:  {together: true, meet: {Dmitri: {}, Karim: {}, Jury du lundi: {choice: jury}, Jury du mardi: {choice: jury}, Jury du mercredi: {choice: jury}}}
+  Paula:  {together: true, meet: {Gina: {}, Jonas: {}, Jury du lundi: {choice: jury}, Jury du mardi: {choice: jury}, Jury du mercredi: {choice: jury}}}
+  Quentin: {together: true, meet: {Gina: {}, Karim: {}, Jury du lundi: {choice: jury}, Jury du mardi: {choice: jury}, Jury du mercredi: {choice: jury}}}
+  Rosa:   {together: true, meet: {Jonas: {}, Inès: {}, Jury du lundi: {choice: jury}, Jury du mardi: {choice: jury}, Jury du mercredi: {choice: jury}}}
+  Sacha:  {together: true, meet: {Jonas: {}, Elsa: {}, Jury du lundi: {choice: jury}, Jury du mardi: {choice: jury}, Jury du mercredi: {choice: jury}}}
+  Tess:   {together: true, meet: {Chloé: {}, Karim: {}, Jury du lundi: {choice: jury}, Jury du mardi: {choice: jury}, Jury du mercredi: {choice: jury}}}

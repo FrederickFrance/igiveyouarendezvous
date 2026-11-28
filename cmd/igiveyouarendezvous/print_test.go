@@ -111,3 +111,48 @@ candidates:
 	require.Contains(t, out.String(),
 		"Journey shortened by a way through other places: Ici to Loin, 72h00 given, 24 min through other places.")
 }
+
+// Of a choice held, the alternatives that could never be held are no
+// loss: they are not reported. Of a choice not held, they are, a whole jury
+// by all its names.
+func TestImpossibleAlternativesOfAChoiceHeld(t *testing.T) {
+	t.Parallel()
+
+	p := &planning.Problem{
+		Recruiters: []planning.Recruiter{{Name: "Ana"}, {Name: "Bea"}, {Name: "Cal"}, {Name: "Dan"}},
+		Candidates: []planning.Candidate{{Name: "Student"}},
+		Requests: []planning.Request{
+			{Candidate: 0, Recruiter: 0, With: []int{1}, Choice: 1},
+			{Candidate: 0, Recruiter: 2, With: []int{3}, Choice: 1},
+		},
+	}
+
+	var b strings.Builder
+	printImpossible(&b, p, &planning.Schedule{
+		Interviews: []planning.Interview{{Candidate: 0, Recruiters: []int{0, 1}, Requests: []int{0}}},
+		Impossible: []int{1},
+	})
+	require.Empty(t, b.String())
+
+	b.Reset()
+	printImpossible(&b, p, &planning.Schedule{Impossible: []int{1}})
+	require.Equal(t, "\nImpossible, never free together long enough: Student (Cal + Dan)\n", b.String())
+}
+
+// The place shown is that of the alternative held, when it has one: the
+// room of the jury chosen, not the candidate's.
+func TestThePlaceShownIsThatOfTheAlternativeHeld(t *testing.T) {
+	t.Parallel()
+
+	p := &planning.Problem{
+		Recruiters: []planning.Recruiter{{Name: "Ana"}, {Name: "Bea"}},
+		Candidates: []planning.Candidate{{Name: "Student", Place: "Hall"}},
+		Requests: []planning.Request{
+			{Candidate: 0, Recruiter: 0, Choice: 1, Place: "Room A"},
+			{Candidate: 0, Recruiter: 1, Choice: 1},
+		},
+	}
+
+	require.Equal(t, "Room A", p.PlaceOf(planning.Interview{Candidate: 0, Requests: []int{0}}))
+	require.Equal(t, "Hall", p.PlaceOf(planning.Interview{Candidate: 0, Requests: []int{1}}))
+}

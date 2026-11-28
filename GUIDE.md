@@ -66,6 +66,7 @@ hours:
 | A jury: its members interview together | A selection panel |
 | Recordings with guests who are hard to gather | Recordings of a show |
 | Each candidate meets one or another of several recruiters | One assessor among three |
+| Defences, each before one of the juries of the week | Defences before one of three juries |
 | Shoots in several cities, with the journeys | A tour of shoots in five cities |
 | A colloquium, games | A colloquium; Role-playing games |
 | An outing or a trip: visits, trains, a guest | Two days away, by train |

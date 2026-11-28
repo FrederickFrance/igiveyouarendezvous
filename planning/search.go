@@ -394,6 +394,9 @@ type searcher struct {
 	dayMeets          []int // [unit]: interviews of the recruiter that day
 	usedAt            int   // index of MinRecruiters in crit, or -1
 	halfAt            int   // index of MinRecruiterHalfDays in crit, or -1
+	placesAt          int   // index of MinRecruiterPlaces in crit, or -1
+	panelSpreadAt     int   // index of MinPanelSpread in crit, or -1
+	visitsAt          int   // index of MinRecruiterVisits in crit, or -1
 	endAt             int   // index of MinDayEnds in crit, or -1
 	wholeAt           int   // index of MinSpan in crit, or -1
 	// completeFirst: complete candidates rank before meetings.
@@ -442,8 +445,11 @@ type searcher struct {
 
 	// The presence of the recruiters is kept by unit: a recruiter on a day,
 	// unit h*days + d (see unit).
-	busy  []bitset  // [recruiter]: busy slots
-	owner [][]int32 // [recruiter][slot]: the candidate of a busy slot, with journeys only
+	busy   []bitset  // [recruiter]: busy slots
+	owner  [][]int32 // [recruiter][slot]: the place of a busy slot, with journeys or MinRecruiterPlaces only
+	places [][]int32 // [unit]: the places of the day, with MinRecruiterPlaces only
+	jury   []int     // [request]: its jury (see Problem.juries), with MinPanelSpread only
+	juryAt []int     // [jury]: the interviews it holds, with MinPanelSpread only
 	// fixedBusy: the busy slots of the fixed interviews, which even eject
 	// respects; nil without them.
 	fixedBusy []bitset
@@ -543,50 +549,53 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 	nC, nR := len(in.p.Candidates), len(in.p.Recruiters)
 	nU := nR * in.o.days()
 	s := &searcher{
-		in:           in,
-		rnd:          rand.New(rand.NewPCG(seed, 0x6a09e667f3bcc908)), //nolint:gosec // reproducible search, not cryptography
-		crit:         in.crit,
-		retime:       -1,
-		spanAt:       indexOf(in.crit, MinRecruiterSpan),
-		gapAt:        indexOf(in.crit, MinRecruiterBreaks),
-		idleAt:       indexOf(in.crit, MinRecruiterIdle),
-		idleSpreadAt: indexOf(in.crit, MinRecruiterIdleSpread),
-		returnsAt:    slices.IndexFunc(in.crit, func(cr criterion) bool { return cr.returns }),
-		brokenAt:     slices.IndexFunc(in.crit, func(cr criterion) bool { return cr.broken }),
-		invited:      make([][]int, nR),
-		spread:       -1,
-		meets:        make([]int, nR),
-		usedAt:       indexOf(in.crit, MinRecruiters),
-		halfAt:       indexOf(in.crit, MinRecruiterHalfDays),
-		endAt:        indexOf(in.crit, MinDayEnds),
-		wholeAt:      indexOf(in.crit, MinSpan),
-		pinned:       make([]bool, nC),
-		needed:       make([]bool, nC),
-		optionsOf:    make([][]int, nC),
-		holding:      make([][][]int, nC),
-		longest:      make([][]int, nC),
-		before:       make([]uint64, len(in.options)),
-		lower:        make([]uint64, len(in.options)),
-		higher:       make([]uint64, len(in.options)),
-		optMask:      make([]uint64, len(in.options)),
-		fullMask:     make([]uint64, nC),
-		needMask:     make([]uint64, nC),
-		possible:     make([]uint64, nC),
-		days:         in.o.days(),
-		perDay:       in.g.perDay,
-		breaks:       in.o.everyDay(in.o.Breaks),
-		busy:         make([]bitset, nR),
-		first:        make([]int, nU),
-		last:         make([]int, nU),
-		span:         make([]int, nU),
-		gaps:         make([]int, nU),
-		dayMeets:     make([]int, nU),
-		half:         make([][2]bool, nU),
-		dayEnd:       make([]int, in.o.days()),
-		wholeLo:      -1,
-		plans:        make([][]placed, nC),
-		contrib:      make([][]int, nC),
-		total:        make([]int, len(in.crit)),
+		in:            in,
+		rnd:           rand.New(rand.NewPCG(seed, 0x6a09e667f3bcc908)), //nolint:gosec // reproducible search, not cryptography
+		crit:          in.crit,
+		retime:        -1,
+		spanAt:        indexOf(in.crit, MinRecruiterSpan),
+		gapAt:         indexOf(in.crit, MinRecruiterBreaks),
+		idleAt:        indexOf(in.crit, MinRecruiterIdle),
+		idleSpreadAt:  indexOf(in.crit, MinRecruiterIdleSpread),
+		returnsAt:     slices.IndexFunc(in.crit, func(cr criterion) bool { return cr.returns }),
+		brokenAt:      slices.IndexFunc(in.crit, func(cr criterion) bool { return cr.broken }),
+		invited:       make([][]int, nR),
+		spread:        -1,
+		meets:         make([]int, nR),
+		usedAt:        indexOf(in.crit, MinRecruiters),
+		halfAt:        indexOf(in.crit, MinRecruiterHalfDays),
+		placesAt:      indexOf(in.crit, MinRecruiterPlaces),
+		panelSpreadAt: indexOf(in.crit, MinPanelSpread),
+		visitsAt:      indexOf(in.crit, MinRecruiterVisits),
+		endAt:         indexOf(in.crit, MinDayEnds),
+		wholeAt:       indexOf(in.crit, MinSpan),
+		pinned:        make([]bool, nC),
+		needed:        make([]bool, nC),
+		optionsOf:     make([][]int, nC),
+		holding:       make([][][]int, nC),
+		longest:       make([][]int, nC),
+		before:        make([]uint64, len(in.options)),
+		lower:         make([]uint64, len(in.options)),
+		higher:        make([]uint64, len(in.options)),
+		optMask:       make([]uint64, len(in.options)),
+		fullMask:      make([]uint64, nC),
+		needMask:      make([]uint64, nC),
+		possible:      make([]uint64, nC),
+		days:          in.o.days(),
+		perDay:        in.g.perDay,
+		breaks:        in.o.everyDay(in.o.Breaks),
+		busy:          make([]bitset, nR),
+		first:         make([]int, nU),
+		last:          make([]int, nU),
+		span:          make([]int, nU),
+		gaps:          make([]int, nU),
+		dayMeets:      make([]int, nU),
+		half:          make([][2]bool, nU),
+		dayEnd:        make([]int, in.o.days()),
+		wholeLo:       -1,
+		plans:         make([][]placed, nC),
+		contrib:       make([][]int, nC),
+		total:         make([]int, len(in.crit)),
 	}
 
 	if s.idleAt >= 0 || s.idleSpreadAt >= 0 {
@@ -662,7 +671,7 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 		s.spread = *in.o.BreakSpread
 	}
 
-	if in.travel {
+	if in.travel || s.placesAt >= 0 {
 		s.owner = make([][]int32, nR)
 		for h := range s.owner {
 			s.owner[h] = make([]int32, in.g.slots)
@@ -672,6 +681,8 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 	for u := range s.first {
 		s.first[u] = -1
 	}
+
+	s.indexJuries()
 
 	s.bound = s.bounds()
 	s.fewest = s.fewestInterviews()
@@ -803,13 +814,17 @@ func (s *searcher) credit(gain bool) {
 func (s *searcher) indexGuests() {
 	guest := make([]bool, len(s.in.p.Recruiters))
 
-	for _, req := range s.in.p.Requests {
-		guest[req.Recruiter] = guest[req.Recruiter] || req.Optional || s.in.p.Recruiters[req.Recruiter].Continuous
+	for r, req := range s.in.p.Requests {
+		for _, h := range s.in.p.people(r) {
+			guest[h] = guest[h] || req.Optional || s.in.p.Recruiters[h].Continuous
+		}
 	}
 
-	for _, req := range s.in.p.Requests {
-		if guest[req.Recruiter] && !slices.Contains(s.invited[req.Recruiter], req.Candidate) {
-			s.invited[req.Recruiter] = append(s.invited[req.Recruiter], req.Candidate)
+	for r, req := range s.in.p.Requests {
+		for _, h := range s.in.p.people(r) {
+			if guest[h] && !slices.Contains(s.invited[h], req.Candidate) {
+				s.invited[h] = append(s.invited[h], req.Candidate)
+			}
 		}
 	}
 
@@ -957,7 +972,9 @@ func (s *searcher) capacity() int {
 			}
 
 			cost += length
-			of[req.Recruiter] += length
+			for _, h := range s.in.p.people(r) {
+				of[h] += length
+			}
 		}
 
 		for _, length := range shortest {
@@ -1709,7 +1726,7 @@ func (s *searcher) locate(iv Interview) (placed, string) {
 			return placed{}, "unknown recruiter"
 		}
 
-		if !slices.ContainsFunc(in.requestsOf[c], func(r int) bool { return in.p.Requests[r].Recruiter == h }) {
+		if !slices.ContainsFunc(in.requestsOf[c], func(r int) bool { return slices.Contains(in.p.people(r), h) }) {
 			return placed{}, fmt.Sprintf("%s no longer needs to meet %s", name, in.p.Recruiters[h].Name)
 		}
 	}
@@ -1725,11 +1742,12 @@ func (s *searcher) locate(iv Interview) (placed, string) {
 
 	meeting := len(requests) > 0 && in.p.Requests[requests[0]].Meeting > 0
 	if !meeting {
-		if err := in.p.panel(c, recruiters); err != nil {
+		heads := in.p.heads(requests) // who comes along with a request comes with it
+		if err := in.p.panel(c, heads); err != nil {
 			return placed{}, err.Error()
 		}
 
-		if in.p.joint(c, recruiters, in.o) != nil {
+		if in.p.joint(c, heads, in.o) != nil {
 			return placed{}, s.names(recruiters) + " may no longer interview together"
 		}
 	}
@@ -1741,6 +1759,15 @@ func (s *searcher) locate(iv Interview) (placed, string) {
 
 		return slices.Equal(in.options[o].recruiters, recruiters) && !in.isMeeting(o)
 	})
+
+	// Two alternatives may bring the same people, two juries of the same
+	// members in two rooms: the requests held tell them apart.
+	if k := slices.IndexFunc(s.optionsOf[c], func(o int) bool {
+		return !meeting && slices.Equal(in.options[o].recruiters, recruiters) && !in.isMeeting(o) &&
+			slices.Equal(in.options[o].requests, requests)
+	}); k >= 0 {
+		idx = k
+	}
 	if idx < 0 {
 		return placed{}, fmt.Sprintf("%s and %s are never available together long enough any more", name, s.names(recruiters))
 	}
@@ -2136,7 +2163,7 @@ func (s *searcher) ruin() []int {
 	// pick a recruiter and a window at random and so land on such a day
 	// only by chance. The gaps are already counted for the objective, so
 	// aiming costs one pass.
-	if s.gapAt >= 0 || s.spread >= 0 {
+	if s.gapAt >= 0 || s.spread >= 0 || s.visitsAt >= 0 {
 		if s.rnd.IntN(3) == 0 {
 			victims = s.gappyDay(served)
 		}
@@ -2521,7 +2548,47 @@ type node struct {
 	endDelta   int // increase of the ends of the days, in minutes
 	wholeDelta int // increase of the span of the whole period, in minutes
 	usedDelta  int // recruiters' days that had no interview
+	placeDelta int // places new to a recruiter's day
 	halfDelta  int // recruiters' half-days that had no interview
+}
+
+// indexJuries sets the tables of MinRecruiterPlaces and MinPanelSpread,
+// when they are objectives.
+func (s *searcher) indexJuries() {
+	if s.placesAt >= 0 {
+		s.places = make([][]int32, len(s.first))
+	}
+
+	if s.panelSpreadAt >= 0 {
+		var n int
+		s.jury, n = s.in.p.juries()
+		s.juryAt = make([]int, n)
+	}
+}
+
+// recruiterDeltas adds to node n what placing option opt at slot t changes
+// for recruiter h, whose day starts offset slots before t.
+func (s *searcher) recruiterDeltas(n *node, opt *option, h, t, offset int) {
+	u := s.unit(h, t)
+	n.spanDelta += s.spanIncrease(u, t, t+opt.length)
+	n.gapDelta += s.gapIncrease(h, u, t, t+opt.length)
+	n.heldDelta += opt.length
+
+	if s.first[u] < 0 {
+		n.usedDelta++
+	}
+
+	if len(s.places) > 0 && !slices.Contains(s.places[u], int32(opt.place)) { //nolint:gosec // fewer places than an int32 holds
+		n.placeDelta++
+	}
+
+	if offset < s.halves[0] && !s.half[u][0] {
+		n.halfDelta++
+	}
+
+	if offset+opt.length > s.halves[1] && !s.half[u][1] {
+		n.halfDelta++
+	}
 }
 
 // unit returns the unit of recruiter h on the day of slot t.
@@ -2628,22 +2695,7 @@ func (s *searcher) bestPlacement(c int) []placed {
 		n.rangeDelta += s.spreadIncrease(opt, t)
 
 		for _, h := range opt.recruiters {
-			u := s.unit(h, t)
-			n.spanDelta += s.spanIncrease(u, t, t+opt.length)
-			n.gapDelta += s.gapIncrease(h, u, t, t+opt.length)
-			n.heldDelta += opt.length
-
-			if s.first[u] < 0 {
-				n.usedDelta++
-			}
-
-			if offset < s.halves[0] && !s.half[u][0] {
-				n.halfDelta++
-			}
-
-			if offset+opt.length > s.halves[1] && !s.half[u][1] {
-				n.halfDelta++
-			}
+			s.recruiterDeltas(&n, opt, h, t, offset)
 		}
 
 		return s.then(n, o, t)
@@ -2833,6 +2885,12 @@ func (s *searcher) vector(dst []int, c int, n node) {
 			dst[i] = n.usedDelta
 		case MinRecruiterHalfDays:
 			dst[i] = n.halfDelta
+		case MinRecruiterPlaces:
+			dst[i] = n.placeDelta
+		case MinPanelSpread:
+			dst[i] = 0 // a share of the whole, counted by score
+		case MinRecruiterVisits:
+			dst[i] = n.usedDelta + n.gapDelta
 		}
 	}
 }
@@ -3170,7 +3228,7 @@ func (s *searcher) refresh(u int) {
 		s.span[u] = s.last[u] + 1 - s.first[u]
 	}
 
-	if s.gapAt >= 0 || s.spread >= 0 {
+	if s.gapAt >= 0 || s.spread >= 0 || s.visitsAt >= 0 {
 		s.gaps[u] = countGaps(s.busy[h], s.first[u], s.last[u], 0, 0)
 	}
 
@@ -3187,6 +3245,16 @@ func (s *searcher) refresh(u int) {
 	s.half[u] = [2]bool{
 		!s.busy[h].free(day, day+s.halves[0]),
 		!s.busy[h].free(day+s.halves[1], day+s.perDay),
+	}
+
+	if s.places != nil {
+		s.places[u] = s.places[u][:0]
+
+		for t := s.first[u]; s.first[u] >= 0 && t <= s.last[u]; t++ {
+			if s.busy[h].has(t) && !slices.Contains(s.places[u], s.owner[h][t]) {
+				s.places[u] = append(s.places[u], s.owner[h][t])
+			}
+		}
 	}
 
 	if s.endAt >= 0 { // the end of the day, over all the recruiters
@@ -3247,6 +3315,16 @@ func (s *searcher) mark(touched []int, _ int, plan []placed, busy bool) []int {
 			}
 		}
 
+		if s.juryAt != nil {
+			for _, r := range opt.requests {
+				if k := s.jury[r]; k >= 0 && busy {
+					s.juryAt[k]++
+				} else if k >= 0 {
+					s.juryAt[k]--
+				}
+			}
+		}
+
 		// One interview takes one room however many recruiters sit in it,
 		// which is why this is counted here and not in the loop above.
 		if s.atSlot != nil {
@@ -3300,7 +3378,7 @@ func (s *searcher) contribution(dst []int, c int, plan []placed) {
 
 	s.vector(dst, c, n)
 
-	for _, i := range []int{s.spanAt, s.gapAt, s.idleAt, s.idleSpreadAt, s.usedAt, s.halfAt, s.endAt, s.wholeAt} {
+	for _, i := range []int{s.spanAt, s.gapAt, s.idleAt, s.idleSpreadAt, s.usedAt, s.halfAt, s.placesAt, s.panelSpreadAt, s.visitsAt, s.endAt, s.wholeAt} {
 		if i >= 0 {
 			dst[i] = 0 // counted per recruiter or per day, by score
 		}
@@ -3331,6 +3409,14 @@ func (s *searcher) score() []int {
 		if s.halfAt >= 0 {
 			score[s.halfAt] += count(s.half[u][:])
 		}
+
+		if s.placesAt >= 0 {
+			score[s.placesAt] += len(s.places[u])
+		}
+
+		if s.visitsAt >= 0 && s.first[u] >= 0 {
+			score[s.visitsAt] += 1 + s.gaps[u]
+		}
 	}
 
 	if s.endAt >= 0 {
@@ -3359,6 +3445,10 @@ func (s *searcher) score() []int {
 		if lo >= 0 {
 			score[s.idleSpreadAt] += hi - lo
 		}
+	}
+
+	if s.panelSpreadAt >= 0 {
+		score[s.panelSpreadAt] += spreadOf(s.juryAt)
 	}
 
 	if s.wholeAt >= 0 && s.wholeLo >= 0 {
@@ -3548,9 +3638,11 @@ func (s *searcher) absent(sched *Schedule) {
 	in := s.in
 	recruiters, candidates := map[int]bool{}, map[int]bool{}
 
-	for _, req := range in.p.Requests {
-		if !slices.Contains(in.availR[req.Recruiter], true) {
-			recruiters[req.Recruiter] = true
+	for r, req := range in.p.Requests {
+		for _, h := range in.p.people(r) {
+			if !slices.Contains(in.availR[h], true) {
+				recruiters[h] = true
+			}
 		}
 
 		if !slices.Contains(in.availC[req.Candidate], true) && !s.pinned[req.Candidate] {
