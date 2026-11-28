@@ -7,6 +7,33 @@ it before pushing the tag. The format follows
 [semantic versioning](https://semver.org/) (before 1.0.0, a minor version
 may break the files).
 
+## [0.19.0] - 2026-11-28 "Armando Muñoz" 🧬
+
+### Added
+
+- **A candidate may wait so that a recruiter does not.** A new kind of
+  move, the wave, takes one interview of a candidate out, pushes their
+  other interviews of the day away from it and puts it back where the
+  schedule is best, wherever that is. Until now an interview of a candidate
+  always started as early as it could after the one before, so the search
+  never built the day where one candidate waits half an hour and a
+  recruiter's interviews follow each other for it. The pushes are counted
+  in interviews, the shortest of the problem, and not in slots: a grid of
+  one minute changes nothing to them.
+
+### Changed
+
+- **The search chooses its moves by itself.** It has three kinds of moves:
+  re-timing a whole day, the wave, and removing some candidates to put
+  them back. It used to give one move in fifty to the last. It now follows
+  what each kind lately brought: the improvements of the schedule for the
+  work it took, the recent moves counting most, and every kind keeping at
+  least one draw in twenty (Ropke & Pisinger, 2006, added to the
+  references). The work is counted, never timed, so a seed still gives the
+  same schedule on every machine. That schedule is not the one the same
+  seed gave in 0.18: the moves are drawn differently. `-retime` still sets
+  the share of the re-timings by hand, for measurements.
+
 ## [0.18.0] - 2026-11-25 "Régis-Robert" 🐕
 
 ### Added
