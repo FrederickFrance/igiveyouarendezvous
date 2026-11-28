@@ -43,11 +43,50 @@ const (
 	// one.
 	noiseRate = 8
 
-	// ruinEvery reserves one move in this many for ruin and recreate, so
-	// that the search keeps changing who meets whom and not only when:
-	// re-timing alone never reaches another grouping of the requests.
-	ruinEvery = 50
+	// waveReach is how many interviews on each side of the meeting taken
+	// out a wave pushes at most (see wave), and waveIdle how many candidates
+	// with no interview it then tries to let in.
+	waveReach = 4
+	waveIdle  = 6
+
+	// The search chooses its moves by their yield: the improvements they
+	// brought per unit of work, both decayed by yieldDecay at each move so
+	// that the recent moves count most (adaptive operator selection; Ropke
+	// & Pisinger, 2006). Each kind starts with one improvement for
+	// firstWork units of work, and keeps at least leastShare of the draws,
+	// so that a kind that did nothing for a while is still tried.
+	//
+	// References:
+	//
+	//   - Ropke, S., & Pisinger, D. (2006). An adaptive large neighborhood
+	//     search heuristic for the pickup and delivery problem with time
+	//     windows. Transportation Science, 40(4), 455–472.
+	//     https://doi.org/10.1287/trsc.1050.0135
+	yieldDecay = 0.999
+	firstWork  = 1000
+	leastShare = 0.05
 )
+
+// The kinds of moves whose yields the search keeps: at the first level a
+// retiming or a rebuild, and a rebuild is a wave or a ruin.
+const (
+	moveRetime = iota
+	moveRebuild
+	moveWave
+	moveRuin
+	moveKinds
+)
+
+// yield is what moves of one kind brought, decayed: the improvements, and
+// the work spent to get them.
+type yield struct{ gains, work float64 }
+
+// charge is a kind of move drawn for the current move, and the work counter
+// when it was drawn: the move's work goes to it, fallback included.
+type charge struct {
+	kind int
+	from int64
+}
 
 // SearchOptions tunes Search.
 type SearchOptions struct {
@@ -81,15 +120,14 @@ type SearchOptions struct {
 	// not.
 	Start *Schedule
 	// Retime is the share of the moves that try to re-time a whole day, the
-	// others ruining and recreating a few candidates: nought never
-	// re-times, one tries it on every move. Nil leaves the choice to the
-	// search, which is right unless the problem has been measured.
+	// others being waves and ruins: nought never re-times, one tries it on
+	// every move. Nil leaves the choice to the search, which then follows
+	// what each kind of move lately brought for the work it took; that is
+	// right unless the problem has been measured.
 	//
-	// The two moves do different work — a retiming packs a day tighter than
+	// The moves do different work — a retiming packs a day tighter than
 	// any insertion can, and only a ruin lets in a candidate who had no
-	// place — and the best share depends on the problem. A retiming also
-	// costs about twelve ruins, so its share of the moves understates its
-	// share of the time.
+	// place — and the best share depends on the problem.
 	//
 	// It is a setting for whoever measures, and may change before v1.
 	//
@@ -136,11 +174,14 @@ type Progress struct {
 // Search plans the period with a local search in pure Go: a greedy
 // construction, then moves accepted when the schedule is not worse than the
 // current one or than the one of a thousand moves ago (late acceptance hill
-// climbing; Burke & Bykov, 2017). Most moves re-time a whole day; the others
-// remove some candidates, at random or among related ones, and insert them
-// back in the best place (ruin and recreate; Schrimpf et al., 2000; Shaw,
-// 1998). The objectives are compared lexicographically (Ehrgott, 2005): the
-// first one decides, the next one only breaks ties, and so on.
+// climbing; Burke & Bykov, 2017). A move re-times a whole day, or takes one
+// interview out and puts it back with its neighbours pushed apart (a wave),
+// or removes some candidates, at random or among related ones, and inserts
+// them back in the best place (ruin and recreate; Schrimpf et al., 2000;
+// Shaw, 1998). The search gives more moves to the kind that lately improved
+// the schedule most for the work it took (Ropke & Pisinger, 2006). The
+// objectives are compared lexicographically (Ehrgott, 2005): the first one
+// decides, the next one only breaks ties, and so on.
 //
 // The schedule improves with time but its optimality is not proven, except
 // for objectives that reach an obvious bound (everybody served, for
@@ -159,6 +200,10 @@ type Progress struct {
 //     https://doi.org/10.1016/j.ejor.2016.07.012
 //   - Ehrgott, M. (2005). Multicriteria optimization (2nd ed.). Springer.
 //     https://doi.org/10.1007/3-540-27659-9
+//   - Ropke, S., & Pisinger, D. (2006). An adaptive large neighborhood
+//     search heuristic for the pickup and delivery problem with time
+//     windows. Transportation Science, 40(4), 455–472.
+//     https://doi.org/10.1287/trsc.1050.0135
 //   - Schrimpf, G., Schneider, J., Stamm-Wilbrandt, H., & Dueck, G. (2000).
 //     Record breaking optimization results using the ruin and recreate
 //     principle. Journal of Computational Physics, 159(2), 139–171.
@@ -446,15 +491,25 @@ type searcher struct {
 	ahead map[int][]placed
 
 	// retime is the share of the moves that try a retiming, or negative to
-	// leave it at one in ruinEvery for the ruin, which is the draw the
-	// search has always made and so keeps a seed giving what it gave.
+	// leave the choice to the yields (see yieldDecay).
 	retime float64
-	// retimed and ruined count the moves of each kind that were made. They
-	// are what a measurement reads, and what a search choosing the share
-	// by itself would learn from.
-	retimed, ruined int
-	exact           float64 // SearchOptions.Exact
-	exacted         int
+	// retimed, waved and ruined count the moves of each kind that were
+	// made: what a measurement reads.
+	retimed, waved, ruined int
+	// yields holds what each kind of move brought (see yieldDecay), and
+	// charges the kinds drawn for the current move, which credit settles.
+	yields  [moveKinds]yield
+	charges []charge
+	// work counts the work done, deterministically: one per test of a
+	// placement (free) and one per slot marked or cleared (mark). Time would
+	// make a seed give another schedule on another machine.
+	work int64
+	// shortest is the length of the shortest interview, in slots: the step
+	// of a wave, which a fine grid would otherwise make too small to open
+	// any room.
+	shortest int
+	exact    float64 // SearchOptions.Exact
+	exacted  int
 	// The tables of exactDay, kept between moves.
 	exactFit             [][]int
 	exactCost, exactBack []int32
@@ -650,7 +705,94 @@ func newSearcher(in *instance, seed uint64) (*searcher, error) {
 	s.completeFirst = complete >= 0 && (meetings < 0 || complete < meetings)
 	s.completeAt = complete
 
+	s.shortest = in.shortest()
+	s.resetYields()
+
 	return s, nil
+}
+
+// shortest returns the length of the shortest option, in slots: one when
+// there is none.
+func (in *instance) shortest() int {
+	shortest := 0
+
+	for _, opt := range in.options {
+		if opt.length > 0 && (shortest == 0 || opt.length < shortest) {
+			shortest = opt.length
+		}
+	}
+
+	return max(shortest, 1)
+}
+
+// resetYields gives every kind of move the same yield to start from.
+func (s *searcher) resetYields() {
+	for k := range s.yields {
+		s.yields[k] = yield{gains: 1, work: firstWork}
+	}
+}
+
+// value returns the yield: improvements per unit of work.
+func (y yield) value() float64 {
+	if y.work <= 0 {
+		return 0
+	}
+
+	return y.gains / y.work
+}
+
+// share returns the share of the draws that goes to kind a rather than kind
+// b, by their yields, a half when neither has any, and never less than
+// leastShare to either.
+func (s *searcher) share(a, b int) float64 {
+	ya, yb := s.yields[a].value(), s.yields[b].value()
+	if ya+yb <= 0 {
+		return 0.5
+	}
+
+	return min(max(ya/(ya+yb), leastShare), 1-leastShare)
+}
+
+// draw chooses between kinds a and b by their share, and opens a charge
+// for the one chosen.
+func (s *searcher) draw(a, b int) int {
+	kind := b
+	if s.rnd.Float64() < s.share(a, b) {
+		kind = a
+	}
+
+	s.open(kind)
+
+	return kind
+}
+
+// open charges the rest of the current move to kind.
+func (s *searcher) open(kind int) {
+	s.charges = append(s.charges, charge{kind, s.work})
+}
+
+// credit settles the current move: every yield decays, and each kind drawn
+// for the move gets its work and, when the move improved the current
+// schedule, one improvement.
+func (s *searcher) credit(gain bool) {
+	for k := range s.yields {
+		y := &s.yields[k]
+		// The conversions keep the products from being fused with the
+		// sums, which would round differently on another machine.
+		y.gains = float64(y.gains * yieldDecay)
+		y.work = float64(y.work * yieldDecay)
+	}
+
+	for _, ch := range s.charges {
+		y := &s.yields[ch.kind]
+		y.work += float64(s.work - ch.from)
+
+		if gain {
+			y.gains++
+		}
+	}
+
+	s.charges = s.charges[:0]
 }
 
 // indexGuests lists, for each recruiter who is a guest somewhere or
@@ -1028,6 +1170,7 @@ func (s *searcher) run(ctx context.Context, so SearchOptions, onBest func(*searc
 			for range kickMoves {
 				s.log = s.log[:0]
 				s.move()
+				s.credit(false)
 			}
 
 			s.current = s.snapshot()
@@ -1045,12 +1188,15 @@ func (s *searcher) run(ctx context.Context, so SearchOptions, onBest func(*searc
 
 		score := s.score()
 		slot := it % lahcHistory
+		better := compare(score, s.current.score) < 0
 
-		if compare(score, s.current.score) <= 0 || compare(score, s.history[slot]) <= 0 {
+		if better || compare(score, s.current.score) == 0 || compare(score, s.history[slot]) <= 0 {
 			s.current = s.snapshot()
 		} else {
 			s.undo()
 		}
+
+		s.credit(better)
 
 		s.history[slot] = s.current.score
 
@@ -1732,21 +1878,21 @@ func (s *searcher) names(recruiters []int) string {
 	return strings.Join(names, " and ")
 }
 
-// retiming draws whether this move tries to re-time a day. Left to itself
-// the search draws as it always has, an integer out of ruinEvery, so that a
-// seed keeps giving the schedule it gave before the share could be set; a
-// share that was asked for is drawn against directly.
+// retiming draws whether this move tries to re-time a day: by the yields
+// when the search chooses, against the share asked for otherwise.
 func (s *searcher) retiming() bool {
 	if s.retime < 0 {
-		return s.rnd.IntN(ruinEvery) != 0
+		return s.draw(moveRetime, moveRebuild) == moveRetime
 	}
 
 	return s.rnd.Float64() < s.retime
 }
 
-// move removes some candidates and inserts them back, with a few candidates
-// who had no interview.
+// move changes the schedule by one move: a retiming of a day, a wave around
+// one meeting, or a ruin and recreate of a few candidates.
 func (s *searcher) move() {
+	s.charges = s.charges[:0]
+
 	// On the share asked for, the exact re-timing of one recruiter's day
 	// (SearchOptions.Exact) comes first; nought draws nothing, so that the
 	// moves of a seed stay what they were.
@@ -1760,15 +1906,21 @@ func (s *searcher) move() {
 		return
 	}
 
-	// Re-timing a whole day packs it tighter than any insertion can, so
-	// most moves go to it; when it changes nothing, and once in ruinEvery
-	// moves, the ruin and recreate below takes over.
+	// Re-timing a whole day packs it tighter than any insertion can; when
+	// it changes nothing, or when the draw goes to a rebuild, a wave or a
+	// ruin and recreate takes over. The yields choose between them.
 	if s.retiming() && s.resequence() {
 		s.retimed++
 
 		if !s.fair() {
 			s.undo()
 		}
+
+		return
+	}
+
+	if s.draw(moveWave, moveRuin) == moveWave && s.wave() {
+		s.waved++
 
 		return
 	}
@@ -2848,6 +3000,7 @@ func (r valueRange) width() int {
 // ignoreBusy, free of the fixed interviews only.
 func (s *searcher) free(o, t int) bool {
 	opt := &s.in.options[o]
+	s.work++
 
 	// The rooms come first, and they hold even under ignoreBusy, which
 	// skips everything below. Eject looks for a place as if the others had
@@ -3077,6 +3230,8 @@ func (s *searcher) rebound() {
 func (s *searcher) mark(touched []int, _ int, plan []placed, busy bool) []int {
 	for _, pl := range plan {
 		opt := &s.in.options[pl.option]
+		s.work += int64(opt.length)
+
 		for _, h := range opt.recruiters {
 			s.busy[h].set(pl.start, pl.start+opt.length, busy)
 			touched = append(touched, s.unit(h, pl.start))

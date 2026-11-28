@@ -53,9 +53,9 @@ func ExampleSearch() {
 	fmt.Println("left for tomorrow:", len(s.Remaining(p).Requests))
 
 	// Output:
-	// 10:00-11:00 B [R1]
-	// 10:30-11:00 C [R2]
-	// 11:00-12:00 A [R1 R2]
+	// 09:00-10:00 B [R1]
+	// 10:00-11:00 A [R1 R2]
+	// 11:00-11:30 C [R2]
 	// priorities 3 true
 	// meetings 4 true
 	// recruiters 2 false

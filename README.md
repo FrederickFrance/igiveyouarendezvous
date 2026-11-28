@@ -152,9 +152,15 @@ the new schedule is not worse than the current one, or than the one of 1,000
 moves ago (*late acceptance hill climbing*): accepting a slightly worse
 schedule now and then gets the search out of dead ends.
 
-Most moves, though, re-time a whole day: they keep who meets whom and pack
-the interviews of the day as tight as they go; the ruin and recreate comes
-one move in fifty, and whenever a re-timing changes nothing. With `-exact`,
+There are two other kinds of moves. A re-timing takes a whole day, keeps
+who meets whom and packs the interviews as tight as they go. A wave takes
+one interview of a candidate out, pushes their other interviews of the day
+away from it and puts it back where the schedule is best, even when the
+candidate then waits: half an hour of waiting for one candidate sometimes
+lets a recruiter's interviews follow each other. The search chooses between
+the three kinds by itself: it gives more moves to the kind that has lately
+improved the schedule most for the work it took. That work is counted, never
+timed, so the same seed gives the same schedule on every machine. With `-exact`,
 some moves also take the day of one recruiter that has a break and put its
 interviews back where they leave the fewest breaks there can be, for the
 recruiter and for everybody they meet: on days of one-slot meetings, as at a
@@ -1086,7 +1092,8 @@ style of APA 7 and cited in the documentation of the code where each is
 used: accepting a move not worse than the schedule of a thousand moves ago
 (Burke & Bykov, 2017); removing some candidates and putting them back
 (Schrimpf et al., 2000), chosen among related ones, such as those sharing a
-recruiter or a time window (Shaw, 1998); objectives in a strict order
+recruiter or a time window (Shaw, 1998); the kinds of moves chosen by what
+they lately brought (Ropke & Pisinger, 2006); objectives in a strict order
 (Ehrgott, 2005); the exact re-timing of one recruiter's day (`-exact`), a
 dynamic programme over the subsets of its interviews (Held & Karp, 1962);
 and, to know when no schedule can serve more candidates, a knapsack of each
@@ -1102,6 +1109,10 @@ recruiter's hours (Kellerer et al., 2004).
   10*(1), 196–210. https://doi.org/10.1137/0110015
 - Kellerer, H., Pferschy, U., & Pisinger, D. (2004). *Knapsack problems*.
   Springer. https://doi.org/10.1007/978-3-540-24777-7
+- Ropke, S., & Pisinger, D. (2006). An adaptive large neighborhood search
+  heuristic for the pickup and delivery problem with time windows.
+  *Transportation Science, 40*(4), 455–472.
+  https://doi.org/10.1287/trsc.1050.0135
 - Schrimpf, G., Schneider, J., Stamm-Wilbrandt, H., & Dueck, G. (2000). Record
   breaking optimization results using the ruin and recreate principle.
   *Journal of Computational Physics, 159*(2), 139–171.

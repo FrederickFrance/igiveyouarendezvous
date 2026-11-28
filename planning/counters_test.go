@@ -276,12 +276,12 @@ func requireValid(t *testing.T, s *searcher, o Options, seed uint64, move int) {
 
 // The share of the moves that re-time a day is the caller's to set, and it
 // is honoured: none at nought, and on a day busy enough every move at one.
-// Left alone, the search makes the draw it has always made, which is what
-// keeps a seed giving the schedule it gave before the share could be set.
+// The other moves are waves or ruins. Left alone, the search chooses the
+// share by itself (see TestTheSearchGivesItsMovesToTheKindThatPays).
 func TestTheShareOfRetimingsIsHonoured(t *testing.T) {
 	t.Parallel()
 
-	moves := func(share float64) (retimed, ruined int) {
+	moves := func(share float64) (retimed, rebuilt int) {
 		rnd := rand.New(rand.NewPCG(7, 0x9e3779b97f4a7c15))
 		p, o := randomForum(rnd)
 
@@ -294,9 +294,7 @@ func TestTheShareOfRetimingsIsHonoured(t *testing.T) {
 		s, err := newSearcher(in, 7)
 		require.NoError(t, err)
 
-		if share >= 0 {
-			s.retime = share
-		}
+		s.retime = share
 
 		s.apply(prep)
 		s.greedy()
@@ -306,19 +304,14 @@ func TestTheShareOfRetimingsIsHonoured(t *testing.T) {
 			s.move()
 		}
 
-		return s.retimed, s.ruined
+		return s.retimed, s.waved + s.ruined
 	}
 
-	retimed, ruined := moves(0)
+	retimed, rebuilt := moves(0)
 	require.Zero(t, retimed, "a share of nought never re-times")
-	require.Equal(t, 400, ruined)
+	require.Equal(t, 400, rebuilt)
 
-	retimed, ruined = moves(1)
+	retimed, rebuilt = moves(1)
 	require.Positive(t, retimed, "a share of one re-times")
-	require.Equal(t, 400, retimed+ruined, "and a retiming that changes nothing leaves the move to the ruin")
-
-	// Left alone: one move in ruinEvery goes to the ruin by the draw, the
-	// rest to a retiming when one can be made.
-	retimed, ruined = moves(-1)
-	require.Greater(t, retimed, ruined)
+	require.Equal(t, 400, retimed+rebuilt, "and a retiming that changes nothing leaves the move to a wave or a ruin")
 }

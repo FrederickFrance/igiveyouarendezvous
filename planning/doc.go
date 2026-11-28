@@ -65,10 +65,17 @@
 // the highest priorities first, then the candidates with the fewest
 // requests, each at the first place found.
 //
-// Most moves re-time a whole day, keeping who meets whom and packing the
-// interviews as tight as they go; one in fifty, and whenever re-timing
-// changes nothing, removes some candidates and puts them back
-// ([SearchOptions.Retime]). With [SearchOptions.Exact], some moves take the
+// There are three kinds of moves. A retiming takes a whole day, keeps who
+// meets whom and packs the interviews as tight as they go. A wave takes one
+// interview of a candidate out, pushes their other interviews of the day
+// away from it and puts it back where the schedule is best, even when the
+// candidate then waits: a recruiter is sometimes better off for it. A ruin
+// removes some candidates and puts them back, with others who had no
+// interview. The search chooses between them by itself, giving more moves
+// to the kind that has lately improved the schedule most for the work it
+// took; the work is counted, never timed, so that a seed gives the same
+// schedule on every machine ([SearchOptions.Retime] sets the share of the
+// retimings by hand). With [SearchOptions.Exact], some moves take the
 // day of one recruiter that has a break and put its interviews back where
 // they leave the fewest breaks there can be, for the recruiter and for
 // everybody they meet: worked out rather than tried, on days of one-slot
@@ -95,7 +102,8 @@
 // than the schedule of a thousand moves ago (Burke & Bykov, 2017); removing
 // some candidates and putting them back (Schrimpf et al., 2000), chosen
 // among related ones, such as those sharing a recruiter or a time window
-// (Shaw, 1998); objectives in a strict order (Ehrgott, 2005); the exact
+// (Shaw, 1998); the kinds of moves chosen by what they lately brought (Ropke
+// & Pisinger, 2006); objectives in a strict order (Ehrgott, 2005); the exact
 // re-timing of one recruiter's day, a dynamic programme over the subsets of
 // its interviews (Held & Karp, 1962); and, to know when no schedule can
 // serve more candidates, a knapsack of each recruiter's hours (Kellerer et
@@ -111,6 +119,10 @@
 //     Mathematics, 10(1), 196–210. https://doi.org/10.1137/0110015
 //   - Kellerer, H., Pferschy, U., & Pisinger, D. (2004). Knapsack problems.
 //     Springer. https://doi.org/10.1007/978-3-540-24777-7
+//   - Ropke, S., & Pisinger, D. (2006). An adaptive large neighborhood
+//     search heuristic for the pickup and delivery problem with time
+//     windows. Transportation Science, 40(4), 455–472.
+//     https://doi.org/10.1287/trsc.1050.0135
 //   - Schrimpf, G., Schneider, J., Stamm-Wilbrandt, H., & Dueck, G. (2000).
 //     Record breaking optimization results using the ruin and recreate
 //     principle. Journal of Computational Physics, 159(2), 139–171.

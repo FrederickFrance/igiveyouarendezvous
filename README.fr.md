@@ -161,10 +161,16 @@ planning n'est pas pire que le courant, ou que celui d'il y a 1 000
 mouvements (*late acceptance hill climbing*) : accepter de temps en temps un
 planning un peu moins bon sort la recherche des impasses.
 
-La plupart des mouvements, pourtant, re-horodatent une journée entière : ils
-gardent qui rencontre qui et resserrent les entretiens de la journée autant
-que possible ; le « détruire et reconstruire » vient un mouvement sur
-cinquante, et chaque fois qu'un re-horodatage ne change rien. Avec `-exact`,
+Il y a deux autres sortes de mouvements. Un re-horodatage prend une journée
+entière, garde qui rencontre qui et resserre les entretiens autant que
+possible. Une onde retire un entretien d'un candidat, écarte ses autres
+entretiens de la journée et le replace là où le planning est le meilleur,
+même si le candidat doit alors attendre : une demi-heure d'attente pour un
+candidat permet parfois aux entretiens d'un recruteur de s'enchaîner. La
+recherche choisit seule entre les trois sortes : elle donne plus de
+mouvements à celle qui a récemment le plus amélioré le planning pour le
+travail fourni. Ce travail est compté, jamais chronométré : la même graine
+donne le même planning sur toutes les machines. Avec `-exact`,
 certains mouvements prennent aussi la journée d'un recruteur qui a un trou et
 replacent ses entretiens là où ils laissent le moins de trous possible, pour
 lui et pour tous ceux qu'il rencontre : sur des journées de rencontres d'un
@@ -1130,7 +1136,9 @@ norme APA 7 et citées dans la documentation du code là où chacune sert :
 accepter un mouvement qui n'est pas pire que le planning d'il y a mille
 mouvements (Burke & Bykov, 2017) ; retirer quelques candidats et les remettre
 (Schrimpf et al., 2000), choisis parmi des candidats liés, comme ceux qui
-partagent un recruteur ou une plage horaire (Shaw, 1998) ; des objectifs dans
+partagent un recruteur ou une plage horaire (Shaw, 1998) ; les sortes de
+mouvements choisies d'après ce qu'elles ont récemment apporté (Ropke &
+Pisinger, 2006) ; des objectifs dans
 un ordre strict (Ehrgott, 2005) ; le re-horodatage exact de la journée d'un
 recruteur (`-exact`), une programmation dynamique sur les sous-ensembles de
 ses entretiens (Held & Karp, 1962) ; et, pour savoir quand aucun planning ne
@@ -1147,6 +1155,10 @@ peut recevoir plus de candidats, un sac à dos des heures de chaque recruteur
   10*(1), 196–210. https://doi.org/10.1137/0110015
 - Kellerer, H., Pferschy, U., & Pisinger, D. (2004). *Knapsack problems*.
   Springer. https://doi.org/10.1007/978-3-540-24777-7
+- Ropke, S., & Pisinger, D. (2006). An adaptive large neighborhood search
+  heuristic for the pickup and delivery problem with time windows.
+  *Transportation Science, 40*(4), 455–472.
+  https://doi.org/10.1287/trsc.1050.0135
 - Schrimpf, G., Schneider, J., Stamm-Wilbrandt, H., & Dueck, G. (2000). Record
   breaking optimization results using the ruin and recreate principle.
   *Journal of Computational Physics, 159*(2), 139–171.
